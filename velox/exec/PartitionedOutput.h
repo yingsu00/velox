@@ -124,6 +124,10 @@ class PartitionedOutput : public Operator {
     }
   }
 
+  std::string toString() override {
+    return fmt::format("PartitionedOutput({})", stats_.operatorId);
+  }
+
   void addInput(RowVectorPtr input) override;
 
   // Always returns nullptr. The action is to further process

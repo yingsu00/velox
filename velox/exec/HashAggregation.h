@@ -27,6 +27,10 @@ class HashAggregation : public Operator {
       DriverCtx* driverCtx,
       const std::shared_ptr<const core::AggregationNode>& aggregationNode);
 
+  std::string toString() override {
+    return fmt::format("HashAggregation({})", stats_.operatorId);
+  }
+
   void addInput(RowVectorPtr input) override;
 
   RowVectorPtr getOutput() override;

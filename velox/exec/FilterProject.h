@@ -29,6 +29,10 @@ class FilterProject : public Operator {
       const std::shared_ptr<const core::FilterNode>& filter,
       const std::shared_ptr<const core::ProjectNode>& project);
 
+  std::string toString() override {
+    return fmt::format("FilterProject({})", stats_.operatorId);
+  }
+
   bool isFilter() const override {
     return true;
   }

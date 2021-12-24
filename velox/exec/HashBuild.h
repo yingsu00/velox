@@ -65,6 +65,10 @@ class HashBuild final : public Operator {
       DriverCtx* driverCtx,
       std::shared_ptr<const core::HashJoinNode> joinNode);
 
+  std::string toString() override {
+    return fmt::format("HashBuild({})", stats_.operatorId);
+  }
+
   void addInput(RowVectorPtr input) override;
 
   RowVectorPtr getOutput() override {

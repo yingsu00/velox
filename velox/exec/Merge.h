@@ -37,6 +37,10 @@ class Merge : public SourceOperator {
       const std::string& planNodeId,
       const std::string& operatorType);
 
+  std::string toString() override {
+    return fmt::format("Merge({})", stats_.operatorId);
+  }
+
   BlockingReason isBlocked(ContinueFuture* future) override;
 
   RowVectorPtr getOutput() override;

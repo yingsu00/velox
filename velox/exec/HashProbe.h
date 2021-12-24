@@ -30,6 +30,10 @@ class HashProbe : public Operator {
       DriverCtx* driverCtx,
       const std::shared_ptr<const core::HashJoinNode>& hashJoinNode);
 
+  std::string toString() override {
+    return fmt::format("HashProbe({})", stats_.operatorId);
+  }
+
   void addInput(RowVectorPtr input) override;
 
   RowVectorPtr getOutput() override;

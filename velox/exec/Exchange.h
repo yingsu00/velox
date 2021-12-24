@@ -284,6 +284,10 @@ class Exchange : public SourceOperator {
         future_(false),
         exchangeClient_(std::move(exchangeClient)) {}
 
+  std::string toString() override {
+    return fmt::format("Exchange({})", stats_.operatorId);
+  }
+
   ~Exchange() override {
     close();
   }

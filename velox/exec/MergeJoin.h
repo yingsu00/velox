@@ -25,6 +25,10 @@ class MergeJoin : public Operator {
       DriverCtx* driverCtx,
       const std::shared_ptr<const core::MergeJoinNode>& joinNode);
 
+  std::string toString() override {
+    return fmt::format("MergeJoin({})", stats_.operatorId);
+  }
+
   BlockingReason isBlocked(ContinueFuture* future) override;
 
   bool needsInput() const override;
