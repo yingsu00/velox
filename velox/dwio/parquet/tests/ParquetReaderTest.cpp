@@ -81,6 +81,19 @@ class ParquetReaderTest : public testing::Test {
     }
   }
 
+  void assertRead(RowReader& reader) {
+    uint64_t total = 0;
+    uint64_t count = 0;
+
+    VectorPtr result;
+    do {
+      count = reader.next(1000, result);
+      total += count;
+    } while (count != 0);
+
+    printf("total = %llu", total);
+  }
+
   void assertReadExpected(RowReader& reader, RowVectorPtr expected) {
     uint64_t total = 0;
     VectorPtr result;
@@ -428,4 +441,34 @@ TEST_F(ParquetReaderTest, varcharFilters) {
 
   // TODO Test name IN ('CANADA', 'UNITED KINGDOM') filter. Currently it doesn't
   // work. The reader returns all rows instead of just 2.
+}
+
+
+TEST_F(ParquetReaderTest, readBigintPlainNoCompression) {
+  const std::string sample(
+      getExampleFilePath("integer10_plain_uncompressed.parquet"));
+
+  ReaderOptions readerOptions;
+  ParquetReader reader(
+      std::make_unique<FileInputStream>(sample), readerOptions);
+
+  RowReaderOptions rowReaderOpts;
+  auto rowType = ROW({"a"}, {INTEGER()});
+  auto cs =
+      std::make_shared<ColumnSelector>(rowType, std::vector<std::string>{"a"});
+  rowReaderOpts.select(cs);
+
+  common::ScanSpec scanSpec("");
+  scanSpec.getOrCreateChild(common::Subfield("a"))
+  ->setFilter(common::test::between(0, 100000000));
+  //  scanSpec.getOrCreateChild(common::Subfield("bigint"))
+  //  ->setFilter(common::test::between(900, 1006));
+  rowReaderOpts.setScanSpec(&scanSpec);
+  auto rowReader = reader.createRowReader(rowReaderOpts);
+
+  assertRead(*rowReader);
+
+  //  auto expected = vectorMaker_->rowVector(
+  //      {rangeVector<int32_t>(5, 102), rangeVector<int64_t>(5, 1002)});
+  //  assertReadExpected(*rowReader, expected);
 }
