@@ -41,7 +41,7 @@ option(VELOX_ENABLE_EXAMPLES
        "Build examples. This will enable VELOX_ENABLE_EXPRESSION automatically."
        ON)
 option(VELOX_ENABLE_S3 "Build S3 Connector" OFF)
-option(VELOX_ENABLE_PARQUET "Enable Parquet support" OFF)
+option(VELOX_ENABLE_PARQUET "Enable Parquet support" ON)
 option(VELOX_BUILD_TEST_UTILS "Enable Velox test utilities" OFF)
 
 if(${VELOX_BUILD_MINIMAL})
