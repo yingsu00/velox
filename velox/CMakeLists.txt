@@ -60,3 +60,6 @@ endif()
 if(${VELOX_CODEGEN_SUPPORT})
   add_subdirectory(experimental/codegen)
 endif()
+
+# add_subdirectory(external/ahana)
+

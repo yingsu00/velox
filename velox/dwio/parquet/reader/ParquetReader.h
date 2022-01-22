@@ -48,6 +48,8 @@ class ParquetRowReader : public dwio::common::RowReader {
   memory::MemoryPool& pool_;
   RowTypePtr rowType_;
   std::vector<::duckdb::LogicalType> duckdbRowType_;
+  bool useAhana_;
+  ::duckdb::DataChunk output_;
 };
 
 class ParquetReader : public dwio::common::Reader {
@@ -82,6 +84,7 @@ class ParquetReader : public dwio::common::Reader {
 
   RowTypePtr type_;
   mutable std::shared_ptr<const dwio::common::TypeWithId> typeWithId_;
+//  bool useAhana_;
 };
 
 class ParquetReaderFactory : public dwio::common::ReaderFactory {

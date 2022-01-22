@@ -388,6 +388,7 @@ void ByteRleDecoder::skip(uint64_t numValues) {
   }
 }
 
+// insert 0s into
 void ByteRleDecoder::next(
     char* data,
     uint64_t numValues,

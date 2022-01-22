@@ -35,6 +35,8 @@ class ColumnStatistics {
         rawSize_(rawSize),
         size_(size) {}
 
+  ColumnStatistics() {}
+
   virtual ~ColumnStatistics() = default;
 
   /**
@@ -82,7 +84,7 @@ class ColumnStatistics {
   }
 
  protected:
-  ColumnStatistics() {}
+
 
   std::optional<uint64_t> valueCount_;
   std::optional<bool> hasNull_;

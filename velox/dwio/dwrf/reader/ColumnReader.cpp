@@ -80,7 +80,7 @@ BufferPtr ColumnReader::readNulls(
 
 void ColumnReader::readNulls(
     vector_size_t numValues,
-    const uint64_t* incomingNulls,
+    const uint64_t* incomingNulls, // bit vector
     VectorPtr* result,
     BufferPtr& nulls) {
   if (!notNullDecoder_ && !incomingNulls) {

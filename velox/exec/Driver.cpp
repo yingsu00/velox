@@ -367,14 +367,17 @@ StopReason Driver::runInternal(
             guard.notThrown();
             return StopReason::kBlock;
           }
+//          printf ("nextOp %s, nextOp->needsInput()) %b\n", nextOp->toString().c_str(), nextOp->needsInput() ? "true" : "false");
           if (nextOp->needsInput()) {
             uint64_t resultBytes = 0;
             RowVectorPtr result;
             {
               CpuWallTimer timer(op->stats().getOutputTiming);
+//              printf ("op %s  op->getOutput())\n", op->toString().c_str());
               result = op->getOutput();
               if (result) {
                 op->stats().outputPositions += result->size();
+//                printf ("op got result of size %d\n", result->size());
                 resultBytes = result->retainedSize();
                 op->stats().outputBytes += resultBytes;
               }

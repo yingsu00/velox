@@ -62,20 +62,33 @@ void toDuckDbFilter(
         filters.PushFilter(
             colIdx, constantEqualFilter(makeValue(type, rangeFilter->lower())));
       } else {
-        if (rangeFilter->lower() != std::numeric_limits<int64_t>::min()) {
-          filters.PushFilter(
-              colIdx,
-              constantFilter(
-                  ::duckdb::ExpressionType::COMPARE_GREATERTHANOREQUALTO,
-                  makeValue(type, rangeFilter->lower())));
-        }
-        if (rangeFilter->upper() != std::numeric_limits<int64_t>::max()) {
-          filters.PushFilter(
-              colIdx,
-              constantFilter(
-                  ::duckdb::ExpressionType::COMPARE_LESSTHANOREQUALTO,
-                  makeValue(type, rangeFilter->upper())));
-        }
+        ::duckdb::ConjunctionAndFilter andFilter;
+        andFilter.child_filters.push_back(constantFilter(
+            ::duckdb::ExpressionType::COMPARE_GREATERTHAN,
+            makeValue(type, rangeFilter->lower())));
+        andFilter.child_filters.push_back(constantFilter(
+            ::duckdb::ExpressionType::COMPARE_LESSTHANOREQUALTO,
+            makeValue(type, rangeFilter->upper())));
+        filters.filters.insert(
+            std::make_pair<idx_t, std::shared_ptr<::duckdb::ConjunctionAndFilter>>(
+                std::move(colIdx), std::make_shared<::duckdb::ConjunctionAndFilter>(andFilter)));
+
+        //        if (rangeFilter->lower() !=
+        //        std::numeric_limits<int64_t>::min()) {
+        //          filters.PushFilter(
+        //              colIdx,
+        //              constantFilter(
+        //                  ::duckdb::ExpressionType::COMPARE_GREATERTHANOREQUALTO,
+        //                  makeValue(type, rangeFilter->lower())));
+        //        }
+        //        if (rangeFilter->upper() !=
+        //        std::numeric_limits<int64_t>::max()) {
+        //          filters.PushFilter(
+        //              colIdx,
+        //              constantFilter(
+        //                  ::duckdb::ExpressionType::COMPARE_LESSTHANOREQUALTO,
+        //                  makeValue(type, rangeFilter->upper())));
+        //        }
       }
       break;
     }
@@ -223,40 +236,70 @@ ParquetRowReader::ParquetRowReader(
   }
 
   reader_->InitializeScan(
-      state_, std::move(columnIds), std::move(groups), &filters_);
+      state_,
+      std::move(columnIds),
+      std::move(groups),
+      &filters_,
+      options.getUseAhanaParquetReader());
+
+  output_.Initialize(duckdbRowType_);
 }
 
 uint64_t ParquetRowReader::next(uint64_t /*size*/, velox::VectorPtr& result) {
-  ::duckdb::DataChunk output;
-  output.Initialize(duckdbRowType_);
+  uint64_t rowsScanned = reader_->Scan(state_, output_);
 
-  reader_->Scan(state_, output);
-
-  if (output.size() > 0) {
+  if (output_.size() > 0) {
     std::vector<VectorPtr> columns;
-    columns.reserve(output.data.size());
-    for (int i = 0; i < output.data.size(); i++) {
+    columns.reserve(output_.data.size());
+    for (int i = 0; i < output_.data.size(); i++) {
       columns.emplace_back(duckdb::toVeloxVector(
-          output.size(), output.data[i], rowType_->childAt(i), &pool_));
+          output_.size(), output_.data[i], rowType_->childAt(i), &pool_));
     }
 
-    result = std::make_shared<RowVector>(
+    VectorPtr newResult = std::make_shared<RowVector>(
         &pool_,
         rowType_,
         BufferPtr(nullptr),
         columns[0]->size(),
         columns,
         std::nullopt);
+    result = newResult;
   }
 
-  return output.size();
+  return rowsScanned;
 }
+
+//uint64_t ParquetRowReader::next(uint64_t /*size*/, velox::VectorPtr& result) {
+//  ::duckdb::DataChunk output;
+//  output.Initialize(duckdbRowType_);
+//
+//  uint64_t rowsScanned = reader_->Scan(state_, output);
+//
+//  if (output.size() > 0) {
+//    std::vector<VectorPtr> columns;
+//    columns.reserve(output.data.size());
+//    for (int i = 0; i < output.data.size(); i++) {
+//      columns.emplace_back(duckdb::toVeloxVector(
+//          output.size(), output.data[i], rowType_->childAt(i), &pool_));
+//    }
+//
+//    result = std::make_shared<RowVector>(
+//        &pool_,
+//        rowType_,
+//        BufferPtr(nullptr),
+//        columns[0]->size(),
+//        columns,
+//        std::nullopt);
+//  }
+//
+//  return rowsScanned;
+//}
 
 void ParquetRowReader::updateRuntimeStats(
     dwio::common::RuntimeStatistics& /*stats*/) const {}
 
 void ParquetRowReader::resetFilterCaches() {
-  VELOX_FAIL("ParquetRowReader::resetFilterCaches is NYI");
+  VELOX_FAIL("ParquetReader::resetFilterCaches is NYI");
 }
 
 std::optional<size_t> ParquetRowReader::estimatedRowSize() const {

@@ -34,6 +34,18 @@ set(VELOX_LINK_LIBS
 set(TEST_LINK_LIBS ${gflags_LIBRARIES} ${GTEST_BOTH_LIBRARIES} ${GMock} ${GLOG}
                    ${FILESYSTEM})
 
+set(BENCHMARK_DEPENDENCIES
+        velox_functions_test_lib
+        velox_exec
+        velox_functions_prestosql
+        velox_functions_lib
+        velox_exec_test_util
+        velox_vector_fuzzer
+        ${GTEST_BOTH_LIBRARIES}
+        ${gflags_LIBRARIES}
+        ${FOLLY_WITH_DEPENDENCIES}
+        ${FOLLY_BENCHMARK})
+
 add_executable(velox_dwio_parquet_reader_test ParquetReaderTest.cpp)
 add_test(
   NAME velox_dwio_parquet_reader_test
@@ -43,6 +55,7 @@ add_test(
 target_link_libraries(
   velox_dwio_parquet_reader_test
   velox_vector_test_lib
+#  ahana_parquet
   ${VELOX_LINK_LIBS}
   ${FOLLY_WITH_DEPENDENCIES}
   ${FMT}
@@ -65,7 +78,28 @@ target_link_libraries(
   velox_exec
   velox_hive_connector
   velox_aggregates
+#  ahana_parquet
   ${VELOX_LINK_LIBS}
   ${FOLLY_WITH_DEPENDENCIES}
   ${FMT}
   ${TEST_LINK_LIBS})
+
+add_executable(parquet_reader_benchmark ParquetReaderBenchmark.cpp)
+#add_test(
+#        NAME parquet_reader_benchmark
+#        COMMAND parquet_reader_benchmark
+#        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+
+target_link_libraries(
+        parquet_reader_benchmark
+        velox_vector_test_lib
+        velox_exec_test_util
+        velox_exec
+        velox_hive_connector
+        velox_aggregates
+        #  ahana_parquet
+        ${VELOX_LINK_LIBS}
+        ${FOLLY_WITH_DEPENDENCIES}
+        ${FMT}
+        ${TEST_LINK_LIBS}
+        ${BENCHMARK_DEPENDENCIES})

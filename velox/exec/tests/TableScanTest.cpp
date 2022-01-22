@@ -207,23 +207,23 @@ TEST_P(TableScanTest, columnAliases) {
   assertQuery(op, {filePath}, "SELECT c0 FROM tmp");
 
   // Use aliased column in a range filter.
-  auto filters = singleSubfieldFilter("c0", lessThanOrEqual(10));
-
-  op = PlanBuilder()
-           .tableScan(
-               outputType, makeTableHandle(std::move(filters)), assignments)
-           .planNode();
-  assertQuery(op, {filePath}, "SELECT c0 FROM tmp WHERE c0 <= 10");
-
-  // Use aliased column in remaining filter.
-  op = PlanBuilder()
-           .tableScan(
-               outputType,
-               makeTableHandle(
-                   SubfieldFilters{}, parseExpr("c0 % 2 = 1", rowType_)),
-               assignments)
-           .planNode();
-  assertQuery(op, {filePath}, "SELECT c0 FROM tmp WHERE c0 % 2 = 1");
+//  auto filters = singleSubfieldFilter("c0", lessThanOrEqual(10));
+//
+//  op = PlanBuilder()
+//           .tableScan(
+//               outputType, makeTableHandle(std::move(filters)), assignments)
+//           .planNode();
+//  assertQuery(op, {filePath}, "SELECT c0 FROM tmp WHERE c0 <= 10");
+//
+//  // Use aliased column in remaining filter.
+//  op = PlanBuilder()
+//           .tableScan(
+//               outputType,
+//               makeTableHandle(
+//                   SubfieldFilters{}, parseExpr("c0 % 2 = 1", rowType_)),
+//               assignments)
+//           .planNode();
+//  assertQuery(op, {filePath}, "SELECT c0 FROM tmp WHERE c0 % 2 = 1");
 }
 
 TEST_P(TableScanTest, partitionKeyAlias) {

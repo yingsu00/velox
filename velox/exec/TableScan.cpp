@@ -118,7 +118,8 @@ bool TableScan::isFinished() {
 
 void TableScan::setBatchSize() {
   constexpr int64_t kMB = 1 << 20;
-  auto estimate = dataSource_->estimatedRowSize();
+//  auto estimate = dataSource_->estimatedRowSize();
+  auto estimate = 8;
   if (estimate == connector::DataSource::kUnknownRowSize) {
     readBatchSize_ = kDefaultBatchSize;
     return;

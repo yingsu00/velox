@@ -133,6 +133,19 @@ class ParquetTableScanTest : public HiveConnectorTestBase {
   std::vector<std::shared_ptr<connector::ConnectorSplit>> splits_;
 };
 
+TEST_F(ParquetTableScanTest, AhanaReader) {
+  loadData(
+      getExampleFilePath("2000_integers.parquet"),
+      ROW({"a"}, {INTEGER()}),
+      makeRowVector(
+          {"a"},
+          {
+            makeFlatVector<int64_t>(6000, [](auto row) { return row + 1; })
+            }));
+
+  assertSelect({"a"}, "SELECT a FROM tmp");
+}
+
 TEST_F(ParquetTableScanTest, basic) {
   loadData(
       getExampleFilePath("sample.parquet"),

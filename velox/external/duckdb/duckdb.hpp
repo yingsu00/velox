@@ -19813,6 +19813,8 @@ class TableFilter {
 public:
 	TableFilter(TableFilterType filter_type_p) : filter_type(filter_type_p) {
 	}
+	TableFilter(TableFilter& other) :filter_type(other.filter_type) {
+	}
 	virtual ~TableFilter() {
 	}
 
@@ -19829,10 +19831,10 @@ public:
 
 class TableFilterSet {
 public:
-	unordered_map<idx_t, unique_ptr<TableFilter>> filters;
+	unordered_map<idx_t, shared_ptr<TableFilter>> filters;  // idx is the index into columnIds
 
 public:
-	void PushFilter(idx_t table_index, unique_ptr<TableFilter> filter);
+  void PushFilter(idx_t table_index, unique_ptr<TableFilter> filter);
 
 	bool Equals(TableFilterSet &other) {
 		if (filters.size() != other.filters.size()) {
@@ -20121,7 +20123,7 @@ public:
 	ConjunctionAndFilter();
 
 	//! The filters to OR together
-	vector<unique_ptr<TableFilter>> child_filters;
+	vector<shared_ptr<TableFilter>> child_filters;
 
 public:
 	FilterPropagateResult CheckStatistics(BaseStatistics &stats) override;
@@ -20149,6 +20151,7 @@ namespace duckdb {
 class ConstantFilter : public TableFilter {
 public:
 	ConstantFilter(ExpressionType comparison_type, Value constant);
+	ConstantFilter(TableFilter& other);
 
 	//! The comparison type (e.g. COMPARE_EQUAL, COMPARE_GREATERTHAN, COMPARE_LESSTHAN, ...)
 	ExpressionType comparison_type;

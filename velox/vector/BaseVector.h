@@ -81,6 +81,9 @@ class BaseVector {
       std::optional<ByteCount> storageByteCount = std::nullopt);
 
   virtual ~BaseVector() = default;
+//virtual ~BaseVector() {
+//  printf ("~BaseVector\n");
+//}
 
   virtual VectorEncoding::Simple encoding() const = 0;
 

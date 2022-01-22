@@ -1493,6 +1493,7 @@ void SelectiveIntegerDirectColumnReader::processValueHook(
   }
 }
 
+//
 void SelectiveIntegerDirectColumnReader::read(
     vector_size_t offset,
     RowSet rows,

@@ -92,6 +92,8 @@ bool initializeSimdUtil() {
   return true;
 }
 
+// produce scatter vector
+// If
 int32_t indicesOfSetBits(
     const uint64_t* bits,
     int32_t begin,

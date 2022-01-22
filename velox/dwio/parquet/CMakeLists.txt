@@ -12,6 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+SET (THRIFT_LIB_DIR "/usr/local/lib")
+find_library(THRIFT snappy PATHS ${THRIFT_LIB_DIR})
+MESSAGE("Found Thrift lib: ${THRIFT} at ${THRIFT_LIB_DIR}")
+
 add_subdirectory(reader)
 
 #if(${VELOX_BUILD_TESTING})

@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 
-#include "velox/dwio/parquet/reader/ParquetReader.h"
+#include "velox/external/ahana/ParquetReader.h"
 #include <gtest/gtest.h>
 #include "velox/dwio/dwrf/test/utils/DataFiles.h"
+#include "velox/dwio/parquet/reader/ParquetReader.h"
 #include "velox/type/Type.h"
 #include "velox/type/tests/FilterBuilder.h"
 #include "velox/vector/ComplexVector.h"
@@ -84,10 +85,22 @@ class ParquetReaderTest : public testing::Test {
   void assertRead(RowReader& reader) {
     uint64_t total = 0;
     uint64_t count = 0;
+    int i = 0;
 
     VectorPtr result;
     do {
-      count = reader.next(1000, result);
+      if (!result) {
+        result = BaseVector::create(INTEGER(), 0, pool_.get());
+      }
+//      printf(
+//          "i = %d, this = %llu, reuslt is null ? %s \n",
+//          i++,
+//          this,
+//          result ? "true" : "false");
+      if (i == 10) {
+        printf("10th round\n");
+      }
+      count = reader.next(10000, result); // size doesn't work
       total += count;
     } while (count != 0);
 
@@ -98,7 +111,7 @@ class ParquetReaderTest : public testing::Test {
     uint64_t total = 0;
     VectorPtr result;
     while (total < expected->size()) {
-      auto part = reader.next(1000, result);
+      auto part = reader.next(10000, result);
       EXPECT_GT(part, 0);
       if (part > 0) {
         assertEqualVectorPart(expected, result, total);
@@ -111,6 +124,40 @@ class ParquetReaderTest : public testing::Test {
     EXPECT_EQ(reader.next(1000, result), 0);
   }
 
+  void assertReadExpectedWithReadCount(
+      RowReader& reader,
+      RowVectorPtr expected,
+      uint64_t expectedTotalRead) {
+    uint64_t totalRead = 0;
+    uint64_t totalResult = 0;
+
+    VectorPtr columnResult;
+    uint64_t part = 0;
+    VectorPtr resultPart;
+    if (!columnResult) {
+      columnResult = BaseVector::create(INTEGER(), 0, pool_.get());
+    }
+
+    do {
+      part = reader.next(10000, resultPart);
+
+      if (part > 0) {
+        columnResult->append(
+            std::static_pointer_cast<RowVector>(resultPart)->childAt(0).get());
+        totalRead += part;
+        totalResult += resultPart->size();
+      } else {
+        break;
+      }
+    } while (part != 0);
+
+    RowVectorPtr actual = vectorMaker_->rowVector({columnResult});
+    assertEqualVectorPart(expected, actual, 0);
+    EXPECT_EQ(totalRead, expectedTotalRead);
+    EXPECT_EQ(totalResult, expected->size());
+    EXPECT_EQ(reader.next(1000, columnResult), 0);
+  }
+
   using FilterMap =
       std::unordered_map<std::string, std::unique_ptr<common::Filter>>;
 
@@ -119,6 +166,16 @@ class ParquetReaderTest : public testing::Test {
       const RowTypePtr& fileSchema,
       FilterMap filters,
       const RowVectorPtr& expected) {
+    assertReadWithFilters(
+        fileName, fileSchema, std::move(filters), expected, false);
+  }
+
+  void assertReadWithFilters(
+      const std::string& fileName,
+      const RowTypePtr& fileSchema,
+      FilterMap filters,
+      const RowVectorPtr& expected,
+      bool useAhana) {
     const auto filePath(getExampleFilePath(fileName));
 
     ReaderOptions readerOptions;
@@ -133,8 +190,47 @@ class ParquetReaderTest : public testing::Test {
 
     RowReaderOptions rowReaderOpts = getReaderOpts(fileSchema);
     rowReaderOpts.setScanSpec(&scanSpec);
+    rowReaderOpts.setUseAhanaParquetReader(useAhana);
     auto rowReader = reader.createRowReader(rowReaderOpts);
     assertReadExpected(*rowReader, expected);
+  }
+
+  void assertReadWithFiltersWithReadCount(
+      const std::string& fileName,
+      const RowTypePtr& fileSchema,
+      FilterMap filters,
+      const RowVectorPtr& expected,
+      uint64_t expectedTotalRead,
+      bool useAhana) {
+    const auto filePath(getExampleFilePath(fileName));
+
+    ReaderOptions readerOptions;
+    ParquetReader reader(
+        std::make_unique<FileInputStream>(filePath), readerOptions);
+
+    common::ScanSpec scanSpec("");
+    for (auto&& [column, filter] : filters) {
+      scanSpec.getOrCreateChild(common::Subfield(column))
+          ->setFilter(std::move(filter));
+    }
+
+    RowReaderOptions rowReaderOpts = getReaderOpts(fileSchema);
+    rowReaderOpts.setScanSpec(&scanSpec);
+    rowReaderOpts.setUseAhanaParquetReader(useAhana);
+    auto rowReader = reader.createRowReader(rowReaderOpts);
+    assertReadExpectedWithReadCount(*rowReader, expected, expectedTotalRead);
+  }
+
+  void filter2000ConsecutiveIntegers(FilterMap filters, RowVectorPtr expected) {
+    auto rowType = ROW({"a"}, {INTEGER()});
+
+    assertReadWithFiltersWithReadCount(
+        "2000_integers.parquet",
+        rowType,
+        std::move(filters),
+        expected,
+        2000,
+        false);
   }
 
   std::unique_ptr<memory::ScopedMemoryPool> pool_{
@@ -155,28 +251,28 @@ TEST_F(ParquetReaderTest, readSampleFull) {
   // Data is in plain uncompressed format:
   //   a: [1..20]
   //   b: [1.0..20.0]
-  const std::string sample(getExampleFilePath("sample.parquet"));
+  const std::string sample(getExampleFilePath("tmp_row.parquet"));
 
   ReaderOptions readerOptions;
   ParquetReader reader(
       std::make_unique<FileInputStream>(sample), readerOptions);
 
-  EXPECT_EQ(reader.numberOfRows(), 20ULL);
-
-  auto type = reader.typeWithId();
-  EXPECT_EQ(type->size(), 2ULL);
-  auto col0 = type->childAt(0);
-  EXPECT_EQ(col0->type->kind(), TypeKind::BIGINT);
-  auto col1 = type->childAt(1);
-  EXPECT_EQ(col1->type->kind(), TypeKind::DOUBLE);
-  EXPECT_EQ(type->childByName("a"), col0);
-  EXPECT_EQ(type->childByName("b"), col1);
-
-  RowReaderOptions rowReaderOpts = getReaderOpts(sampleSchema());
-  auto rowReader = reader.createRowReader(rowReaderOpts);
-  auto expected = vectorMaker_->rowVector(
-      {rangeVector<int64_t>(20, 1), rangeVector<double>(20, 1)});
-  assertReadExpected(*rowReader, expected);
+//  EXPECT_EQ(reader.numberOfRows(), 20ULL);
+//
+//  auto type = reader.typeWithId();
+//  EXPECT_EQ(type->size(), 2ULL);
+//  auto col0 = type->childAt(0);
+//  EXPECT_EQ(col0->type->kind(), TypeKind::BIGINT);
+//  auto col1 = type->childAt(1);
+//  EXPECT_EQ(col1->type->kind(), TypeKind::DOUBLE);
+//  EXPECT_EQ(type->childByName("a"), col0);
+//  EXPECT_EQ(type->childByName("b"), col1);
+//
+//  RowReaderOptions rowReaderOpts = getReaderOpts(sampleSchema());
+//  auto rowReader = reader.createRowReader(rowReaderOpts);
+//  auto expected = vectorMaker_->rowVector(
+//      {rangeVector<int64_t>(20, 1), rangeVector<double>(20, 1)});
+//  assertReadExpected(*rowReader, expected);
 }
 
 TEST_F(ParquetReaderTest, readSampleRange1) {
@@ -443,10 +539,9 @@ TEST_F(ParquetReaderTest, varcharFilters) {
   // work. The reader returns all rows instead of just 2.
 }
 
-
 TEST_F(ParquetReaderTest, readBigintPlainNoCompression) {
   const std::string sample(
-      getExampleFilePath("integer10_plain_uncompressed.parquet"));
+      getExampleFilePath("10000_random_integers_plain_nocompression.parquet"));
 
   ReaderOptions readerOptions;
   ParquetReader reader(
@@ -460,10 +555,11 @@ TEST_F(ParquetReaderTest, readBigintPlainNoCompression) {
 
   common::ScanSpec scanSpec("");
   scanSpec.getOrCreateChild(common::Subfield("a"))
-  ->setFilter(common::test::between(0, 100000000));
+      ->setFilter(common::test::between(500, 1500));
   //  scanSpec.getOrCreateChild(common::Subfield("bigint"))
   //  ->setFilter(common::test::between(900, 1006));
   rowReaderOpts.setScanSpec(&scanSpec);
+  rowReaderOpts.setUseAhanaParquetReader(true);
   auto rowReader = reader.createRowReader(rowReaderOpts);
 
   assertRead(*rowReader);
@@ -471,4 +567,47 @@ TEST_F(ParquetReaderTest, readBigintPlainNoCompression) {
   //  auto expected = vectorMaker_->rowVector(
   //      {rangeVector<int32_t>(5, 102), rangeVector<int64_t>(5, 1002)});
   //  assertReadExpected(*rowReader, expected);
+}
+
+TEST_F(ParquetReaderTest, filter10IntegerPlainNoCompression) {
+  FilterMap filters;
+  //  filters.insert({"a", new common::BigintRange(0L, 6L, false)});
+
+  auto expected = vectorMaker_->rowVector(
+      {vectorMaker_->flatVector<int32_t>({1, 2, 3, 4, 5})});
+
+  auto rowType = ROW({"a"}, {INTEGER()});
+
+  assertReadWithFilters(
+      "integer10_plain_uncompressed.parquet",
+      rowType,
+      std::move(filters),
+      expected,
+      true);
+}
+
+
+
+
+TEST_F(ParquetReaderTest, filter2000IntegerPlainNoCompression) {
+  FilterMap twoResultFilters;
+  twoResultFilters.insert(std::make_pair(
+      "a",
+      new common::BigintRange(
+          1023L, 1025L, true)));   // fix bug: lower exclusive, upper inclusive
+
+  auto expected = vectorMaker_->rowVector({rangeVector<int32_t>(2, 1024)});
+
+  filter2000ConsecutiveIntegers(std::move(twoResultFilters), expected);
+
+  FilterMap fullResultFilters;
+  twoResultFilters.insert(std::make_pair(
+      "a",
+      new common::BigintRange(
+          0L, 2000L, true)));
+
+  auto expected2 = vectorMaker_->rowVector({rangeVector<int32_t>(2000, 1)});
+
+  filter2000ConsecutiveIntegers(std::move(twoResultFilters), expected2);
+
 }

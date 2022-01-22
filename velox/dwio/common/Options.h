@@ -98,6 +98,7 @@ class RowReaderOptions {
   velox::common::ScanSpec* scanSpec_ = nullptr;
   // Node id for map column to a list of keys to be projected as a struct.
   std::unordered_map<uint32_t, std::vector<std::string>> flatmapNodeIdAsStruct_;
+  bool useAhanaParquetReader_ = false;
 
  public:
   RowReaderOptions(const RowReaderOptions& other) {
@@ -141,6 +142,14 @@ class RowReaderOptions {
     dataStart = offset;
     dataLength = length;
     return *this;
+  }
+
+  bool getUseAhanaParquetReader() const {
+    return useAhanaParquetReader_;
+  }
+
+  void setUseAhanaParquetReader(bool useAhanaParquetReader) {
+    useAhanaParquetReader_ = useAhanaParquetReader;
   }
 
   /**
@@ -316,6 +325,7 @@ class ReaderOptions {
   std::shared_ptr<DataCacheConfig> dataCacheConfig_;
   std::shared_ptr<encryption::DecrypterFactory> decrypterFactory_;
   velox::dwrf::BufferedInputFactory* bufferedInputFactory_ = nullptr;
+  bool useAhanaParquetReader = false;
 
  public:
   static constexpr int32_t kDefaultLoadQuantum = 8 << 20; // 8MB
@@ -353,6 +363,15 @@ class ReaderOptions {
 
   ReaderOptions(const ReaderOptions& other) {
     *this = other;
+  }
+
+  ReaderOptions& setUseAhanaParquetReader(bool useAhanaParquetReader) {
+    this->useAhanaParquetReader = useAhanaParquetReader;
+    return *this;
+  }
+
+  bool getUseAhanaParquetReader() {
+    return this->useAhanaParquetReader;
   }
 
   /**

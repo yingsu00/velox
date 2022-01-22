@@ -108,6 +108,8 @@ TypePtr toVeloxType(LogicalType type) {
       return TIMESTAMP();
     case LogicalTypeId::BLOB:
       return VARBINARY();
+    case LogicalTypeId::STRUCT:
+
     default:
       throw std::runtime_error(
           "unsupported type for duckdb -> velox conversion: " +

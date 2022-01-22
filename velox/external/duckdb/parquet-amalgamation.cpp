@@ -6471,6 +6471,8 @@ uint32_t FileMetaData::read(::duckdb_apache::thrift::protocol::TProtocol* iprot)
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
+
+
     if (ftype == ::duckdb_apache::thrift::protocol::T_STOP) {
       break;
     }
@@ -10095,10 +10097,6 @@ public:
 //
 //===----------------------------------------------------------------------===//
 
-
-
-
-
 namespace duckdb {
 
 template <class VALUE_TYPE>
@@ -12965,6 +12963,7 @@ ZSTDLIB_API size_t ZSTD_sizeof_DDict(const ZSTD_DDict* ddict);
 #include <iostream>
 
 #include "duckdb.hpp"
+#include "AhanaParquetReader.h"
 #ifndef DUCKDB_AMALGAMATION
 #include "duckdb/common/types/blob.hpp"
 #include "duckdb/common/types/chunk_collection.hpp"
@@ -13020,7 +13019,7 @@ unique_ptr<ColumnReader> CreateDecimalReader(ParquetReader &reader, const Logica
 
 unique_ptr<ColumnReader> ColumnReader::CreateReader(ParquetReader &reader, const LogicalType &type_p,
                                                     const SchemaElement &schema_p, idx_t file_idx_p, idx_t max_define,
-                                                    idx_t max_repeat) {
+                                                    idx_t max_repeat, bool useAhana, shared_ptr<TableFilter> filter) {
 	switch (type_p.id()) {
 	case LogicalTypeId::BOOLEAN:
 		return make_unique<BooleanColumnReader>(reader, type_p, schema_p, file_idx_p, max_define, max_repeat);
@@ -13043,8 +13042,19 @@ unique_ptr<ColumnReader> ColumnReader::CreateReader(ParquetReader &reader, const
 		return make_unique<TemplatedColumnReader<int16_t, TemplatedParquetValueConversion<int32_t>>>(
 		    reader, type_p, schema_p, file_idx_p, max_define, max_repeat);
 	case LogicalTypeId::INTEGER:
-		return make_unique<TemplatedColumnReader<int32_t, TemplatedParquetValueConversion<int32_t>>>(
-		    reader, type_p, schema_p, file_idx_p, max_define, max_repeat);
+	  if (useAhana) {
+	    auto integerReader = make_unique<IntegerPlainColumnReader>(
+	        reader, type_p, schema_p, file_idx_p, max_define, max_repeat);
+	    if (filter != nullptr) {
+              integerReader->SetFilter(std::move(filter));
+            }
+	    return integerReader;
+	  }
+	  else {
+	    return make_unique<TemplatedColumnReader<int32_t, TemplatedParquetValueConversion<int32_t>>>(
+	        reader, type_p, schema_p, file_idx_p, max_define, max_repeat);
+	  }
+
 	case LogicalTypeId::BIGINT:
 		return make_unique<TemplatedColumnReader<int64_t, TemplatedParquetValueConversion<int64_t>>>(
 		    reader, type_p, schema_p, file_idx_p, max_define, max_repeat);
@@ -13119,6 +13129,9 @@ void ColumnReader::PrepareRead(parquet_filter_t &filter) {
 	defined_decoder.reset();
 	block.reset();
 
+	auto &trans = (ThriftFileTransport &)*protocol->getTransport();
+        trans.Prefetch(trans.GetLocation(), sizeof(PageHeader));
+  
 	PageHeader page_hdr;
 	page_hdr.read(protocol);
 
@@ -15682,8 +15695,7 @@ static unique_ptr<duckdb_apache::thrift::protocol::TProtocol> CreateThriftProtoc
 	auto transport = make_shared<ThriftFileTransport>(allocator, file_handle);
 	return make_unique<duckdb_apache::thrift::protocol::TCompactProtocolT<ThriftFileTransport>>(move(transport));
 }
-
-static shared_ptr<ParquetFileMetadataCache> LoadMetadata(Allocator &allocator, FileHandle &file_handle) {
+ shared_ptr<ParquetFileMetadataCache> LoadMetadata(Allocator &allocator, FileHandle &file_handle) {
 	auto current_time = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
 
 	auto proto = CreateThriftProtocol(allocator, file_handle);
@@ -15915,15 +15927,28 @@ unique_ptr<ColumnReader> ParquetReader::CreateReaderRecursive(const FileMetaData
 			auto list_type = LogicalType::LIST(derived_type);
 
 			auto element_reader =
-			    ColumnReader::CreateReader(*this, derived_type, s_ele, next_file_idx++, max_define, max_repeat);
+			    ColumnReader::CreateReader(*this, derived_type, s_ele, next_file_idx++, max_define, max_repeat);  // Hack filter on column 0
 
 			return make_unique<ListColumnReader>(*this, list_type, s_ele, this_idx, max_define, max_repeat,
 			                                     move(element_reader));
 		}
 
-		// TODO check return value of derive type or should we only do this on read()
-		return ColumnReader::CreateReader(*this, DeriveLogicalType(s_ele), s_ele, next_file_idx++, max_define,
-		                                  max_repeat);
+		if (filterByHiveIdx && !filterByHiveIdx->empty()) {
+                  auto iter = filterByHiveIdx->find(0);  // Hack We know filter is on column 0
+                  if (iter != filterByHiveIdx->end()) {
+                    return ColumnReader::CreateReader(*this, DeriveLogicalType(s_ele), s_ele, next_file_idx++, max_define,
+                                                                  max_repeat, useAhana, iter->second);
+                  }
+                  else {
+                    return ColumnReader::CreateReader(*this, DeriveLogicalType(s_ele), s_ele, next_file_idx++, max_define, max_repeat);
+                  }
+                              // TODO check return value of derive type or should we only do this on read()
+
+                }
+                else {
+                  return ColumnReader::CreateReader(*this, DeriveLogicalType(s_ele), s_ele, next_file_idx++, max_define,
+                                                          max_repeat, useAhana, {});
+                }
 	}
 }
 
@@ -16051,6 +16076,11 @@ unique_ptr<BaseStatistics> ParquetReader::ReadStatistics(ParquetReader &reader, 
 	return column_stats;
 }
 
+
+void ParquetReader::setUseAhana(bool value) {
+  useAhana = value;
+}
+
 const ParquetRowGroup &ParquetReader::GetGroup(ParquetReaderScanState &state) {
 	auto file_meta_data = GetFileMetadata();
 	D_ASSERT(state.current_group >= 0 && (idx_t)state.current_group < state.group_idx_list.size());
@@ -16096,18 +16126,29 @@ idx_t ParquetReader::NumRowGroups() {
 }
 
 void ParquetReader::InitializeScan(ParquetReaderScanState &state, vector<column_t> column_ids,
-                                   vector<idx_t> groups_to_read, TableFilterSet *filters) {
+                                   vector<idx_t> groups_to_read, TableFilterSet *filterSet, bool useAhana) {
 	state.current_group = -1;
 	state.finished = false;
 	state.column_ids = move(column_ids);
 	state.group_offset = 0;
 	state.group_idx_list = move(groups_to_read);
-	state.filters = filters;
 	state.sel.Initialize(STANDARD_VECTOR_SIZE);
 	state.file_handle =
 	    file_handle->file_system.OpenFile(file_handle->path, FileFlags::FILE_FLAGS_READ, FileSystem::DEFAULT_LOCK,
 	                                      FileSystem::DEFAULT_COMPRESSION, file_opener);
 	state.thrift_file_proto = CreateThriftProtocol(allocator, *state.file_handle);
+        state.filters = filterSet;
+
+        this->useAhana = useAhana;
+        if (useAhana) {
+          
+          filterByHiveIdx = std::make_unique<std::unordered_map<idx_t, shared_ptr<TableFilter>>>();
+          for (auto& pair : filterSet->filters) {
+            idx_t idxInColumnIds = pair.first;
+            filterByHiveIdx->insert((std::make_pair(state.column_ids[idxInColumnIds], pair.second)));
+          }
+        }
+
 	state.root_reader = CreateReader(GetFileMetadata());
 
 	state.define_buf.resize(allocator, STANDARD_VECTOR_SIZE);
@@ -16279,125 +16320,255 @@ static void ApplyFilter(Vector &v, TableFilter &filter, parquet_filter_t &filter
 	}
 }
 
-void ParquetReader::Scan(ParquetReaderScanState &state, DataChunk &result) {
-	while (ScanInternal(state, result)) {
-		if (result.size() > 0) {
-			break;
-		}
-		result.Reset();
-	}
+uint64_t ParquetReader::Scan(ParquetReaderScanState &state, DataChunk &result) {
+  uint64_t rowsScanned = 0;
+  while (!state.finished) {
+    result.Reset();
+    rowsScanned += ScanInternal(state, result);
+    if (result.size() > 0) {
+      break;
+    }
+  }
+  return rowsScanned;
 }
 
-bool ParquetReader::ScanInternal(ParquetReaderScanState &state, DataChunk &result) {
-	if (state.finished) {
-		return false;
-	}
+// uint64_t ParquetReader::Scan(ParquetReaderScanState &state, DataChunk &result) {
+// 	while (ScanInternal(state, result)) {
+// 		if (result.size() > 0) {
+// 			break;
+// 		}
+// 		result.Reset();
+// 	}
+// }
 
-	// see if we have to switch to the next row group in the parquet file
-	if (state.current_group < 0 || (int64_t)state.group_offset >= GetGroup(state).num_rows) {
-		state.current_group++;
-		state.group_offset = 0;
+uint64_t ParquetReader::ScanInternal(ParquetReaderScanState &state, DataChunk &result) {
+  // if (state.finished) {
+  //   return false;
+  // }
 
-		if ((idx_t)state.current_group == state.group_idx_list.size()) {
-			state.finished = true;
-			return false;
-		}
+  uint64_t rowsScanned = 0;
 
-		for (idx_t out_col_idx = 0; out_col_idx < result.ColumnCount(); out_col_idx++) {
-			// this is a special case where we are not interested in the actual contents of the file
-			if (state.column_ids[out_col_idx] == COLUMN_IDENTIFIER_ROW_ID) {
-				continue;
-			}
+  // see if we have to switch to the next row group in the parquet file
+  if (state.current_group < 0 || (int64_t)state.group_offset >= GetGroup(state).num_rows) {
+    state.current_group++;
+    state.group_offset = 0;
 
-			PrepareRowGroupBuffer(state, out_col_idx);
-		}
-		return true;
-	}
+    if ((idx_t)state.current_group == state.group_idx_list.size()) {
+      state.finished = true;
+      return rowsScanned;
+    }
 
-	auto this_output_chunk_rows = MinValue<idx_t>(STANDARD_VECTOR_SIZE, GetGroup(state).num_rows - state.group_offset);
-	result.SetCardinality(this_output_chunk_rows);
+    for (idx_t out_col_idx = 0; out_col_idx < result.ColumnCount(); out_col_idx++) {
+      // this is a special case where we are not interested in the actual contents of the file
+      if (state.column_ids[out_col_idx] == COLUMN_IDENTIFIER_ROW_ID) {
+        continue;
+      }
 
-	if (this_output_chunk_rows == 0) {
-		state.finished = true;
-		return false; // end of last group, we are done
-	}
+      PrepareRowGroupBuffer(state, out_col_idx);
+    }
+  }
 
-	// we evaluate simple table filters directly in this scan so we can skip decoding column data that's never going to
-	// be relevant
-	parquet_filter_t filter_mask;
-	filter_mask.set();
+  auto this_output_chunk_rows = MinValue<idx_t>(STANDARD_VECTOR_SIZE, GetGroup(state).num_rows - state.group_offset);
+  result.SetCardinality(this_output_chunk_rows);
 
-	state.define_buf.zero();
-	state.repeat_buf.zero();
+  if (this_output_chunk_rows == 0) {
+    state.finished = true;
+    return rowsScanned; // end of last group, we are done
+  }
 
-	auto define_ptr = (uint8_t *)state.define_buf.ptr;
-	auto repeat_ptr = (uint8_t *)state.repeat_buf.ptr;
+  // we evaluate simple table filters directly in this scan so we can skip decoding column data that's never going to
+  // be relevant
+  parquet_filter_t filter_mask;
+  filter_mask.set();
 
-	auto root_reader = ((StructColumnReader *)state.root_reader.get());
+  state.define_buf.zero();
+  state.repeat_buf.zero();
 
-	if (state.filters) {
-		vector<bool> need_to_read(result.ColumnCount(), true);
+  auto define_ptr = (uint8_t *)state.define_buf.ptr;
+  auto repeat_ptr = (uint8_t *)state.repeat_buf.ptr;
 
-		// first load the columns that are used in filters
-		for (auto &filter_col : state.filters->filters) {
-			auto file_col_idx = state.column_ids[filter_col.first];
+  auto root_reader = ((StructColumnReader *)state.root_reader.get());
+  
 
-			if (filter_mask.none()) { // if no rows are left we can stop checking filters
-				break;
-			}
+  if (state.filters) {
+    vector<bool> need_to_read(result.ColumnCount(), true);
 
-			root_reader->GetChildReader(file_col_idx)
-			    ->Read(result.size(), filter_mask, define_ptr, repeat_ptr, result.data[filter_col.first]);
+    // first load the columns that are used in filters
+    for (auto &filter_col : state.filters->filters) {
+      auto file_col_idx = state.column_ids[filter_col.first];
 
-			need_to_read[filter_col.first] = false;
+      if (filter_mask.none()) { // if no rows are left we can stop checking filters
+        break;
+      }
 
-			ApplyFilter(result.data[filter_col.first], *filter_col.second, filter_mask, this_output_chunk_rows);
-		}
+      rowsScanned = root_reader->GetChildReader(file_col_idx)
+          ->Read(result.size(), filter_mask, define_ptr, repeat_ptr, result.data[filter_col.first]);
 
-		// we still may have to read some cols
-		for (idx_t out_col_idx = 0; out_col_idx < result.ColumnCount(); out_col_idx++) {
-			if (!need_to_read[out_col_idx]) {
-				continue;
-			}
-			auto file_col_idx = state.column_ids[out_col_idx];
+      need_to_read[filter_col.first] = false;
 
-			if (filter_mask.none()) {
-				root_reader->GetChildReader(file_col_idx)->Skip(result.size());
-				continue;
-			}
-			// TODO handle ROWID here, too
-			root_reader->GetChildReader(file_col_idx)
-			    ->Read(result.size(), filter_mask, define_ptr, repeat_ptr, result.data[out_col_idx]);
-		}
+      if (!useAhana) {
+        ApplyFilter(result.data[filter_col.first], *filter_col.second, filter_mask, this_output_chunk_rows);
+      }
+    }
 
-		idx_t sel_size = 0;
-		for (idx_t i = 0; i < this_output_chunk_rows; i++) {
-			if (filter_mask[i]) {
-				state.sel.set_index(sel_size++, i);
-			}
-		}
+    // we still may have to read some cols
+    for (idx_t out_col_idx = 0; out_col_idx < result.ColumnCount(); out_col_idx++) {
+      if (!need_to_read[out_col_idx]) {
+        continue;
+      }
+      auto file_col_idx = state.column_ids[out_col_idx];
 
-		result.Slice(state.sel, sel_size);
-		result.Verify();
+      if (filter_mask.none()) {
+        root_reader->GetChildReader(file_col_idx)->Skip(result.size());
+        continue;
+      }
+      // TODO handle ROWID here, too
+      rowsScanned = root_reader->GetChildReader(file_col_idx)
+          ->Read(result.size(), filter_mask, define_ptr, repeat_ptr, result.data[out_col_idx]);
+    }
 
-	} else { // #nofilter, just fricking load the data
-		for (idx_t out_col_idx = 0; out_col_idx < result.ColumnCount(); out_col_idx++) {
-			auto file_col_idx = state.column_ids[out_col_idx];
+    idx_t sel_size = 0;
+    for (idx_t i = 0; i < this_output_chunk_rows; i++) {
+      if (filter_mask[i]) {
+        state.sel.set_index(sel_size++, i);
+      }
+    }
 
-			if (file_col_idx == COLUMN_IDENTIFIER_ROW_ID) {
-				Value constant_42 = Value::BIGINT(42);
-				result.data[out_col_idx].Reference(constant_42);
-				continue;
-			}
+    result.Slice(state.sel, sel_size);
+    result.Verify();
 
-			root_reader->GetChildReader(file_col_idx)
-			    ->Read(result.size(), filter_mask, define_ptr, repeat_ptr, result.data[out_col_idx]);
-		}
-	}
+  } else { // #nofilter, just fricking load the data
+    for (idx_t out_col_idx = 0; out_col_idx < result.ColumnCount(); out_col_idx++) {
+      auto file_col_idx = state.column_ids[out_col_idx];
 
-	state.group_offset += this_output_chunk_rows;
-	return true;
+      if (file_col_idx == COLUMN_IDENTIFIER_ROW_ID) {
+        Value constant_42 = Value::BIGINT(42);
+        result.data[out_col_idx].Reference(constant_42);
+        continue;
+      }
+
+      root_reader->GetChildReader(file_col_idx)
+          ->Read(result.size(), filter_mask, define_ptr, repeat_ptr, result.data[out_col_idx]);
+    }
+  }
+
+  state.group_offset += this_output_chunk_rows;
+  return rowsScanned;
 }
+
+// uint64_t ParquetReader::ScanInternal(ParquetReaderScanState &state, DataChunk &result) {
+// 	if (state.finished) {
+// 		return false;
+// 	}
+
+// 	// see if we have to switch to the next row group in the parquet file
+// 	if (state.current_group < 0 || (int64_t)state.group_offset >= GetGroup(state).num_rows) {
+// 		state.current_group++;
+// 		state.group_offset = 0;
+
+// 		if ((idx_t)state.current_group == state.group_idx_list.size()) {
+// 			state.finished = true;
+// 			return false;
+// 		}
+
+// 		for (idx_t out_col_idx = 0; out_col_idx < result.ColumnCount(); out_col_idx++) {
+// 			// this is a special case where we are not interested in the actual contents of the file
+// 			if (state.column_ids[out_col_idx] == COLUMN_IDENTIFIER_ROW_ID) {
+// 				continue;
+// 			}
+
+// 			PrepareRowGroupBuffer(state, out_col_idx);
+// 		}
+// //		return true;
+// 	}
+
+// 	auto this_output_chunk_rows = MinValue<idx_t>(STANDARD_VECTOR_SIZE, GetGroup(state).num_rows - state.group_offset);
+// 	result.SetCardinality(this_output_chunk_rows);
+
+// 	if (this_output_chunk_rows == 0) {
+// 		state.finished = true;
+// 		return false; // end of last group, we are done
+// 	}
+
+// 	// we evaluate simple table filters directly in this scan so we can skip decoding column data that's never going to
+// 	// be relevant
+// 	parquet_filter_t filter_mask;
+// 	filter_mask.set();
+
+// 	state.define_buf.zero();
+// 	state.repeat_buf.zero();
+
+// 	auto define_ptr = (uint8_t *)state.define_buf.ptr;
+// 	auto repeat_ptr = (uint8_t *)state.repeat_buf.ptr;
+
+// 	auto root_reader = ((StructColumnReader *)state.root_reader.get());
+// 	uint64_t readCount = 0;
+
+// 	if (state.filters) {
+// 		vector<bool> need_to_read(result.ColumnCount(), true);
+
+// 		// first load the columns that are used in filters
+// 		for (auto &filter_col : state.filters->filters) {
+// 			auto file_col_idx = state.column_ids[filter_col.first];
+
+// 			if (filter_mask.none()) { // if no rows are left we can stop checking filters
+// 				break;
+// 			}
+
+// 			readCount = root_reader->GetChildReader(file_col_idx)
+// 			    ->Read(result.size(), filter_mask, define_ptr, repeat_ptr, result.data[filter_col.first]);
+
+// 			need_to_read[filter_col.first] = false;
+
+// 			if (!useAhana) {
+// 			  ApplyFilter(result.data[filter_col.first], *filter_col.second, filter_mask, this_output_chunk_rows);
+// 			}
+// 		}
+
+// 		// we still may have to read some cols
+// 		for (idx_t out_col_idx = 0; out_col_idx < result.ColumnCount(); out_col_idx++) {
+// 			if (!need_to_read[out_col_idx]) {
+// 				continue;
+// 			}
+// 			auto file_col_idx = state.column_ids[out_col_idx];
+
+// 			if (filter_mask.none()) {
+// 				root_reader->GetChildReader(file_col_idx)->Skip(result.size());
+// 				continue;
+// 			}
+// 			// TODO handle ROWID here, too
+// 			readCount = root_reader->GetChildReader(file_col_idx)
+// 			    ->Read(result.size(), filter_mask, define_ptr, repeat_ptr, result.data[out_col_idx]);
+// 		}
+
+// 		idx_t sel_size = 0;
+// 		for (idx_t i = 0; i < this_output_chunk_rows; i++) {
+// 			if (filter_mask[i]) {
+// 				state.sel.set_index(sel_size++, i);
+// 			}
+// 		}
+
+// 		result.Slice(state.sel, sel_size);
+// 		result.Verify();
+
+// 	} else { // #nofilter, just fricking load the data
+// 		for (idx_t out_col_idx = 0; out_col_idx < result.ColumnCount(); out_col_idx++) {
+// 			auto file_col_idx = state.column_ids[out_col_idx];
+
+// 			if (file_col_idx == COLUMN_IDENTIFIER_ROW_ID) {
+// 				Value constant_42 = Value::BIGINT(42);
+// 				result.data[out_col_idx].Reference(constant_42);
+// 				continue;
+// 			}
+
+// 			root_reader->GetChildReader(file_col_idx)
+// 			    ->Read(result.size(), filter_mask, define_ptr, repeat_ptr, result.data[out_col_idx]);
+// 		}
+// 	}
+
+// 	state.group_offset += this_output_chunk_rows;
+// 	return true;
+// }
 
 } // namespace duckdb
 

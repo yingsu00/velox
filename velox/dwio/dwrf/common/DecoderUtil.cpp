@@ -22,6 +22,7 @@ namespace facebook::velox::dwrf {
 
 using V32 = simd::Vectors<int32_t>;
 
+// scatter
 int32_t nonNullRowsFromDense(
     const uint64_t* nulls,
     int32_t numRows,
@@ -50,6 +51,10 @@ uint64_t loadUpTo56Bits(const uint64_t* bits, int32_t index, int32_t width) {
       bits::lowMask(width);
 }
 
+// 1, null, 2, null, 3, null
+//          ^
+// Find the number of nulls before value 2
+//
 template <bool isFilter, bool outputNulls>
 bool nonNullRowsFromSparse(
     const uint64_t* nulls,

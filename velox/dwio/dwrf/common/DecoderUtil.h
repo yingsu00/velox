@@ -73,6 +73,7 @@ void scatterDense(
   }
 }
 
+// Important to read
 // Filters and writes a SIMD register worth of values into scan
 // output. T is the element type of 'values'. 'width' is the number
 // of valid leading elements in 'values'.  Appends the row numbers
@@ -95,13 +96,13 @@ template <
     typename LoadIndices>
 inline void processFixedFilter(
     __m256i values,
-    int32_t width,
+    int32_t width,   // number of lanes in the regester
     int32_t firstRow,
     TFilter& filter,
-    LoadIndices loadIndices,
+    LoadIndices loadIndices,   // Template parameter
     T* rawValues,
-    int32_t* filterHits,
-    int32_t& numValues) {
+    int32_t* filterHits,  // result
+    int32_t& numValues) {  //
   using V32 = simd::Vectors<int32_t>;
   using TV = simd::Vectors<T>;
   constexpr bool is16 = sizeof(T) == 2;
@@ -129,11 +130,11 @@ inline void processFixedFilter(
     if (dense && !scatter) {
       V32::store(filterHits + numValues, setBits + firstRow);
     } else {
-      simd::storePermute(filterHits + numValues, loadIndices(0), setBits);
+      simd::storePermute(filterHits + numValues, loadIndices(0), setBits);  // shifting to the lest
     }
     if (!filterOnly) {
       if (sizeof(T) == 4) {
-        simd::storePermute(
+        simd::storePermute(   // store the values
             rawValues + numValues, reinterpret_cast<__m256si>(values), setBits);
       } else if (sizeof(T) == 8) {
         simd::storePermute(
@@ -170,6 +171,9 @@ inline void processFixedFilter(
 
 struct NoHook;
 
+// Plain encoding, fixed width,
+// passing values, and indices of the passing values
+
 template <
     typename T,
     bool filterOnly,
@@ -178,7 +182,7 @@ template <
     typename THook>
 void fixedWidthScan(
     folly::Range<const int32_t*> rows,
-    const int32_t* scatterRows,
+    const int32_t* scatterRows,  // non-null domain
     void* voidValues,
     int32_t* filterHits,
     int32_t& numValues,
@@ -199,7 +203,7 @@ void fixedWidthScan(
       input,
       bufferStart,
       bufferEnd,
-      [&](T value, int32_t rowIndex) {
+      [&](T value, int32_t rowIndex) {  // single value
         if (!hasFilter) {
           if (hasHook) {
             hook.addValue(scatterRows[rowIndex], &value);
@@ -224,7 +228,7 @@ void fixedWidthScan(
           int32_t numRowsInBuffer,
           int32_t rowOffset,
           const T* buffer) {
-        rowLoop(
+        rowLoop(   // loop over the words and gather
             rows,
             rowIndex,
             rowIndex + numRowsInBuffer,
@@ -278,10 +282,10 @@ void fixedWidthScan(
             [&](int32_t rowIndex) {
               for (auto step = 0; step < kStep / kWidth; ++step) {
                 auto indices =
-                    simd::Vectors<T>::loadGather32Indices(rows + rowIndex);
+                    simd::Vectors<T>::loadGather32Indices(rows + rowIndex);  // non-contigous
                 __m256i values;
                 if (is16) {
-                  values = reinterpret_cast<__m256i>(simd::gather16x32(
+                  values = reinterpret_cast<__m256i>(simd::gather16x32(  // gather only required rows
                       buffer - rowOffset, rows + rowIndex, 16));
                 } else {
                   values = reinterpret_cast<__m256i>(
