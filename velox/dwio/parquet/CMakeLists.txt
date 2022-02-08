@@ -14,6 +14,8 @@
 
 add_subdirectory(reader)
 
+message(STATUS "VELOX_BUILD_TESTING: ${VELOX_BUILD_TESTING}")
+
 if(${VELOX_BUILD_TESTING})
   add_subdirectory(tests)
 endif()
