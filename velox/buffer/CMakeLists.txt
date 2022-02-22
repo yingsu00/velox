@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_library(velox_buffer StringViewBufferHolder.cpp)
+add_library(velox_buffer StringViewBufferHolder.cpp BufferUtils.h)
 
 target_link_libraries(velox_buffer ${FOLLY_WITH_DEPENDENCIES})
 

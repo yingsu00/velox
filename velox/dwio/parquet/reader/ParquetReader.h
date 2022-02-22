@@ -16,18 +16,19 @@
 
 #pragma once
 
+#include <thrift/TBase.h>
 #include "velox/dwio/common/Reader.h"
 #include "velox/dwio/common/ReaderFactory.h"
-#include "velox/dwio/parquet/reader/duckdb/Allocator.h"
-#include "velox/dwio/parquet/reader/duckdb/InputStreamFileSystem.h"
-#include "velox/external/duckdb/parquet-amalgamation.hpp"
+//#include "velox/dwio/parquet/reader/duckdb/Allocator.h"
+//#include "velox/dwio/parquet/reader/duckdb/InputStreamFileSystem.h"
+//#include "velox/external/duckdb/parquet-amalgamation.hpp"
 
 namespace facebook::velox::parquet {
 
 class ParquetRowReader : public dwio::common::RowReader {
  public:
   ParquetRowReader(
-      std::shared_ptr<::duckdb::ParquetReader> reader,
+      std::shared_ptr<NativeParquetReader> reader,
       const dwio::common::RowReaderOptions& options,
       memory::MemoryPool& pool);
   ~ParquetRowReader() override = default;

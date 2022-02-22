@@ -73,6 +73,7 @@ uint64_t InMemoryWriteFile::size() const {
 }
 
 LocalReadFile::LocalReadFile(std::string_view path) {
+  std::printf("%s\n", path.data());
   std::unique_ptr<char[]> buf(new char[path.size() + 1]);
   buf[path.size()] = 0;
   memcpy(buf.get(), path.data(), path.size());

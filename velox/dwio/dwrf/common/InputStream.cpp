@@ -225,6 +225,10 @@ bool SeekableFileInputStream::Next(const void** data, int32_t* size) {
   *size = static_cast<int32_t>(bytesRead);
   return bytesRead != 0;
 }
+//
+//bool SeekableFileInputStream::Next(const void** data, int32_t* size) {
+//  return Next(data, size, false);
+//}
 
 void SeekableFileInputStream::BackUp(int32_t signedCount) {
   DWIO_ENSURE_GE(signedCount, 0, "can't backup negative distances");

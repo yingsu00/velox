@@ -35,6 +35,8 @@ std::string CacheKey(uint64_t filenum, Region region) {
 
 } // namespace
 
+// TODO: move to dwio/common
+
 void BufferedInput::load(const LogType logType) {
   // no regions to load
   if (regions_.size() == 0) {

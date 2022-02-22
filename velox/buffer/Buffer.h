@@ -436,6 +436,32 @@ class AlignedBuffer : public Buffer {
     return newBuffer;
   }
 
+  // reallocate always allocate new buffer if newSize<oldsize
+//  template <typename T>
+//  static BufferPtr ensureCapacity(
+//      BufferPtr* buffer,
+//      velox::memory::MemoryPool* pool,
+//      size_t numElements,
+//      const std::optional<T>& initValue = std::nullopt) {
+//    VELOX_CHECK(buffer, "buffer is nullptr in ensureCapacity");
+//    if (*buffer == nullptr) {
+//      return allocate(numElements, pool, initValue);
+//    } else {
+//      Buffer* old = buffer->get();
+//      VELOX_CHECK(old, "Buffer doesn't exist in ensureCapacity");
+//      old->checkEndGuard();
+//      VELOX_DCHECK(
+//          dynamic_cast<ImplClass<T>*>(old) != nullptr,
+//          "ensureCapacity tries to change the type");
+//      auto oldSize = old->size();
+//
+//      if (numElements * sizeof(T) >= oldSize) {
+//        reallocate(buffer, numElements, initValue);
+//      }
+//      return *buffer;
+//    }
+//  }
+
  protected:
   AlignedBuffer(velox::memory::MemoryPool* pool, size_t capacity)
       : Buffer(
@@ -648,6 +674,11 @@ class BufferView : public Buffer {
   }
 
   Releaser const releaser_;
+};
+
+struct BufferViewReleaser {
+  void addRef() const {}
+  void release() const {}
 };
 
 } // namespace velox

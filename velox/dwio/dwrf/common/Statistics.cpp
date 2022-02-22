@@ -25,6 +25,8 @@ std::unique_ptr<ColumnStatistics> buildColumnStatisticsFromProto(
     const StatsContext& statsContext) {
   ColumnStatistics colStats(
       s.has_numberofvalues() ? std::optional(s.numberofvalues()) : std::nullopt,
+      std::nullopt,
+      std::nullopt,
       s.has_hasnull() ? std::optional(s.hasnull()) : std::nullopt,
       s.has_rawsize() ? std::optional(s.rawsize()) : std::nullopt,
       s.has_size() ? std::optional(s.size()) : std::nullopt);

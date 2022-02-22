@@ -18,3 +18,4 @@ if(VELOX_ENABLE_PARQUET)
   add_subdirectory(parquet)
 endif()
 add_subdirectory(type)
+

@@ -25,6 +25,10 @@ namespace facebook::velox {
 // Dynamic size dense bit set that Keeps track of maximum set bit.
 class BitSet {
  public:
+  BitSet(int64_t min, int64_t initialSize)
+      : min_(min),
+        lastSetBit_(initialSize),
+        bits_(ceil(initialSize / 64E1), 0) {}
   // Constructs a bitSet. 'min' is the lowest possible member of the
   // set. Values below this are not present and inserting these is a
   // no-op. 'min' is used when using this as an IN predicate filter.
@@ -56,6 +60,14 @@ class BitSet {
     return bits::isBitSet(bits_.data(), bit);
   }
 
+  void setBit(uint64_t idx, bool val) {
+    auto dwordOffset = idx / 64;
+    uint8_t offset = idx - dwordOffset * 64;
+
+    uint64_t& dword64 = bits_[dwordOffset];
+    dword64 = dword64 ^ ((dword64 & (1L << offset)) ^ (val << offset));
+  }
+
   // Returns the largest element of the set or 'min_ - 1' if empty.
   int64_t max() const {
     return lastSetBit_ + min_;
@@ -65,10 +77,48 @@ class BitSet {
     return bits_.data();
   }
 
+  int64_t size() {
+    return lastSetBit_ + 1;
+  }
+
+  int64_t getNumSetBits() {
+    if (numSetBits_ == -1) {
+      numSetBits_ = bits::countBits(bits_.data(), 0, lastSetBit_ + 1);
+    }
+    return numSetBits_;
+  }
+
+  int64_t getNumUnSetBits() {
+    return lastSetBit_ - getNumSetBits() + 1;
+  }
+
+  int64_t empty() {
+    return lastSetBit_ < 0;
+  }
+
+  void reset() {
+    std::fill(bits_.begin(), bits_.end(), 0);
+  }
+
+  void reset(int64_t size) {
+    int64_t numWords = bits::nwords(size);
+    if (bits_.size() < numWords) {
+      bits_.resize(numWords);
+    }
+    lastSetBit_ = size - 1;
+    reset();
+  }
+
+  bool operator[] (size_t pos) const {
+    // TODO:
+    return true;
+  }
+
  private:
   std::vector<uint64_t> bits_;
   const int64_t min_;
   int64_t lastSetBit_ = -1;
+  int64_t numSetBits_ = -1;
 };
 
 } // namespace facebook::velox

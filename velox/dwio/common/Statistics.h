@@ -27,10 +27,14 @@ class ColumnStatistics {
  public:
   ColumnStatistics(
       std::optional<uint64_t> valueCount,
+      std::optional<uint64_t> distinctValueCount,
+      std::optional<uint64_t> nullCount,
       std::optional<bool> hasNull,
       std::optional<uint64_t> rawSize,
       std::optional<uint64_t> size)
       : valueCount_(valueCount),
+        distinctValueCount_(distinctValueCount),
+        nullCount_(nullCount),
         hasNull_(hasNull),
         rawSize_(rawSize),
         size_(size) {}
@@ -43,6 +47,14 @@ class ColumnStatistics {
    */
   std::optional<uint64_t> getNumberOfValues() const {
     return valueCount_;
+  }
+
+  std::optional<uint64_t> getNumberOfDistinctValues() const {
+    return distinctValueCount_;
+  }
+
+  std::optional<uint64_t> getNumberOfNulls() const {
+    return nullCount_;
   }
 
   /**
@@ -77,14 +89,22 @@ class ColumnStatistics {
         (size_ ? folly::to<std::string>(size_.value()) : "unknown"),
         ", Values: ",
         (valueCount_ ? folly::to<std::string>(valueCount_.value()) : "unknown"),
+        ", Distinct Values: ",
+        (distinctValueCount_
+             ? folly::to<std::string>(distinctValueCount_.value())
+             : "unknown"),
         ", hasNull: ",
-        (hasNull_ ? (hasNull_.value() ? "yes" : "no") : "unknown"));
+        (hasNull_ ? (hasNull_.value() ? "yes" : "no") : "unknown"),
+        ", Nulls: ",
+        (nullCount_ ? folly::to<std::string>(nullCount_.value()) : "unknown"));
   }
 
  protected:
   ColumnStatistics() {}
 
-  std::optional<uint64_t> valueCount_;
+  std::optional<uint64_t> valueCount_; // non-null values count
+  std::optional<uint64_t> distinctValueCount_;
+  std::optional<uint64_t> nullCount_;
   std::optional<bool> hasNull_;
   std::optional<uint64_t> rawSize_;
   std::optional<uint64_t> size_;
@@ -97,11 +117,14 @@ class BinaryColumnStatistics : public virtual ColumnStatistics {
  public:
   BinaryColumnStatistics(
       std::optional<uint64_t> valueCount,
+      std::optional<uint64_t> distinctValueCount,
+      std::optional<uint64_t> nullCount,
       std::optional<bool> hasNull,
       std::optional<uint64_t> rawSize,
       std::optional<uint64_t> size,
       std::optional<uint64_t> length)
-      : ColumnStatistics(valueCount, hasNull, rawSize, size), length_(length) {}
+      : ColumnStatistics(valueCount, distinctValueCount, nullCount, hasNull, rawSize, size),
+        length_(length) {}
 
   BinaryColumnStatistics(
       const ColumnStatistics& colStats,
@@ -138,11 +161,13 @@ class BooleanColumnStatistics : public virtual ColumnStatistics {
  public:
   BooleanColumnStatistics(
       std::optional<uint64_t> valueCount,
+      std::optional<uint64_t> distinctValueCount,
+      std::optional<uint64_t> nullCount,
       std::optional<bool> hasNull,
       std::optional<uint64_t> rawSize,
       std::optional<uint64_t> size,
       std::optional<uint64_t> trueCount)
-      : ColumnStatistics(valueCount, hasNull, rawSize, size),
+      : ColumnStatistics(valueCount, distinctValueCount, nullCount, hasNull, rawSize, size),
         trueCount_(trueCount) {}
 
   BooleanColumnStatistics(
@@ -190,13 +215,15 @@ class DoubleColumnStatistics : public virtual ColumnStatistics {
  public:
   DoubleColumnStatistics(
       std::optional<uint64_t> valueCount,
+      std::optional<uint64_t> distinctValueCount,
+      std::optional<uint64_t> nullCount,
       std::optional<bool> hasNull,
       std::optional<uint64_t> rawSize,
       std::optional<uint64_t> size,
       std::optional<double> min,
       std::optional<double> max,
       std::optional<double> sum)
-      : ColumnStatistics(valueCount, hasNull, rawSize, size),
+      : ColumnStatistics(valueCount, distinctValueCount, nullCount, hasNull, rawSize, size),
         min_(min),
         max_(max),
         sum_(sum) {}
@@ -260,13 +287,15 @@ class IntegerColumnStatistics : public virtual ColumnStatistics {
  public:
   IntegerColumnStatistics(
       std::optional<uint64_t> valueCount,
+      std::optional<uint64_t> distinctValueCount,
+      std::optional<uint64_t> nullCount,
       std::optional<bool> hasNull,
       std::optional<uint64_t> rawSize,
       std::optional<uint64_t> size,
       std::optional<int64_t> min,
       std::optional<int64_t> max,
       std::optional<int64_t> sum)
-      : ColumnStatistics(valueCount, hasNull, rawSize, size),
+      : ColumnStatistics(valueCount, distinctValueCount, nullCount, hasNull, rawSize, size),
         min_(min),
         max_(max),
         sum_(sum) {}
@@ -330,13 +359,15 @@ class StringColumnStatistics : public virtual ColumnStatistics {
  public:
   StringColumnStatistics(
       std::optional<uint64_t> valueCount,
+      std::optional<uint64_t> distinctValueCount,
+      std::optional<uint64_t> nullCount,
       std::optional<bool> hasNull,
       std::optional<uint64_t> rawSize,
       std::optional<uint64_t> size,
       std::optional<std::string> min,
       std::optional<std::string> max,
       std::optional<int64_t> length)
-      : ColumnStatistics(valueCount, hasNull, rawSize, size),
+      : ColumnStatistics(valueCount, distinctValueCount, nullCount, hasNull, rawSize, size),
         min_(min),
         max_(max),
         length_(length) {}

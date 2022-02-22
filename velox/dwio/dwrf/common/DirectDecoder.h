@@ -19,10 +19,66 @@
 #include "velox/common/base/Nulls.h"
 #include "velox/dwio/dwrf/common/DecoderUtil.h"
 #include "velox/dwio/dwrf/common/IntDecoder.h"
+#include "velox/vector/LazyVector.h"
 
 namespace facebook::velox::dwrf {
 
-struct DropValues;
+using vector_size_t = int32_t;
+
+// Template parameter to indicate no hook in fast scan path. This is
+// referenced in decoders, thus needs to be declared in a header.
+struct NoHook : public ValueHook {
+  void addValue(vector_size_t /*row*/, const void* /*value*/) override {}
+};
+
+//struct DropValues;
+struct DropValues {
+  static constexpr bool kSkipNulls = false;
+  using HookType = NoHook;
+
+  bool acceptsNulls() const {
+    return true;
+  }
+
+  template <typename V>
+  void addValue(vector_size_t /*rowIndex*/, V /*value*/) {}
+
+  void addNull(vector_size_t /*rowIndex*/) {}
+
+  HookType& hook() {
+    static NoHook hook;
+    return hook;
+  }
+};
+
+//namespace {
+template <typename TReader>
+ struct ExtractToReader {
+   using HookType = NoHook;
+   static constexpr bool kSkipNulls = false;
+   explicit ExtractToReader(TReader* readerIn) : reader(readerIn) {}
+
+   bool acceptsNulls() const {
+     return true;
+   }
+
+   void addNull(vector_size_t rowIndex) {
+     reader->template addNull<typename TReader::ValueType>();
+   }
+
+   template <typename V>
+   void addValue(vector_size_t /*rowIndex*/, V value) {
+     reader->addValue(value);
+   }
+
+   TReader* reader;
+
+   NoHook& hook() {
+     static NoHook noHook;
+     return noHook;
+   }
+ };
+//} // namespace
 
 template <bool isSigned>
 class DirectDecoder : public IntDecoder<isSigned> {
