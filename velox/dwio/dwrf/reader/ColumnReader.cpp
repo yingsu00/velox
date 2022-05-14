@@ -1005,9 +1005,17 @@ void StringDictionaryColumnReader::loadStrideDictionary() {
   strideDictCount = positions.Get(strideDictSizeOffset);
   if (strideDictCount > 0) {
     // seek stride dictionary related streams
-    std::vector<uint64_t> pos(
-        positions.begin() + positionOffset, positions.end());
+    std::vector<uint64_t> pos(positions.begin(), positions.end());
     PositionProvider pp(pos);
+
+    if (flatMapContext_.inMapDecoder) {
+      flatMapContext_.inMapDecoder->skipPositions(pp);
+    }
+
+    if (notNullDecoder_) {
+      notNullDecoder_->skipPositions(pp);
+    }
+
     strideDictStream->seekToPosition(pp);
     strideDictLengthDecoder->seekToRowGroup(pp);
 
@@ -1348,15 +1356,6 @@ void StringDictionaryColumnReader::ensureInitialized() {
   if (inDictionaryReader) {
     // load stride dictionary offsets
     rowIndex_ = ProtoUtils::readProto<proto::RowIndex>(std::move(indexStream_));
-    auto indexStartOffset = flatMapContext_.inMapDecoder
-        ? flatMapContext_.inMapDecoder->loadIndices(*rowIndex_, 0)
-        : 0;
-    positionOffset = notNullDecoder_
-        ? notNullDecoder_->loadIndices(*rowIndex_, indexStartOffset)
-        : indexStartOffset;
-    auto offset = strideDictStream->loadIndices(*rowIndex_, positionOffset);
-    strideDictSizeOffset =
-        strideDictLengthDecoder->loadIndices(*rowIndex_, offset);
   }
   initialized_ = true;
 }
