@@ -173,9 +173,9 @@ void SeekableArrayInputStream::seekToPosition(PositionProvider& position) {
   this->position = position.next();
 }
 
-void SeekableArrayInputStream::skipPositions(PositionProvider& pp) {
-  // not compressed, so only need to skip 1 value (uncompressed position)
-  pp.next();
+uint16_t SeekableArrayInputStream::positionSize() {
+  // not compressed, so only need 1 position value to identify the address
+  return 1;
 }
 
 std::string SeekableArrayInputStream::getName() const {
@@ -253,9 +253,9 @@ void SeekableFileInputStream::seekToPosition(PositionProvider& location) {
   pushBack = 0;
 }
 
-void SeekableFileInputStream::skipPositions(PositionProvider& pp) {
-  // not compressed, so only need to skip 1 value: uncompressed position
-  pp.next();
+uint16_t SeekableFileInputStream::positionSize() {
+  // not compressed, so only need 1 position value to identify the address
+  return 1;
 }
 
 std::string SeekableFileInputStream::getName() const {

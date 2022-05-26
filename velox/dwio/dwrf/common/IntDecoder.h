@@ -99,7 +99,7 @@ class IntDecoder {
    * @return updated start index after this stream's index values.
    */
   void skipPositions(PositionProvider& pp) {
-    inputStream->skipPositions(pp);
+    inputStream->positionSize();
     pp.next();
   }
 

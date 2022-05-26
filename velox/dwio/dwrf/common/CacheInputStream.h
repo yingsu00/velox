@@ -44,7 +44,7 @@ class CacheInputStream : public SeekableInputStream {
   bool Skip(int count) override;
   google::protobuf::int64 ByteCount() const override;
   void seekToPosition(PositionProvider& position) override;
-  void skipPositions(PositionProvider& position) override;
+  uint16_t positionSize() override;
   std::string getName() const override;
 
  private:

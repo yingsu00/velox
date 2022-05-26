@@ -96,9 +96,9 @@ void CacheInputStream::seekToPosition(PositionProvider& seekPosition) {
   position_ = seekPosition.next();
 }
 
-void CacheInputStream::skipPositions(PositionProvider& position) {
-  // not compressed, so only need to skip 1 value (uncompressed position)
-  position.next();
+uint16_t CacheInputStream::positionSize() {
+  // not compressed, so only need 1 position value to identify the address
+  return 1;
 }
 
 std::string CacheInputStream::getName() const {

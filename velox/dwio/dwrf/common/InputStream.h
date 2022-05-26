@@ -52,7 +52,7 @@ class SeekableInputStream : public google::protobuf::io::ZeroCopyInputStream {
 
   virtual void seekToPosition(PositionProvider& position) = 0;
 
-  virtual void skipPositions(PositionProvider& position) = 0;
+  virtual uint16_t positionSize() = 0;
 
   virtual std::string getName() const = 0;
 
@@ -98,7 +98,7 @@ class SeekableArrayInputStream : public SeekableInputStream {
   virtual bool Skip(int32_t count) override;
   virtual google::protobuf::int64 ByteCount() const override;
   virtual void seekToPosition(PositionProvider& position) override;
-  virtual void skipPositions(PositionProvider& position) override;
+  virtual uint16_t positionSize() override;
   virtual std::string getName() const override;
 };
 
@@ -132,7 +132,7 @@ class SeekableFileInputStream : public SeekableInputStream {
   virtual bool Skip(int32_t count) override;
   virtual google::protobuf::int64 ByteCount() const override;
   virtual void seekToPosition(PositionProvider& position) override;
-  virtual void skipPositions(PositionProvider& position) override;
+  virtual uint16_t positionSize() override;
   virtual std::string getName() const override;
 };
 

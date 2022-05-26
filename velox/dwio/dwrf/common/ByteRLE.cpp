@@ -389,7 +389,7 @@ void ByteRleDecoder::skip(uint64_t numValues) {
 }
 
 void ByteRleDecoder::skipPositions(PositionProvider& pp) {
-  inputStream->skipPositions(pp);
+  inputStream->positionSize();
   pp.next();
 }
 

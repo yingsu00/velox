@@ -59,10 +59,10 @@ class PagedInputStream : public SeekableInputStream {
         ")");
   }
 
-  void skipPositions(PositionProvider& position) override {
-    // need to skip 2 values: compressed position + uncompressed position
-    position.next();
-    position.next();
+  uint16_t positionSize() override {
+    // compressed, so need 2 position values to identify the stream address.
+    // (compressed position + uncompressed position)
+    return 1;
   }
 
  protected:
