@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include "velox/common/base/Portability.h"
 #include "velox/common/base/SimdUtil.h"
 #include "velox/dwio/dwrf/reader/SelectiveColumnReader.h"
 

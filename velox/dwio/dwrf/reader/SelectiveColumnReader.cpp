@@ -55,6 +55,20 @@ void ScanState::updateRawState() {
 }
 
 SelectiveColumnReader::SelectiveColumnReader(
+    memory::MemoryPool& memoryPool,
+    std::shared_ptr<const dwio::common::TypeWithId> requestedType,
+    common::ScanSpec* scanSpec,
+    // TODO: why is data type instead of requested type passed in?
+    const TypePtr& type,
+    FlatMapContext flatMapContext)
+    : ColumnReader(memoryPool, std::move(requestedType)),
+    scanSpec_(scanSpec),
+    type_{type},
+    rowsPerRowGroup_{static_cast<uint32_t>(-1)} {
+  EncodingKey encodingKey{nodeType_->id, flatMapContext_.sequence};
+}
+
+SelectiveColumnReader::SelectiveColumnReader(
     std::shared_ptr<const dwio::common::TypeWithId> requestedType,
     StripeStreams& stripe,
     common::ScanSpec* scanSpec,

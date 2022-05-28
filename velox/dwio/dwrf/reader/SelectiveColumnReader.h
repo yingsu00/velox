@@ -103,6 +103,13 @@ class SelectiveColumnReader : public ColumnReader {
   static constexpr uint64_t kStringBufferSize = 16 * 1024;
 
   SelectiveColumnReader(
+      memory::MemoryPool& memoryPool,
+      std::shared_ptr<const dwio::common::TypeWithId> requestedType,
+      common::ScanSpec* scanSpec,
+      const TypePtr& type,
+      FlatMapContext flatMapContext = FlatMapContext::nonFlatMapContext());
+
+  SelectiveColumnReader(
       std::shared_ptr<const dwio::common::TypeWithId> requestedType,
       StripeStreams& stripe,
       common::ScanSpec* scanSpec,

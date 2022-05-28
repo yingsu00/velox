@@ -69,7 +69,7 @@ endif()
 if(${VELOX_BUILD_TESTING})
   # Enable all components to build testing binaries
   set(VELOX_ENABLE_PRESTO_FUNCTIONS ON)
-  set(VELOX_ENABLE_DUCKDB ON)
+  set(VELOX_ENABLE_DUCKDB OFF)
   set(VELOX_ENABLE_EXPRESSION ON)
   set(VELOX_ENABLE_PARSE ON)
   set(VELOX_ENABLE_EXEC ON)
@@ -87,7 +87,7 @@ if(${VELOX_ENABLE_EXAMPLES})
 endif()
 
 if(${VELOX_ENABLE_BENCHMARKS} OR ${VELOX_ENABLE_BENCHMARKS_BASIC})
-  set(VELOX_ENABLE_DUCKDB ON)
+  set(VELOX_ENABLE_DUCKDB OFF)    # Disable DuckDB temporarily
   set(VELOX_ENABLE_PARSE ON)
 endif()
 
@@ -99,6 +99,8 @@ if(${VELOX_BUILD_BENCHMARKS_LARGE})
   set(VELOX_ENABLE_EXEC ON)
   set(VELOX_BUILD_TEST_UTILS ON)
 endif()
+
+message(VELOX_ENABLE_DUCKDB  ${VELOX_ENABLE_DUCKDB})
 
 if(VELOX_ENABLE_S3)
   # Set AWS_ROOT_DIR if you have a custom install location of AWS SDK CPP.
@@ -302,12 +304,12 @@ else()
   set(FILESYSTEM "")
 endif()
 
-if(VELOX_BUILD_TESTING AND NOT VELOX_ENABLE_DUCKDB)
-  message(
-    FATAL_ERROR
-      "Unit tests require duckDB to be enabled (VELOX_ENABLE_DUCKDB=ON or VELOX_BUILD_TESTING=OFF)"
-  )
-endif()
+#if(VELOX_BUILD_TESTING AND NOT VELOX_ENABLE_DUCKDB)
+#  message(
+#    FATAL_ERROR
+#      "Unit tests require duckDB to be enabled (VELOX_ENABLE_DUCKDB=ON or VELOX_BUILD_TESTING=OFF)"
+#  )
+#endif()
 
 # Benchmarks and tests at some places are coupled which is not great. See
 # velox/vector/CMakeLists.txt. TODO: Decouple.

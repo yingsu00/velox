@@ -1,4 +1,4 @@
-# Copyright (c) Facebook, Inc. and its affiliates.
+Git diff# Copyright (c) Facebook, Inc. and its affiliates.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,10 +16,11 @@
 BUILD_BASE_DIR=_build
 BUILD_DIR=release
 BUILD_TYPE=Release
+
 BENCHMARKS_BASIC_DIR=$(BUILD_BASE_DIR)/$(BUILD_DIR)/velox/benchmarks/basic/
 BENCHMARKS_DUMP_DIR=dumps
-TREAT_WARNINGS_AS_ERRORS ?= 1
-ENABLE_WALL ?= 1
+TREAT_WARNINGS_AS_ERRORS ?= 0
+ENABLE_WALL ?= 0
 
 # Option to make a minimal build. By default set to "OFF"; set to
 # "ON" to only build a minimal set of components. This may override

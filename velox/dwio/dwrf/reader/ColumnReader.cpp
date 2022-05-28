@@ -129,6 +129,14 @@ void ColumnReader::readNulls(
   notNullDecoder_->next(
       reinterpret_cast<char*>(nullsPtr), numValues, incomingNulls);
 }
+//
+//ColumnReader::ColumnReader(
+//    memory::MemoryPool& memoryPool,
+//    std::shared_ptr<const dwio::common::TypeWithId> nodeType)
+//    : nodeType_(std::move(nodeType)),
+//    memoryPool_(memoryPool)) {
+//  EncodingKey encodingKey{nodeType_->id, flatMapContext_.sequence};
+//}
 
 ColumnReader::ColumnReader(
     std::shared_ptr<const dwio::common::TypeWithId> nodeType,
