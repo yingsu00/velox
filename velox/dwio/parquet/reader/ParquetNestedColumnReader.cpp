@@ -226,7 +226,8 @@ std::shared_ptr<NestedData> ParquetNestedLeafColumnReader::parseNestedData(
 
 void ParquetNestedLeafColumnReader::readNoFilter(
     uint64_t /* offset */,
-    RowSet topLevelRows) {
+    RowSet topLevelRows,
+    std::vector<std::shared_ptr<NestedData>> nestedData) {
   auto maxNumTopLevelRows = topLevelRows.back() + 1;
   if (maxNumTopLevelRows == topLevelRows.size()) {
     // full row range
@@ -265,7 +266,22 @@ void ParquetNestedLeafColumnReader::readNoFilter(
     std::iota(outputRows_.begin(), outputRows_.end(), 0);
   } else {
     //   Populate leaf level RowSet
-    VELOX_NYI();
+    nestedRows_.reserve(numNonEmptyRowsInBatch_);
+    RowSet rows = topLevelRows;
+
+    for (auto level = 0; level < level_; level++) {
+      auto levelData = nestedData[level];
+      auto offsets = levelData->offsets->asMutable<uint32_t>();
+      auto lengths = levelData->lengths->asMutable<uint32_t>();
+      auto nulls = levelData->nulls->asMutable<uint32_t>();
+
+      uint32_t maxRowForLevel = rows.back();
+      for (auto i = 0; i < maxNumTopLevelRows; i++) {
+        auto row = rows[i];
+
+      }
+    }
+
   }
 }
 
