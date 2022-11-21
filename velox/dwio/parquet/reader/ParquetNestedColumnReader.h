@@ -152,7 +152,7 @@ class ParquetNestedLeafColumnReader : public ParquetNestedColumnReader {
   uint64_t numRemainingRowsInLastBatch_ = 0;
 
   std::unique_ptr<NestedStructureDecoder> nestedStructureDecoder_;
-  raw_vector<vector_size_t> nestedRows_;
+  raw_vector<vector_size_t> nestedRowRangeEnds_;
 
   std::shared_ptr<ParquetDataPage> getDataPage();
 };

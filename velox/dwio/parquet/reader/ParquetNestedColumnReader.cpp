@@ -266,8 +266,13 @@ void ParquetNestedLeafColumnReader::readNoFilter(
     std::iota(outputRows_.begin(), outputRows_.end(), 0);
   } else {
     //   Populate leaf level RowSet
-    nestedRows_.reserve(numNonEmptyRowsInBatch_);
-    RowSet rows = topLevelRows;
+    auto nestedRowRangeBegins = topLevelRows;
+    nestedRowRangeEnds_.reserve(topLevelRows.size());
+    std::copy(
+        nestedRowRangeEnds_.begin(),
+        nestedRowRangeEnds_.end(),
+        nestedRowRangeEnds_.begin());
+    auto numRanges = nestedRowRangeBegins.size();
 
     for (auto level = 0; level < level_; level++) {
       auto levelData = nestedData[level];
@@ -275,13 +280,32 @@ void ParquetNestedLeafColumnReader::readNoFilter(
       auto lengths = levelData->lengths->asMutable<uint32_t>();
       auto nulls = levelData->nulls->asMutable<uint32_t>();
 
-      uint32_t maxRowForLevel = rows.back();
-      for (auto i = 0; i < maxNumTopLevelRows; i++) {
-        auto row = rows[i];
+      uint32_t lastOffset = 0;
+      for (auto i = 0; i < numRanges; i++) {
+        auto beginRow = nestedRowRangeBegins[i];
+        auto endRow = nestedRowRangeEnds_[i];
+        auto beginOffset = offsets[beginRow];
+        auto beginLength = lengths[beginRow];
 
+        nestedRowRangeBegins[i] = beginOffset;
+        nestedRowRangeEnds_[i] = offsets[endRow] + lengths[endRow] - 1;
+
+        lastOffset += beginLength;
+        offsets[i] = lastOffset;
+        lengths[i] = beginLength;
       }
     }
 
+    outputRows_.reserve(nestedRowRangeEnds_[numRanges - 1] + 1);
+    auto outputRowsIndex = 0;
+    for (auto i = 0; i < numRanges; i++) {
+      auto beginRow = nestedRowRangeBegins[i];
+      auto rangeSize = nestedRowRangeEnds_[i] - beginRow + 1;
+      std::iota(
+          &outputRows_[outputRowsIndex],
+          &outputRows_[outputRowsIndex] + rangeSize,
+          beginRow);
+    }
   }
 }
 
