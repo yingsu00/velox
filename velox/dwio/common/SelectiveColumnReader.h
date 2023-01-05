@@ -225,7 +225,7 @@ class SelectiveColumnReader {
   // capacity and is unique. If extending existing buffer, preserves
   // previous contents.
   uint64_t* FOLLY_NONNULL mutableNulls(int32_t size) {
-    if (!resultNulls_->unique()) {
+    if (!resultNulls_ || !resultNulls_->unique()) {
       resultNulls_ = AlignedBuffer::allocate<bool>(
           numValues_ + size, &memoryPool_, bits::kNotNull);
       rawResultNulls_ = resultNulls_->asMutable<uint64_t>();
@@ -266,18 +266,29 @@ class SelectiveColumnReader {
     outputRows_.resize(size);
   }
 
-  // Sets the result nulls to be returned in getValues(). This is used for
-  // combining nulls from multiple encoding runs. nullptr means no nulls.
-  void setNulls(BufferPtr resultNulls);
+  void offsetOutputRows(
+      int32_t firstRow,
+      int32_t bias) {
+    offsetRows(outputRows_, firstRow, bias);
+  }
 
   // Adds 'bias' to outputt rows between 'firstRow' and end. Used
   // whenn combining data from multiple encoding runs, where the
   // output rows are first in terms of position in the encoding entry.
-  void offsetOutputRows(int32_t firstRow, int32_t bias) {
-    for (auto i = firstRow; i < outputRows_.size(); ++i) {
-      outputRows_[i] += bias;
+  static void offsetRows(
+      raw_vector<vector_size_t>& rows,
+      int32_t firstRow,
+      int32_t bias) {
+    for (auto i = firstRow; i < rows.size(); ++i) {
+      rows[i] += bias;
     }
   }
+
+  // Sets the result nulls to be returned in getValues(). This is used for
+  // combining nulls from multiple encoding runs. nullptr means no nulls.
+  void setResultNulls(BufferPtr resultNulls);
+
+  void updateResultNullsStats();
 
   void setHasNulls() {
     anyNulls_ = true;
@@ -285,10 +296,6 @@ class SelectiveColumnReader {
 
   void setAllNull() {
     allNull_ = true;
-  }
-
-  void incrementNumValues(vector_size_t size) {
-    numValues_ += size;
   }
 
   template <typename T>
@@ -306,6 +313,10 @@ class SelectiveColumnReader {
     auto valuesAsChar = reinterpret_cast<char*>(rawValues_);
     *reinterpret_cast<T*>(valuesAsChar + valueSize_ * numValues_) = T();
     numValues_++;
+  }
+
+  void incrementNumValues(vector_size_t size) {
+    numValues_ += size;
   }
 
   template <typename T>
@@ -440,21 +451,31 @@ class SelectiveColumnReader {
   template <typename T>
   void ensureValuesCapacity(vector_size_t numRows);
 
+  void ensureNullsCapacity(vector_size_t numRows);
+
   // Prepares the result buffer for nulls for reading 'rows'. Leaves
   // 'extraSpace' bits worth of space in the nulls buffer.
-  void prepareNulls(RowSet rows, bool hasNulls, int32_t extraRows = 0);
+  void prepareResultNulls(RowSet rows, bool hasNulls, int32_t extraRows = 0);
 
- protected:
   // Filters 'rows' according to 'is_null'. Only applies to cases where
   // readsNullsOnly() is true.
   template <typename T>
   void filterNulls(RowSet rows, bool isNull, bool extractValues);
 
   template <typename T>
+  RowSet filterNulls(RowSet rows, bool extractValues);
+
+ protected:
+  template <typename T>
   void prepareRead(
       vector_size_t offset,
       RowSet rows,
       const uint64_t* FOLLY_NULLABLE incomingNulls);
+
+  virtual void readNulls(
+      RowSet rows,
+      int32_t extraRows = 0,
+      const uint64_t* FOLLY_NULLABLE incomingNulls = nullptr);
 
   void setOutputRows(RowSet rows) {
     outputRows_.resize(rows.size());

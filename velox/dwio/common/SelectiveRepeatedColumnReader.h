@@ -73,10 +73,6 @@ class SelectiveRepeatedColumnReader : public SelectiveColumnReader {
     }
   }
 
-  // Apply filter on parent level.  Child filtering should be handled separately
-  // in subclasses.
-  RowSet applyFilter(RowSet rows);
-
   std::vector<int32_t> allLengths_;
   RowSet nestedRows_;
   raw_vector<vector_size_t> nestedRowsHolder_;

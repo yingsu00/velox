@@ -76,6 +76,9 @@ BENCHMARK(randomDefs) {
 
   suspender.dismiss();
 
+  uint64_t numNonEmptyCollections,
+  uint64_t numNonNullCollections,
+
   int64_t numCollections = NestedStructureDecoder::readOffsetsAndNulls(
       benchmark.definitionLevels_.get(),
       benchmark.repetitionLevels_.get(),
@@ -85,6 +88,8 @@ BENCHMARK(randomDefs) {
       benchmark.offsetsBuffer_,
       benchmark.lengthsBuffer_,
       benchmark.nullsBuffer_,
+      numNonEmptyCollections,
+      numNonNullCollections,
       *benchmark.pool_);
 
   folly::doNotOptimizeAway(numCollections);

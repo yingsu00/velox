@@ -16,9 +16,18 @@
 
 #pragma once
 
+#include <common/base/RawVector.h>
 #include "velox/buffer/Buffer.h"
 
 namespace facebook::velox::parquet {
+
+struct NestedData {
+  BufferPtr offsets;
+  BufferPtr lengths;
+  BufferPtr nulls;
+  uint64_t numNonEmptyCollections;
+  uint64_t numNonNullCollections;
+};
 
 class NestedStructureDecoder {
  public:
@@ -50,14 +59,41 @@ class NestedStructureDecoder {
   /// @param nullsBuffer The output buffer for the nulls bitmap.
   /// @return The number of elements for the current nested level.
   static int64_t readOffsetsAndNulls(
-      const uint8_t* definitionLevels,
       const uint8_t* repetitionLevels,
-      int64_t numValues,
-      uint8_t maxDefinition,
+      const uint8_t* definitionLevels,
+      uint64_t numValues,
       uint8_t maxRepeat,
+      uint8_t maxDefinition,
       BufferPtr& offsetsBuffer,
       BufferPtr& lengthsBuffer,
       BufferPtr& nullsBuffer,
+      uint64_t& numNonEmptyCollections,
+      uint64_t& numNonNullCollections,
+      memory::MemoryPool& pool);
+
+  static void readOffsetsAndNulls(
+      const uint8_t* repetitionLevels,
+      const uint8_t* definitionLevels,
+      uint64_t numValues,
+      uint32_t maxRepeat,
+      uint32_t maxDefinition,
+      int64_t& lastOffset,
+      bool& wasLastCollectionNull,
+      uint32_t* offsets,
+      uint64_t* nulls,
+      uint64_t& numNonEmptyCollections,
+      uint64_t& numNonNullCollections,
+      memory::MemoryPool& pool);
+
+  static int64_t readNulls(
+      raw_vector<int16_t> repetitionLevels,
+      raw_vector<int16_t> definitionLevels,
+      uint64_t numRepDefs,
+      uint8_t maxRepeat,
+      uint8_t maxDefinition,
+      BufferPtr& nullsBuffer,
+      uint64_t& numNonEmptyCollections,
+      uint64_t& numNonNullCollections,
       memory::MemoryPool& pool);
 
  private:

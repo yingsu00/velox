@@ -21,6 +21,7 @@
 #include "velox/dwio/parquet/reader/NestedStructureDecoder.h"
 #include "velox/dwio/parquet/thrift/ThriftTransport.h"
 #include "velox/vector/FlatVector.h"
+#include "velox/dwio/common/SelectiveColumnReader.h"
 
 #include <lz4.h>
 #include <snappy.h>
@@ -33,25 +34,35 @@ namespace facebook::velox::parquet {
 using thrift::Encoding;
 using thrift::PageHeader;
 
-void PageReader::seekToPage(int64_t row) {
+void PageReader::seekForwardToPage(int64_t row) {
+  printf(" seekToPage to row %d\n", row);
+  //  printf("  inputStream_ %llx\n",
+  //  dynamic_cast<dwio::common::SeekableArrayInputStream*>(inputStream_.get()));
+  //  printf("  inputStream_->data %llx\n",
+  //  dynamic_cast<dwio::common::SeekableArrayInputStream*>(inputStream_.get())->data);
+  //  printf("  inputStream_->length %d\n",
+  //  dynamic_cast<dwio::common::SeekableArrayInputStream*>(inputStream_.get())->length);
+  //  printf("  inputStream_->position %d\n\n",
+  //  dynamic_cast<dwio::common::SeekableArrayInputStream*>(inputStream_.get())->position);
+
   defineDecoder_.reset();
   repeatDecoder_.reset();
   // 'rowOfPage_' is the row number of the first row of the next page.
-  rowOfPage_ += numRowsInPage_;
-  for (;;) {
-    auto dataStart = pageStart_;
-    if (chunkSize_ <= pageStart_) {
-      // This may happen if seeking to exactly end of row group.
-      numRepDefsInPage_ = 0;
-      numRowsInPage_ = 0;
-      break;
-    }
-    PageHeader pageHeader = readPageHeader();
+  //  rowOfPage_ += numRowsInPage_;
+  while (row + readOffset_ >= rowOfPage_ + numRowsInPage_) {
+    //    if (chunkSize_ <= pageStart_) {
+    //      // This may happen if seeking to exactly end of row group.
+    //      numRepDefsInPage_ = 0;
+    //      numRowsInPage_ = 0;
+    //      break;
+    //    }
+    PageHeader pageHeader = readPageHeader(); // updates pageDataStart_
     pageStart_ = pageDataStart_ + pageHeader.compressed_page_size;
+    rowOfPage_ += numRowsInPage_;
 
     switch (pageHeader.type) {
       case thrift::PageType::DATA_PAGE:
-        prepareDataPageV1(pageHeader, row);
+        prepareDataPageV1(pageHeader, row); // updates numRowsInPage_
         break;
       case thrift::PageType::DATA_PAGE_V2:
         prepareDataPageV2(pageHeader, row);
@@ -70,14 +81,90 @@ void PageReader::seekToPage(int64_t row) {
       default:
         break; // ignore INDEX page type and any other custom extensions
     }
-    if (row == kRepDefOnly || row < rowOfPage_ + numRowsInPage_) {
+    if (row == kRepDefOnly) {
       break;
     }
-    updateRowInfoAfterPageSkipped();
+
+    if (hasChunkRepDefs_) {
+      numLeafNullsConsumed_ = rowOfPage_;
+    }
   }
 }
 
+// void PageReader::seekToPage(int64_t row) {
+//   printf(" seekToPage to row %d\n", row);
+//   //  printf("  inputStream_ %llx\n",
+//   //
+//   dynamic_cast<dwio::common::SeekableArrayInputStream*>(inputStream_.get()));
+//   //  printf("  inputStream_->data %llx\n",
+//   //
+//   dynamic_cast<dwio::common::SeekableArrayInputStream*>(inputStream_.get())->data);
+//   //  printf("  inputStream_->length %d\n",
+//   //
+//   dynamic_cast<dwio::common::SeekableArrayInputStream*>(inputStream_.get())->length);
+//   //  printf("  inputStream_->position %d\n\n",
+//   //
+//   dynamic_cast<dwio::common::SeekableArrayInputStream*>(inputStream_.get())->position);
+//
+//   defineDecoder_.reset();
+//   repeatDecoder_.reset();
+//   // 'rowOfPage_' is the row number of the first row of the next page.
+//   rowOfPage_ += numRowsInPage_;
+//   for (;;) {
+//     auto dataStart = pageStart_;
+//     if (chunkSize_ <= pageStart_) {
+//       // This may happen if seeking to exactly end of row group.
+//       numRepDefsInPage_ = 0;
+//       numRowsInPage_ = 0;
+//       break;
+//     }
+//     PageHeader pageHeader = readPageHeader();
+//     pageStart_ = pageDataStart_ + pageHeader.compressed_page_size;
+//
+//     switch (pageHeader.type) {
+//       case thrift::PageType::DATA_PAGE:
+//         prepareDataPageV1(pageHeader, row);
+//         break;
+//       case thrift::PageType::DATA_PAGE_V2:
+//         prepareDataPageV2(pageHeader, row);
+//         break;
+//       case thrift::PageType::DICTIONARY_PAGE:
+//         if (row == kRepDefOnly) {
+//           skipBytes(
+//               pageHeader.compressed_page_size,
+//               inputStream_.get(),
+//               bufferStart_,
+//               bufferEnd_);
+//           continue;
+//         }
+//         prepareDictionary(pageHeader);
+//         continue;
+//       default:
+//         break; // ignore INDEX page type and any other custom extensions
+//     }
+//     if (row == kRepDefOnly || row < rowOfPage_ + numRowsInPage_) {
+//       break;
+//     }
+//
+//     rowOfPage_ += numRowsInPage_;
+//     if (hasChunkRepDefs_) {
+//       numLeafNullsConsumed_ = rowOfPage_;
+//     }
+//
+////    updateRowInfoAfterPageSkipped();
+//  }
+//}
+
 PageHeader PageReader::readPageHeader() {
+  //  printf(" readPageHeader\n");
+  //  printf("  inputStream_ %llx, ByteCount %lld\n", inputStream_.get(),
+  //  inputStream_->ByteCount()); printf("  inputStream_->data %llx\n",
+  //  dynamic_cast<dwio::common::SeekableArrayInputStream*>(inputStream_.get())->data);
+  //  printf("  inputStream_->length %d\n",
+  //  dynamic_cast<dwio::common::SeekableArrayInputStream*>(inputStream_.get())->length);
+  //  printf("  inputStream_->position %d\n",
+  //  dynamic_cast<dwio::common::SeekableArrayInputStream*>(inputStream_.get())->position);
+
   if (bufferEnd_ == bufferStart_) {
     const void* buffer;
     int32_t size;
@@ -325,6 +412,10 @@ void PageReader::readPageDefLevels() {
   VELOX_CHECK(kRowsUnknown == numRowsInPage_ || maxDefine_ > 1);
   definitionLevels_.resize(numRepDefsInPage_);
   wideDefineDecoder_->GetBatch(definitionLevels_.data(), numRepDefsInPage_);
+
+  printf(" readPageDefLevels definitionLevels\n");
+  //  printArray(definitionLevels_.data(), 64);
+
   leafNulls_.resize(bits::nwords(numRepDefsInPage_));
   leafNullsSize_ = getLengthsAndNulls(
       LevelMode::kNulls,
@@ -338,6 +429,10 @@ void PageReader::readPageDefLevels() {
       0);
   numRowsInPage_ = leafNullsSize_;
   numLeafNullsConsumed_ = 0;
+  if (maxRepeat_ > 0) {
+    repetitionLevels_.resize(numRepDefsInPage_);
+    repeatDecoder_->GetBatch(repetitionLevels_.data(), numRepDefsInPage_);
+  }
 }
 
 void PageReader::updateRowInfoAfterPageSkipped() {
@@ -363,11 +458,19 @@ void PageReader::prepareDataPageV1(const PageHeader& pageHeader, int64_t row) {
 
     return;
   }
+
   pageData_ = readBytes(pageHeader.compressed_page_size, pageBuffer_);
+
+  //  printf(" prepareDataPageV1\n");
+  //  printf("  compressed pageData_=%llx,", pageData_);
+
   pageData_ = uncompressData(
       pageData_,
       pageHeader.compressed_page_size,
       pageHeader.uncompressed_page_size);
+
+  //  printf("  Uncompressed pageData_=%llx,", pageData_);
+
   auto pageEnd = pageData_ + pageHeader.uncompressed_page_size;
   if (maxRepeat_ > 0) {
     uint32_t repeatLength = readField<int32_t>(pageData_);
@@ -399,6 +502,13 @@ void PageReader::prepareDataPageV1(const PageHeader& pageHeader, int64_t row) {
   if (!hasChunkRepDefs_ && (numRowsInPage_ == kRowsUnknown || maxDefine_ > 1)) {
     readPageDefLevels();
   }
+
+  //  printf(
+  //      "  pageData_=%llx, numRowsInPage_=%d, rowOfPage_=%d, page_size=%d\n",
+  //      pageData_,
+  //      numRowsInPage_,
+  //      rowOfPage_,
+  //      pageHeader.compressed_page_size);
 
   if (row != kRepDefOnly) {
     makeDecoder();
@@ -648,12 +758,16 @@ int32_t parquetTypeBytes(thrift::Type::type type) {
 void PageReader::preloadRepDefs() {
   hasChunkRepDefs_ = true;
   while (pageStart_ < chunkSize_) {
-    seekToPage(kRepDefOnly);
+    seekForwardToPage(kRepDefOnly);
     auto begin = definitionLevels_.size();
     auto numLevels = definitionLevels_.size() + numRepDefsInPage_;
     definitionLevels_.resize(numLevels);
     wideDefineDecoder_->GetBatch(
         definitionLevels_.data() + begin, numRepDefsInPage_);
+
+    //    printf(" readPageDefLevels definitionLevels\n");
+    //    printArray(definitionLevels_.data(), 64);
+
     if (repeatDecoder_) {
       repetitionLevels_.resize(numLevels);
 
@@ -798,19 +912,23 @@ void PageReader::makeDecoder() {
 }
 
 void PageReader::skip(int64_t numRows) {
-  if (!numRows && firstUnvisited_ != rowOfPage_ + numRowsInPage_) {
+  printf("  PageReader::skip %d\n", numRows);
+  //  if (!numRows && readOffset_ != rowOfPage_ + numRowsInPage_) {
+  if (!numRows) {
     // Return if no skip and position not at end of page or before first page.
     return;
   }
   auto toSkip = numRows;
-  if (firstUnvisited_ + numRows >= rowOfPage_ + numRowsInPage_) {
-    seekToPage(firstUnvisited_ + numRows);
+  if (readOffset_ + numRows >= rowOfPage_ + numRowsInPage_) {
+    seekForwardToPage(readOffset_ + numRows);
     if (hasChunkRepDefs_) {
       numLeafNullsConsumed_ = rowOfPage_;
     }
-    toSkip -= rowOfPage_ - firstUnvisited_;
+    toSkip -= rowOfPage_ - readOffset_;
   }
-  firstUnvisited_ += numRows;
+  readOffset_ += numRows;
+
+  printf("   PageReader::skip, readOffset_=%d\n", readOffset_);
 
   // Skip nulls
   toSkip = skipNulls(toSkip);
@@ -833,7 +951,7 @@ int32_t PageReader::skipNulls(int32_t numValues) {
   if (!defineDecoder_ && isTopLevel_) {
     return numValues;
   }
-  VELOX_CHECK(1 == maxDefine_ || !leafNulls_.empty());
+  //  VELOX_CHECK(1 == maxDefine_ || !leafNulls_.empty());
   dwio::common::ensureCapacity<bool>(tempNulls_, numValues, &pool_);
   tempNulls_->setSize(0);
   if (isTopLevel_) {
@@ -850,45 +968,85 @@ int32_t PageReader::skipNulls(int32_t numValues) {
   return bits::countBits(words, 0, numValues);
 }
 
-void PageReader::skipNullsOnly(int64_t numRows) {
-  if (!numRows && firstUnvisited_ != rowOfPage_ + numRowsInPage_) {
-    // Return if no skip and position not at end of page or before first page.
-    return;
-  }
-  auto toSkip = numRows;
-  if (firstUnvisited_ + numRows >= rowOfPage_ + numRowsInPage_) {
-    seekToPage(firstUnvisited_ + numRows);
-    firstUnvisited_ += numRows;
-    toSkip = firstUnvisited_ - rowOfPage_;
-  } else {
-    firstUnvisited_ += numRows;
-  }
+// void PageReader::skipNullsOnly(int64_t numRows) {
+//   if (!numRows && readOffset_ != rowOfPage_ + numRowsInPage_) {
+//     // Return if no skip and position not at end of page or before first
+//     page. return;
+//   }
+//   auto toSkip = numRows;
+//   if (readOffset_ + numRows >= rowOfPage_ + numRowsInPage_) {
+//     seekToPage(readOffset_ + numRows);
+//     readOffset_ += numRows;
+//     toSkip = readOffset_ - rowOfPage_;
+//   } else {
+//     readOffset_ += numRows;
+//   }
+//
+//   // Skip nulls
+//   skipNulls(toSkip);
+// }
+//
+// void PageReader::readNullsOnly(int64_t numValues, BufferPtr& buffer) {
+//   VELOX_CHECK(!maxRepeat_);
+//   auto toRead = numValues;
+//   if (buffer) {
+//     dwio::common::ensureCapacity<bool>(buffer, numValues, &pool_);
+//   }
+//   nullConcatenation_.reset(buffer);
+//   while (toRead) {
+//     auto availableOnPage = rowOfPage_ + numRowsInPage_ - readOffset_;
+//     if (!availableOnPage) {
+//       seekToPage(readOffset_);
+//       availableOnPage = numRowsInPage_;
+//     }
+//     auto numRead = std::min(availableOnPage, toRead);
+//     auto nulls = readNulls(numRead, nullsInReadRange_);
+//     toRead -= numRead;
+//     nullConcatenation_.append(nulls, 0, numRead);
+//     readOffset_ += numRead;
+//   }
+//   buffer = nullConcatenation_.buffer();
+// }
 
-  // Skip nulls
-  skipNulls(toSkip);
-}
-
-void PageReader::readNullsOnly(int64_t numValues, BufferPtr& buffer) {
-  VELOX_CHECK(!maxRepeat_);
-  auto toRead = numValues;
-  if (buffer) {
-    dwio::common::ensureCapacity<bool>(buffer, numValues, &pool_);
-  }
-  nullConcatenation_.reset(buffer);
-  while (toRead) {
-    auto availableOnPage = rowOfPage_ + numRowsInPage_ - firstUnvisited_;
-    if (!availableOnPage) {
-      seekToPage(firstUnvisited_);
-      availableOnPage = numRowsInPage_;
-    }
-    auto numRead = std::min(availableOnPage, toRead);
-    auto nulls = readNulls(numRead, nullsInReadRange_);
-    toRead -= numRead;
-    nullConcatenation_.append(nulls, 0, numRead);
-    firstUnvisited_ += numRead;
-  }
-  buffer = nullConcatenation_.buffer();
-}
+// const uint64_t* FOLLY_NULLABLE
+// PageReader::readNulls(int32_t numValues, BufferPtr& buffer) {
+//   if (maxDefine_ == 0) {
+//     buffer = nullptr;
+//     return nullptr;
+//   } else if (maxDefine_ == 1) {
+//     dwio::common::ensureCapacity<bool>(buffer, numValues, &pool_);
+//     if (isTopLevel_) {
+//       VELOX_CHECK_EQ(1, maxDefine_);
+//       bool allOnes;
+//       defineDecoder_->readBits(
+//           numValues, buffer->asMutable<uint64_t>(), &allOnes);
+//       return allOnes ? nullptr : buffer->as<uint64_t>();
+//     }
+//     bits::copyBits(
+//         leafNulls_.data(),
+//         numLeafNullsConsumed_,
+//         buffer->asMutable<uint64_t>(),
+//         0,
+//         numValues);
+//     numLeafNullsConsumed_ += numValues;
+//   } else if (maxDefine_ > 1) {
+//     dwio::common::ensureCapacity<bool>(buffer, numValues, &pool_);
+//     leafNullsSize_ = getLengthsAndNulls(
+//         LevelMode::kNulls,
+//         leafInfo_,
+//         numLeafNullsConsumed_,
+//         numLeafNullsConsumed_ + numValues,
+//         numRepDefsInPage_ - numLeafNullsConsumed_,
+//         nullptr,
+//         buffer->asMutable<uint64_t>(),
+//         0);
+////    numRowsInPage_ = leafNullsSize_;
+//    numLeafNullsConsumed_ += numValues;
+//
+//  }
+//
+//  return buffer->as<uint64_t>();
+//}
 
 const uint64_t* FOLLY_NULLABLE
 PageReader::readNulls(int32_t numValues, BufferPtr& buffer) {
@@ -914,112 +1072,140 @@ PageReader::readNulls(int32_t numValues, BufferPtr& buffer) {
   return buffer->as<uint64_t>();
 }
 
-void PageReader::startVisit(folly::Range<const vector_size_t*> rows) {
-  visitorRows_ = rows.data();
-  numVisitorRows_ = rows.size();
-  currentVisitorRow_ = 0;
-  initialRowOfPage_ = rowOfPage_;
-  visitBase_ = firstUnvisited_;
-}
+// void PageReader::startVisit(folly::Range<const vector_size_t*> rows) {
+//   visitorRows_ = rows.data();
+//   numVisitorRows_ = rows.size();
+//   currentVisitorRow_ = 0;
+//   initialRowOfPage_ = rowOfPage_;
+//   //  visitBase_ = readOffset_;
+// }
+//
+//  folly::Range<const vector_size_t*> PageReader::rowsForPage() {
+//   if (currentVisitorRow_ == numVisitorRows_) {
+//     return folly::Range(
+//         visitorRows_ + numVisitorRows_, visitorRows_ + numVisitorRows_);
+//   }
+//
+//   // Check if the first row to go to is in the current page. If not, seek to
+//   the
+//   // page that contains the row.
+//   auto rowZero = visitBase_ + visitorRows_[currentVisitorRow_];
+//   if (rowZero >= rowOfPage_ + numRowsInPage_) {
+//     seekToPage(rowZero);
+//
+//     if (hasChunkRepDefs_) {
+//       numLeafNullsConsumed_ = rowOfPage_;
+//     }
+//   }
+//
+//   // Then check how many of the rows to visit are on the same page as the
+//   // current one.
+//   int32_t firstOnNextPage = rowOfPage_ + numRowsInPage_ - visitBase_;
+//   auto begin = visitorRows_ + currentVisitorRow_;
+//   auto it =
+//       std::lower_bound(begin, visitorRows_ + numVisitorRows_,
+//       firstOnNextPage);
+//   int32_t numToVisit = it - begin;
+//   auto rowsInPage = folly::Range(begin, numToVisit);
+//
+//   // If it's not the first page in this batch, rescale the row numbers
+//   relative
+//   // to first on this page, such that the first row has row number 0.
+//   rowNumberBias_ = 0;
+//   if (rowOfPage_ != initialRowOfPage_ || currentVisitorRow_ != 0) {
+//     rowNumberBias_ = visitorRows_[currentVisitorRow_];
+//
+//     skip(rowNumberBias_ - (rowOfPage_ - visitBase_));
+//
+//     // The decoder is positioned at 'visitorRows_[currentVisitorRow_']'
+//     // We copy the rows to visit with a bias, so that the first to visit has
+//     // offset 0.
+//     rowsCopy_->resize(numToVisit);
+//     auto copy = rowsCopy_->data();
+//     // Subtract 'rowNumberBias_' from the rows to visit on this page.
+//     // 'copy' has a writable tail of SIMD width, so no special case for end
+//     of
+//     // loop.
+//     for (auto i = 0; i < numToVisit; i += xsimd::batch<int32_t>::size) {
+//       auto numbers = xsimd::batch<int32_t>::load_unaligned(
+//                          &visitorRows_[i + currentVisitorRow_]) -
+//           rowNumberBias_;
+//       numbers.store_unaligned(copy);
+//       copy += xsimd::batch<int32_t>::size;
+//     }
+//
+//     rowsInPage = folly::Range<const vector_size_t*>(
+//         rowsCopy_->data(), rowsCopy_->size());
+//   }
+//
+//   currentVisitorRow_ += rowsInPage.size();
+//   readOffset_ = visitBase_ + visitorRows_[currentVisitorRow_ - 1] + 1;
+//
+//   printf(
+//       "   rowsForPage end, visitBase_=%d, readOffset_=%d\n",
+//       visitBase_,
+//       readOffset_);
+//
+//   return rowsInPage;
+// }
 
-bool PageReader::rowsForPage(
-    dwio::common::SelectiveColumnReader& reader,
-    bool hasFilter,
-    bool mayProduceNulls,
-    folly::Range<const vector_size_t*>& rows,
-    const uint64_t* FOLLY_NULLABLE& nulls) {
-  if (currentVisitorRow_ == numVisitorRows_) {
-    return false;
+folly::Range<const vector_size_t*> PageReader::rowsForPage(
+    const vector_size_t* rows,
+    vector_size_t numRows) {
+  if (currentVisitorRow_ == numRows) {
+    return folly::Range(rows + numRows, rows + numRows);
   }
-  int32_t numToVisit;
+
   // Check if the first row to go to is in the current page. If not, seek to the
   // page that contains the row.
-  auto rowZero = visitBase_ + visitorRows_[currentVisitorRow_];
-  if (rowZero >= rowOfPage_ + numRowsInPage_) {
-    seekToPage(rowZero);
+  auto rowZero = rows[currentVisitorRow_];
+  if (rowZero + readOffset_ >= rowOfPage_ + numRowsInPage_) {
+    seekForwardToPage(rowZero); // update rowOfPage_ and numRowsInPage_
+
     if (hasChunkRepDefs_) {
       numLeafNullsConsumed_ = rowOfPage_;
     }
   }
-  auto& scanState = reader.scanState();
-  if (isDictionary()) {
-    if (scanState.dictionary.values != dictionary_.values) {
-      scanState.dictionary = dictionary_;
-      if (hasFilter) {
-        makeFilterCache(scanState);
-      }
-      scanState.updateRawState();
-    }
-  } else {
-    if (scanState.dictionary.values) {
-      // If there are previous pages in the current read, nulls read
-      // from them are in 'nullConcatenation_' Put this into the
-      // reader for the time of dedictionarizing so we don't read
-      // undefined dictionary indices.
-      if (mayProduceNulls && reader.numValues()) {
-        reader.setNulls(nullConcatenation_.buffer());
-      }
-      reader.dedictionarize();
-      // The nulls across all pages are in nullConcatenation_. Clear
-      // the nulls and let the prepareNulls below reserve nulls for
-      // the new page.
-      reader.setNulls(nullptr);
-      scanState.dictionary.clear();
-    }
+
+  // Then check how many of the rowsRange to visit are on the same page as the
+  // current one.
+  int32_t firstOnNextPage = rowOfPage_ + numRowsInPage_ - readOffset_;
+  auto begin = rows + currentVisitorRow_;
+  auto end = rows + numRows;
+  auto it = std::lower_bound(begin, end, firstOnNextPage);
+  int32_t numToVisit = it - begin;
+  auto rowsInPage = folly::Range(begin, numToVisit);
+
+  // If it's not the first page in this batch, rescale the row numbers relative
+  // to first row of this page. The decoder will decide whether to skip the rows
+  // before the first row, so that the business logic is simpler.
+  //  if (rowOfPage_ != initialRowOfPage_ || currentVisitorRow_ != 0) {
+  if (currentVisitorRow_ != 0) {
+    // The decoder is positioned at 'rows[currentVisitorRow_']' . Subtract
+    // 'rowNumberBias' from the rowsRange to visit on this page. 'copy' has a
+    // writable tail of SIMD width, so no special case for end of loop.
+    rowsCopy_->resize(numToVisit);
+    std::memcpy(
+        rowsCopy_->data(),
+        rows + currentVisitorRow_,
+        numToVisit * sizeof(vector_size_t));
+    auto rowNumberBias = readOffset_ - rowOfPage_;
+    dwio::common::SelectiveColumnReader::offsetRows(*rowsCopy_, 0, rowNumberBias);
+
+    //   dwio::common::SelectiveColumnReader i < numToVisit; i +=
+    //   xsimd::batch<int32_t>::size) {
+    //      auto numbers =
+    //          xsimd::batch<int32_t>::load_unaligned(&rows[i +
+    //          currentVisitorRow_]) - rowNumberBias;
+    //      numbers.store_unaligned(copy);
+    //      copy += xsimd::batch<int32_t>::size;
+    //    }
+
+    rowsInPage =
+        folly::Range<const vector_size_t*>(rowsCopy_->data(), numToVisit);
   }
 
-  // Then check how many of the rows to visit are on the same page as the
-  // current one.
-  int32_t firstOnNextPage = rowOfPage_ + numRowsInPage_ - visitBase_;
-  if (firstOnNextPage > visitorRows_[numVisitorRows_ - 1]) {
-    // All the remaining rows are on this page.
-    numToVisit = numVisitorRows_ - currentVisitorRow_;
-  } else {
-    // Find the last row in the rows to visit that is on this page.
-    auto rangeLeft = folly::Range<const int32_t*>(
-        visitorRows_ + currentVisitorRow_,
-        numVisitorRows_ - currentVisitorRow_);
-    auto it =
-        std::lower_bound(rangeLeft.begin(), rangeLeft.end(), firstOnNextPage);
-    assert(it != rangeLeft.end());
-    assert(it != rangeLeft.begin());
-    numToVisit = it - (visitorRows_ + currentVisitorRow_);
-  }
-  // If the page did not change and this is the first call, we can return a view
-  // on the original visitor rows.
-  if (rowOfPage_ == initialRowOfPage_ && currentVisitorRow_ == 0) {
-    nulls =
-        readNulls(visitorRows_[numToVisit - 1] + 1, reader.nullsInReadRange());
-    rowNumberBias_ = 0;
-    rows = folly::Range<const vector_size_t*>(visitorRows_, numToVisit);
-  } else {
-    // We scale row numbers to be relative to first on this page.
-    auto pageOffset = rowOfPage_ - visitBase_;
-    rowNumberBias_ = visitorRows_[currentVisitorRow_];
-    skip(rowNumberBias_ - pageOffset);
-    // The decoder is positioned at 'visitorRows_[currentVisitorRow_']'
-    // We copy the rows to visit with a bias, so that the first to visit has
-    // offset 0.
-    rowsCopy_->resize(numToVisit);
-    auto copy = rowsCopy_->data();
-    // Subtract 'rowNumberBias_' from the rows to visit on this page.
-    // 'copy' has a writable tail of SIMD width, so no special case for end of
-    // loop.
-    for (auto i = 0; i < numToVisit; i += xsimd::batch<int32_t>::size) {
-      auto numbers = xsimd::batch<int32_t>::load_unaligned(
-                         &visitorRows_[i + currentVisitorRow_]) -
-          rowNumberBias_;
-      numbers.store_unaligned(copy);
-      copy += xsimd::batch<int32_t>::size;
-    }
-    nulls = readNulls(rowsCopy_->back() + 1, reader.nullsInReadRange());
-    rows = folly::Range<const vector_size_t*>(
-        rowsCopy_->data(), rowsCopy_->size());
-  }
-  reader.prepareNulls(rows, nulls != nullptr, currentVisitorRow_);
-  currentVisitorRow_ += numToVisit;
-  firstUnvisited_ = visitBase_ + visitorRows_[currentVisitorRow_ - 1] + 1;
-  return true;
+  return rowsInPage;
 }
 
 const VectorPtr& PageReader::dictionaryValues(const TypePtr& type) {

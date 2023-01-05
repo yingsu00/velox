@@ -58,6 +58,7 @@ PageReader* FOLLY_NULLABLE readLeafRepDefs(
     for (auto i = 0; i < children.size(); ++i) {
       auto child = children[i];
       if (child != structReader->childForRepDefs()) {
+        printf("  child %d readLeafRepDefs\n", i);
         readLeafRepDefs(child, numTop, false);
       }
     }
@@ -282,6 +283,7 @@ void ListColumnReader::setLengthsFromRepDefs(PageReader& pageReader) {
   formatData_->as<ParquetData>().setNulls(nullsInReadRange(), numLists);
   setLengths(std::move(lengths));
 }
+
 void ListColumnReader::read(
     vector_size_t offset,
     RowSet rows,

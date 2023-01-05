@@ -127,6 +127,34 @@ TEST_F(E2EFilterTest, integerDirect) {
       20);
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(E2EFilterTest, integerDirect2) {
+  options_.enableDictionary = false;
+  options_.dataPageSize = 4 * 1024;
+
+  testWithTypes(
+      "long_null:bigint",
+      [&]() { makeAllNulls("long_null"); },
+      true,
+      {  "long_null"},
+}
+
+TEST_F(E2EFilterTest, integerDirect4) {
+  writerProperties_ = ::parquet::WriterProperties::Builder()
+      .disable_dictionary()
+      ->data_pagesize(4 * 1024)
+      ->build();
+  testWithTypes(
+      "short_val:smallint,"
+      "long_val:bigint",
+      [&]() {  },
+      true,
+      {"short_val", "long_val"},
+      20);
+}
+
+>>>>>>> 2fb8d1c6c (New change)
 TEST_F(E2EFilterTest, compression) {
   for (const auto compression :
        {common::CompressionKind_SNAPPY,

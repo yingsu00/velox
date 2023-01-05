@@ -66,6 +66,7 @@ const std::vector<SelectiveColumnReader*>& SelectiveColumnReader::children()
 }
 
 void SelectiveColumnReader::seekTo(vector_size_t offset, bool readsNullsOnly) {
+  printf("  SelectiveColumnReader::seekTo offset=%d, readOffset_=%d\n", offset, readOffset_);
   if (offset == readOffset_) {
     return;
   }
@@ -80,6 +81,7 @@ void SelectiveColumnReader::seekTo(vector_size_t offset, bool readsNullsOnly) {
     numParentNulls_ = 0;
     parentNullsRecordedTo_ = 0;
     if (readsNullsOnly) {
+      printf("  skipNulls %d\n", distance);
       formatData_->skipNulls(distance, true);
     } else {
       skip(distance);
@@ -90,7 +92,15 @@ void SelectiveColumnReader::seekTo(vector_size_t offset, bool readsNullsOnly) {
   }
 }
 
-void SelectiveColumnReader::prepareNulls(
+void SelectiveColumnReader::ensureNullsCapacity(vector_size_t numRows) {
+  auto numBytes = (numRows + 7) / 8;
+  if (!nullsInReadRange_ || nullsInReadRange_->capacity() < numBytes) {
+    nullsInReadRange_ = AlignedBuffer::allocate<char>(numBytes, &memoryPool_);
+  }
+  nullsInReadRange_->setSize(numBytes);
+}
+
+void SelectiveColumnReader::prepareResultNulls(
     RowSet rows,
     bool hasNulls,
     int32_t extraRows) {
@@ -119,11 +129,36 @@ void SelectiveColumnReader::prepareNulls(
     return;
   }
 
-  anyNulls_ = false;
   resultNulls_ = AlignedBuffer::allocate<bool>(
       numRows + (simd::kPadding * 8), &memoryPool_);
   rawResultNulls_ = resultNulls_->asMutable<uint64_t>();
   simd::memset(rawResultNulls_, bits::kNotNullByte, resultNulls_->capacity());
+}
+
+void SelectiveColumnReader::readNulls(
+    RowSet rows,
+    int32_t extraRows,
+    const uint64_t* incomingNulls) {
+  // Do not re-use unless singly-referenced.
+  if (nullsInReadRange_ && !nullsInReadRange_->unique()) {
+    nullsInReadRange_.reset();
+  }
+
+  vector_size_t numRows = rows.back() + 1;
+
+  formatData_->readNulls(
+      numRows, incomingNulls, nullsInReadRange_, readsNullsOnly());
+  anyNulls_ = nullsInReadRange_
+      ? !(bits::isAllSet(
+            nullsInReadRange_->as<uint64_t>(), 0, numRows, bits::kNotNull))
+      : false;
+  allNull_ = anyNulls_
+      ? bits::isAllSet(
+            nullsInReadRange_->as<uint64_t>(), 0, numRows, bits::kNull)
+      : false;
+  nullsInReadRange_ = anyNulls_ ? nullsInReadRange_ : nullptr;
+
+  prepareResultNulls(rows, nullsInReadRange_ != nullptr, extraRows);
 }
 
 const uint64_t* SelectiveColumnReader::shouldMoveNulls(RowSet rows) {
@@ -338,14 +373,18 @@ bool SelectiveColumnReader::readsNullsOnly() const {
   return false;
 }
 
-void SelectiveColumnReader::setNulls(BufferPtr resultNulls) {
+void SelectiveColumnReader::setResultNulls(BufferPtr resultNulls) {
   resultNulls_ = resultNulls;
   rawResultNulls_ = resultNulls ? resultNulls->asMutable<uint64_t>() : nullptr;
+  updateResultNullsStats();
+  returnReaderNulls_ = false;
+}
+
+void SelectiveColumnReader::updateResultNullsStats() {
   anyNulls_ = rawResultNulls_ &&
       !bits::isAllSet(rawResultNulls_, 0, numValues_, bits::kNotNull);
   allNull_ =
       anyNulls_ && bits::isAllSet(rawResultNulls_, 0, numValues_, bits::kNull);
-  returnReaderNulls_ = false;
 }
 
 void SelectiveColumnReader::resetFilterCaches() {

@@ -63,6 +63,9 @@ class StructColumnReader : public dwio::common::SelectiveStructColumnReader {
       dwio::common::FormatData::FilterRowGroupsResult&) const override;
 
  private:
+
+  bool filterMatches(const thrift::RowGroup& rowGroup);
+
   dwio::common::SelectiveColumnReader* findBestLeaf();
 
   // Leaf column reader used for getting nullability information for
