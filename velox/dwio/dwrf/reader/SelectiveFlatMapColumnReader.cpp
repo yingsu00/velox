@@ -251,8 +251,11 @@ class SelectiveFlatMapReader : public SelectiveStructColumnReaderBase {
       override {
     numReads_ = scanSpec_->newRead();
     prepareRead<char>(offset, rows, incomingNulls);
+
     VELOX_DCHECK(!hasMutation());
     auto activeRows = rows;
+
+    readNulls(rows, 0, incomingNulls);
     auto* mapNulls =
         nullsInReadRange_ ? nullsInReadRange_->as<uint64_t>() : nullptr;
     if (scanSpec_->filter()) {
@@ -314,7 +317,8 @@ class SelectiveFlatMapReader : public SelectiveStructColumnReaderBase {
         totalSize += currentRowSize;
       } else {
         if (!rawResultNulls_) {
-          setNulls(AlignedBuffer::allocate<bool>(rows.size(), &memoryPool_));
+          setResultNulls(
+              AlignedBuffer::allocate<bool>(rows.size(), &memoryPool_));
         }
         bits::setNull(rawResultNulls_, i);
         anyNulls_ = true;

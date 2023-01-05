@@ -385,17 +385,9 @@ void SelectiveStringDirectColumnReader::processFilter(
       readHelper<common::AlwaysTrue, isDense>(filter, rows, extractValues);
       break;
     case common::FilterKind::kIsNull:
-      filterNulls<StringView>(
-          rows,
-          true,
-          !std::is_same_v<decltype(extractValues), dwio::common::DropValues>);
-      break;
+      VELOX_FAIL("Filter kIsNull should have been processed", valueSize_);
     case common::FilterKind::kIsNotNull:
-      if (std::is_same_v<decltype(extractValues), dwio::common::DropValues>) {
-        filterNulls<StringView>(rows, false, false);
-      } else {
-        readHelper<common::IsNotNull, isDense>(filter, rows, extractValues);
-      }
+      readHelper<common::IsNotNull, isDense>(filter, rows, extractValues);
       break;
     case common::FilterKind::kBytesRange:
       readHelper<common::BytesRange, isDense>(filter, rows, extractValues);
@@ -422,9 +414,16 @@ void SelectiveStringDirectColumnReader::read(
     RowSet rows,
     const uint64_t* incomingNulls) {
   prepareRead<folly::StringPiece>(offset, rows, incomingNulls);
-  bool isDense = rows.back() == rows.size() - 1;
+
+  readNulls(rows, 0, incomingNulls);
+  if (readsNullsOnly()) {
+    filterNulls<int64_t>(rows, scanSpec_->keepValues());
+    return;
+  }
 
   auto numRows = rows.back() + 1;
+  bool isDense = rows.back() == rows.size() - 1;
+
   auto numNulls =
       nullsInReadRange_ ? BaseVector::countNulls(nullsInReadRange_, 0, numRows) : 0;
   dwio::common::ensureCapacity<int32_t>(lengths_, numRows - numNulls, &memoryPool_);

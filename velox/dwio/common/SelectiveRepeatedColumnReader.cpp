@@ -116,26 +116,6 @@ void SelectiveRepeatedColumnReader::makeOffsetsAndSizes(RowSet rows) {
   sizes_->setSize(numValues_ * sizeof(vector_size_t));
 }
 
-RowSet SelectiveRepeatedColumnReader::applyFilter(RowSet rows) {
-  if (!scanSpec_->filter()) {
-    return rows;
-  }
-  switch (scanSpec_->filter()->kind()) {
-    case velox::common::FilterKind::kIsNull:
-      filterNulls<int32_t>(rows, true, false);
-      break;
-    case velox::common::FilterKind::kIsNotNull:
-      filterNulls<int32_t>(rows, false, false);
-      break;
-    default:
-      VELOX_UNSUPPORTED(
-          "Unsupported filter for column {}, only IS NULL and IS NOT NULL are supported: {}",
-          scanSpec_->fieldName(),
-          scanSpec_->filter()->toString());
-  }
-  return outputRows_;
-}
-
 SelectiveListColumnReader::SelectiveListColumnReader(
     const std::shared_ptr<const dwio::common::TypeWithId>& requestedType,
     const std::shared_ptr<const dwio::common::TypeWithId>& dataType,
@@ -174,8 +154,15 @@ void SelectiveListColumnReader::read(
   // Catch up if the child is behind the length stream.
   child_->seekTo(childTargetReadOffset_, false);
   prepareRead<char>(offset, rows, incomingNulls);
-  auto activeRows = applyFilter(rows);
-  makeNestedRowSet(activeRows, rows.back());
+
+//  auto activeRows = applyFilter(rows);
+//  makeNestedRowSet(activeRows, rows.back());
+
+  readNulls(rows, 0, incomingNulls);
+
+  RowSet activeRows = filterNulls<int32_t>(rows, false);
+  makeNestedRowSet(activeRows);
+
   if (child_ && !nestedRows_.empty()) {
     child_->read(child_->readOffset(), nestedRows_, nullptr);
   }
@@ -251,8 +238,14 @@ void SelectiveMapColumnReader::read(
   }
 
   prepareRead<char>(offset, rows, incomingNulls);
-  auto activeRows = applyFilter(rows);
-  makeNestedRowSet(activeRows, rows.back());
+
+//  auto activeRows = applyFilter(rows);
+//  makeNestedRowSet(activeRows, rows.back());
+
+  readNulls(rows, 0, incomingNulls);
+  auto activeRows = filterNulls<int32_t>(rows, false);
+  makeNestedRowSet(activeRows);
+
   if (keyReader_ && elementReader_ && !nestedRows_.empty()) {
     keyReader_->read(keyReader_->readOffset(), nestedRows_, nullptr);
     nestedRows_ = keyReader_->outputRows();

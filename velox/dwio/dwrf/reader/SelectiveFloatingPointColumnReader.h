@@ -49,6 +49,17 @@ class SelectiveFloatingPointColumnReader
   void read(vector_size_t offset, RowSet rows, const uint64_t* incomingNulls)
       override {
     using T = SelectiveFloatingPointColumnReader<TData, TRequested>;
+
+    dwio::common::SelectiveColumnReader::prepareRead<TRequested>(
+        offset, rows, incomingNulls);
+
+    dwio::common::SelectiveColumnReader::readNulls(rows, 0, incomingNulls);
+    if (dwio::common::SelectiveColumnReader::readsNullsOnly()) {
+      dwio::common::SelectiveColumnReader::filterNulls<int64_t>(
+          rows, dwio::common::SelectiveColumnReader::scanSpec_->keepValues());
+      return;
+    }
+
     base::template readCommon<T>(offset, rows, incomingNulls);
     // Check this
     this->readOffset_ += rows.back() + 1;

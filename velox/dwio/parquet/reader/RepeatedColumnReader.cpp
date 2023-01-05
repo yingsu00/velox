@@ -282,6 +282,7 @@ void ListColumnReader::setLengthsFromRepDefs(PageReader& pageReader) {
   formatData_->as<ParquetData>().setNulls(nullsInReadRange(), numLists);
   setLengths(std::move(lengths));
 }
+
 void ListColumnReader::read(
     vector_size_t offset,
     RowSet rows,
