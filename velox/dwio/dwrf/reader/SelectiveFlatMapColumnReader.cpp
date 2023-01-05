@@ -254,8 +254,11 @@ class SelectiveFlatMapReader : public SelectiveStructColumnReaderBase {
       override {
     numReads_ = scanSpec_->newRead();
     prepareRead<char>(offset, rows, incomingNulls);
+
     VELOX_DCHECK(!hasMutation());
     auto activeRows = rows;
+
+    readNulls(rows, 0, incomingNulls);
     auto* mapNulls =
         nullsInReadRange_ ? nullsInReadRange_->as<uint64_t>() : nullptr;
     if (scanSpec_->filter()) {
@@ -325,9 +328,24 @@ class SelectiveFlatMapReader : public SelectiveStructColumnReaderBase {
         });
         ++currentRowSize;
       }
+<<<<<<< HEAD
       rawOffsets[i] = totalSize;
       rawSizes[i] = currentRowSize;
       totalSize += currentRowSize;
+=======
+      if (currentRowSize > 0) {
+        rawOffsets[i] = totalSize;
+        rawSizes[i] = currentRowSize;
+        totalSize += currentRowSize;
+      } else {
+        if (!rawResultNulls_) {
+          setResultNulls(
+              AlignedBuffer::allocate<bool>(rows.size(), &memoryPool_));
+        }
+        bits::setNull(rawResultNulls_, i);
+        anyNulls_ = true;
+      }
+>>>>>>> a824c0f87 (Simplify nulls reading in Parquet reader)
     }
     auto& mapType = requestedType_->type()->asMap();
     VectorPtr keys =

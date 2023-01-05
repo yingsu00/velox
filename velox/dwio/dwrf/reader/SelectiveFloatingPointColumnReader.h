@@ -48,8 +48,25 @@ class SelectiveFloatingPointColumnReader
 
   void read(vector_size_t offset, RowSet rows, const uint64_t* incomingNulls)
       override {
+<<<<<<< HEAD
     using T = SelectiveFloatingPointColumnReader<TFile, TRequested>;
     this->template readCommon<T>(offset, rows, incomingNulls);
+=======
+    using T = SelectiveFloatingPointColumnReader<TData, TRequested>;
+
+    dwio::common::SelectiveColumnReader::prepareRead<TRequested>(
+        offset, rows, incomingNulls);
+
+    dwio::common::SelectiveColumnReader::readNulls(rows, 0, incomingNulls);
+    if (dwio::common::SelectiveColumnReader::readsNullsOnly()) {
+      dwio::common::SelectiveColumnReader::filterNulls<int64_t>(
+          rows, dwio::common::SelectiveColumnReader::scanSpec_->keepValues());
+      return;
+    }
+
+    base::template readCommon<T>(offset, rows, incomingNulls);
+    // Check this
+>>>>>>> a824c0f87 (Simplify nulls reading in Parquet reader)
     this->readOffset_ += rows.back() + 1;
   }
 

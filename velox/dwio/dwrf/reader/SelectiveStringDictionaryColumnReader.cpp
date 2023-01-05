@@ -203,9 +203,13 @@ void SelectiveStringDictionaryColumnReader::read(
     RowSet rows,
     const uint64_t* incomingNulls) {
   prepareRead<int32_t>(offset, rows, incomingNulls);
-  bool isDense = rows.back() == rows.size() - 1;
-  const auto* nullsPtr =
-      nullsInReadRange_ ? nullsInReadRange_->as<uint64_t>() : nullptr;
+
+  readNulls(rows, 0, incomingNulls);
+  if (readsNullsOnly()) {
+    filterNulls<int64_t>(rows, scanSpec_->keepValues());
+    return;
+  }
+
   // lazy loading dictionary data when first hit
   ensureInitialized();
 
@@ -221,6 +225,8 @@ void SelectiveStringDictionaryColumnReader::read(
     // dictionary, the raw state will not be updated elsewhere.
     scanState_.rawState.inDictionary = scanState_.inDictionary->as<uint64_t>();
 
+    const auto* nullsPtr =
+        nullsInReadRange_ ? nullsInReadRange_->as<uint64_t>() : nullptr;
     inDictionaryReader_->next(
         scanState_.inDictionary->asMutable<char>(),
         numFlags,
@@ -228,6 +234,7 @@ void SelectiveStringDictionaryColumnReader::read(
     loadStrideDictionary();
   }
 
+  bool isDense = rows.back() == rows.size() - 1;
   if (scanSpec_->keepValues()) {
     if (scanSpec_->valueHook()) {
       if (isDense) {
@@ -303,6 +310,7 @@ void SelectiveStringDictionaryColumnReader::makeFlat(VectorPtr* result) {
 void SelectiveStringDictionaryColumnReader::getValues(
     RowSet rows,
     VectorPtr* result) {
+<<<<<<< HEAD
   compactScalarValues<int32_t, int32_t>(rows, false);
   VELOX_CHECK_GT(numRowsScanned_, 0);
   double selectivity = 1.0 * rows.size() / numRowsScanned_;
@@ -317,6 +325,16 @@ void SelectiveStringDictionaryColumnReader::getValues(
     makeFlat(result);
     return;
   }
+=======
+  if (readsNullsOnly()) {
+    rawStringBuffer_ = nullptr;
+    rawStringSize_ = 0;
+    rawStringUsed_ = 0;
+    getFlatValues<StringView, StringView>(rows, result, type_);
+    return;
+  }
+
+>>>>>>> a824c0f87 (Simplify nulls reading in Parquet reader)
   if (!dictionaryValues_) {
     makeDictionaryBaseVector();
   }

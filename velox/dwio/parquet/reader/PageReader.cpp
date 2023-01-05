@@ -29,6 +29,7 @@ using thrift::Encoding;
 using thrift::PageHeader;
 
 void PageReader::seekToPage(int64_t row) {
+  printf(" seekToPage to row %d\n", row);
   defineDecoder_.reset();
   repeatDecoder_.reset();
   // 'rowOfPage_' is the row number of the first row of the next page.
@@ -205,12 +206,24 @@ void PageReader::prepareDataPageV1(const PageHeader& pageHeader, int64_t row) {
 
     return;
   }
+
   pageData_ = readBytes(pageHeader.compressed_page_size, pageBuffer_);
+<<<<<<< HEAD
   pageData_ = decompressData(
+=======
+
+  printf("  compressed pageData_=%llx,", pageData_);
+
+  pageData_ = uncompressData(
+>>>>>>> a824c0f87 (Simplify nulls reading in Parquet reader)
       pageData_,
       pageHeader.compressed_page_size,
       pageHeader.uncompressed_page_size);
-  auto pageEnd = pageData_ + pageHeader.uncompressed_page_size;
+
+  printf("  Uncompressed pageData_=%llx,", pageData_);
+
+  auto pageEnd =
+      pageData_ + pageHeader.uncompressed_page_size;
   if (maxRepeat_ > 0) {
     uint32_t repeatLength = readField<int32_t>(pageData_);
     repeatDecoder_ = std::make_unique<::arrow::util::RleDecoder>(
@@ -241,6 +254,10 @@ void PageReader::prepareDataPageV1(const PageHeader& pageHeader, int64_t row) {
   if (!hasChunkRepDefs_ && (numRowsInPage_ == kRowsUnknown || maxDefine_ > 1)) {
     readPageDefLevels();
   }
+
+  printf(
+      "  pageData_=%llx, numRowsInPage_=%d, rowOfPage_=%d, page_size=%d\n",
+      pageData_, numRowsInPage_, rowOfPage_, pageHeader.compressed_page_size);
 
   if (row != kRepDefOnly) {
     makeDecoder();
@@ -778,81 +795,39 @@ void PageReader::startVisit(folly::Range<const vector_size_t*> rows) {
   visitBase_ = firstUnvisited_;
 }
 
-bool PageReader::rowsForPage(
-    dwio::common::SelectiveColumnReader& reader,
-    bool hasFilter,
-    bool mayProduceNulls,
-    folly::Range<const vector_size_t*>& rows,
-    const uint64_t* FOLLY_NULLABLE& nulls) {
+folly::Range<const vector_size_t*> PageReader::rowsForPage() {
   if (currentVisitorRow_ == numVisitorRows_) {
-    return false;
+    return folly::Range(
+        visitorRows_ + numVisitorRows_, visitorRows_ + numVisitorRows_);
   }
-  int32_t numToVisit;
+
   // Check if the first row to go to is in the current page. If not, seek to the
   // page that contains the row.
   auto rowZero = visitBase_ + visitorRows_[currentVisitorRow_];
   if (rowZero >= rowOfPage_ + numRowsInPage_) {
     seekToPage(rowZero);
+
     if (hasChunkRepDefs_) {
       numLeafNullsConsumed_ = rowOfPage_;
-    }
-  }
-  auto& scanState = reader.scanState();
-  if (isDictionary()) {
-    if (scanState.dictionary.values != dictionary_.values) {
-      scanState.dictionary = dictionary_;
-      if (hasFilter) {
-        makeFilterCache(scanState);
-      }
-      scanState.updateRawState();
-    }
-  } else {
-    if (scanState.dictionary.values) {
-      // If there are previous pages in the current read, nulls read
-      // from them are in 'nullConcatenation_' Put this into the
-      // reader for the time of dedictionarizing so we don't read
-      // undefined dictionary indices.
-      if (mayProduceNulls && reader.numValues()) {
-        reader.setNulls(nullConcatenation_.buffer());
-      }
-      reader.dedictionarize();
-      // The nulls across all pages are in nullConcatenation_. Clear
-      // the nulls and let the prepareNulls below reserve nulls for
-      // the new page.
-      reader.setNulls(nullptr);
-      scanState.dictionary.clear();
     }
   }
 
   // Then check how many of the rows to visit are on the same page as the
   // current one.
   int32_t firstOnNextPage = rowOfPage_ + numRowsInPage_ - visitBase_;
-  if (firstOnNextPage > visitorRows_[numVisitorRows_ - 1]) {
-    // All the remaining rows are on this page.
-    numToVisit = numVisitorRows_ - currentVisitorRow_;
-  } else {
-    // Find the last row in the rows to visit that is on this page.
-    auto rangeLeft = folly::Range<const int32_t*>(
-        visitorRows_ + currentVisitorRow_,
-        numVisitorRows_ - currentVisitorRow_);
-    auto it =
-        std::lower_bound(rangeLeft.begin(), rangeLeft.end(), firstOnNextPage);
-    assert(it != rangeLeft.end());
-    assert(it != rangeLeft.begin());
-    numToVisit = it - (visitorRows_ + currentVisitorRow_);
-  }
-  // If the page did not change and this is the first call, we can return a view
-  // on the original visitor rows.
-  if (rowOfPage_ == initialRowOfPage_ && currentVisitorRow_ == 0) {
-    nulls =
-        readNulls(visitorRows_[numToVisit - 1] + 1, reader.nullsInReadRange());
-    rowNumberBias_ = 0;
-    rows = folly::Range<const vector_size_t*>(visitorRows_, numToVisit);
-  } else {
-    // We scale row numbers to be relative to first on this page.
+  auto begin = visitorRows_ + currentVisitorRow_;
+  auto it =
+      std::lower_bound(begin, visitorRows_ + numVisitorRows_, firstOnNextPage);
+  int32_t numToVisit = it - begin;
+  auto rowsInPage = folly::Range(begin, numToVisit);
+
+  // If it's not the first page in this batch, rescale the row numbers relative
+  // to first on this page.
+  rowNumberBias_ = 0;
+  if (rowOfPage_ != initialRowOfPage_ || currentVisitorRow_ != 0) {
     auto pageOffset = rowOfPage_ - visitBase_;
     rowNumberBias_ = visitorRows_[currentVisitorRow_];
-    skip(rowNumberBias_ - pageOffset);
+
     // The decoder is positioned at 'visitorRows_[currentVisitorRow_']'
     // We copy the rows to visit with a bias, so that the first to visit has
     // offset 0.
@@ -868,14 +843,15 @@ bool PageReader::rowsForPage(
       numbers.store_unaligned(copy);
       copy += xsimd::batch<int32_t>::size;
     }
-    nulls = readNulls(rowsCopy_->back() + 1, reader.nullsInReadRange());
-    rows = folly::Range<const vector_size_t*>(
+
+    rowsInPage = folly::Range<const vector_size_t*>(
         rowsCopy_->data(), rowsCopy_->size());
   }
-  reader.prepareNulls(rows, nulls != nullptr, currentVisitorRow_);
-  currentVisitorRow_ += numToVisit;
+
+  currentVisitorRow_ += rowsInPage.size();
   firstUnvisited_ = visitBase_ + visitorRows_[currentVisitorRow_ - 1] + 1;
-  return true;
+
+  return rowsInPage;
 }
 
 const VectorPtr& PageReader::dictionaryValues(const TypePtr& type) {

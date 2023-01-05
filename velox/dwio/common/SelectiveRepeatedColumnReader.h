@@ -73,6 +73,7 @@ class SelectiveRepeatedColumnReader : public SelectiveColumnReader {
     }
   }
 
+<<<<<<< HEAD
   // Apply filter on parent level.  Child filtering should be handled separately
   // in subclasses.
   RowSet applyFilter(RowSet rows);
@@ -81,6 +82,9 @@ class SelectiveRepeatedColumnReader : public SelectiveColumnReader {
 
   BufferPtr allLengthsHolder_;
   vector_size_t* allLengths_;
+=======
+  std::vector<int32_t> allLengths_;
+>>>>>>> a824c0f87 (Simplify nulls reading in Parquet reader)
   RowSet nestedRows_;
   raw_vector<vector_size_t> nestedRowsHolder_;
 

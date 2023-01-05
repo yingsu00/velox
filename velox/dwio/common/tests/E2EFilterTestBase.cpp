@@ -163,6 +163,9 @@ void E2EFilterTestBase::readWithFilter(
   auto deletedRowsIter = mutationSpec.deletedRows.begin();
   while (true) {
     {
+      printf(
+"-----------------------Round %d---------------------------\n\n",clearCnt);
+
       MicrosecondTimer timer(&time);
       if (++clearCnt % 17 == 0) {
         rowReader->resetFilterCaches();
@@ -171,6 +174,7 @@ void E2EFilterTestBase::readWithFilter(
       if (nextRowNumber == RowReader::kAtEnd) {
         break;
       }
+
       auto readSize = rowReader->nextReadSize(nextReadBatchSize());
       std::vector<uint64_t> isDeleted(bits::nwords(readSize));
       bool haveDelete = false;
@@ -191,6 +195,7 @@ void E2EFilterTestBase::readWithFilter(
         mutation.deletedRows = isDeleted.data();
       }
       auto rowsScanned = rowReader->next(readSize, resultBatch, &mutation);
+      printf("Next finished with %d rows, rowsScanned %lld\n\n", resultBatch->size(), rowsScanned);
       ASSERT_EQ(rowsScanned, readSize);
       if (resultBatch->size() == 0) {
         // No hits in the last resultBatch of rows.
@@ -233,6 +238,22 @@ void E2EFilterTestBase::readWithFilter(
         auto column = spec->children()[childIndex]->channel();
         auto result = resultBatch->asUnchecked<RowVector>()->childAt(column);
         auto expectedColumn = expectedBatch->childAt(column).get();
+
+//        printf(
+//            "i=%d, rowIndex=%d, hit=%d, expected: %s, actual: %s \n",
+//            i,
+//            rowIndex - 1,
+//            hit,
+//            expectedColumn->toString(expectedRow).c_str(),
+//            result->toString(i).c_str());
+
+        if (!result->equalValueAt(expectedColumn, i, expectedRow)) {
+          std::cout << "Content mismatch at " << rowIndex - 1 << " column "
+                    << column
+                    << ": expected: " << expectedColumn->toString(expectedRow)
+                    << " actual: " << result->toString(i) << std::endl;
+          break;
+        }
         ASSERT_TRUE(result->equalValueAt(expectedColumn, i, expectedRow))
             << "Content mismatch at " << rowIndex - 1 << " column " << column
             << ": expected: " << expectedColumn->toString(expectedRow)
@@ -324,7 +345,7 @@ void E2EFilterTestBase::testNoRowGroupSkip(
   auto spec = filterGenerator_->makeScanSpec(SubfieldFilters{});
 
   uint64_t timeWithNoFilter = 0;
-  readWithoutFilter(spec, batches, timeWithNoFilter);
+  //  readWithoutFilter(spec, batches, timeWithNoFilter);
 
   for (auto i = 0; i < numCombinations; ++i) {
     std::vector<FilterSpec> specs =

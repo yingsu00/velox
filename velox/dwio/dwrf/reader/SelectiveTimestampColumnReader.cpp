@@ -125,6 +125,7 @@ void SelectiveTimestampColumnReader::readHelper(
     decodeWithVisitor<velox::dwrf::RleDecoderV2<false>>(nano_.get(), visitor);
   }
 
+<<<<<<< HEAD
   // Merge the seconds and nanos into 'values_'
   auto secondsData = secondsValues_->as<int64_t>();
   auto nanosData = values_->as<uint64_t>();
@@ -133,6 +134,23 @@ void SelectiveTimestampColumnReader::readHelper(
       : nullptr;
   auto tsValues = AlignedBuffer::allocate<Timestamp>(numValues_, &memoryPool_);
   auto rawTs = tsValues->asMutable<Timestamp>();
+=======
+void SelectiveTimestampColumnReader::read(
+    vector_size_t offset,
+    RowSet rows,
+    const uint64_t* incomingNulls) {
+  prepareRead<int64_t>(offset, rows, incomingNulls);
+  readNulls(rows, 0, incomingNulls);
+  VELOX_CHECK(!scanSpec_->filter());
+  bool isDense = rows.back() == rows.size() - 1;
+  if (isDense) {
+    readHelper<true>(rows);
+  } else {
+    readHelper<false>(rows);
+  }
+  readOffset_ += rows.back() + 1;
+}
+>>>>>>> a824c0f87 (Simplify nulls reading in Parquet reader)
 
   for (vector_size_t i = 0; i < numValues_; i++) {
     if (!rawNulls || !bits::isBitNull(rawNulls, i)) {
