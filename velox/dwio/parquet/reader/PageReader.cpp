@@ -76,52 +76,64 @@ void PageReader::seekToPage(int64_t row) {
 }
 
 PageHeader PageReader::readPageHeader(int64_t remainingSize) {
-  // Note that sizeof(PageHeader) may be longer than actually read
-  std::shared_ptr<thrift::ThriftBufferedTransport> transport;
-  std::unique_ptr<apache::thrift::protocol::TCompactProtocolT<
-      thrift::ThriftBufferedTransport>>
-      protocol;
-  char copy[sizeof(PageHeader)];
-  bool wasInBuffer = false;
-  if (bufferEnd_ == bufferStart_) {
-    const void* buffer;
-    int32_t size;
-    inputStream_->Next(&buffer, &size);
-    bufferStart_ = reinterpret_cast<const char*>(buffer);
-    bufferEnd_ = bufferStart_ + size;
-  }
-  if (bufferEnd_ - bufferStart_ >= sizeof(PageHeader)) {
-    wasInBuffer = true;
-    transport = std::make_shared<thrift::ThriftBufferedTransport>(
-        bufferStart_, sizeof(PageHeader));
-    protocol = std::make_unique<apache::thrift::protocol::TCompactProtocolT<
-        thrift::ThriftBufferedTransport>>(transport);
-  } else {
-    dwio::common::readBytes(
-        std::min<int64_t>(remainingSize, sizeof(PageHeader)),
-        inputStream_.get(),
-        &copy,
-        bufferStart_,
-        bufferEnd_);
+  auto transport =
+      std::make_shared<thrift::ThriftBufferedTransport2>(std::move(inputStream_));
+  auto protocol = std::make_unique<apache::thrift::protocol::TCompactProtocolT<
+      thrift::ThriftBufferedTransport2>>(transport);
 
-    transport = std::make_shared<thrift::ThriftBufferedTransport>(
-        copy, sizeof(PageHeader));
-    protocol = std::make_unique<apache::thrift::protocol::TCompactProtocolT<
-        thrift::ThriftBufferedTransport>>(transport);
-  }
   PageHeader pageHeader;
   uint64_t readBytes = pageHeader.read(protocol.get());
   pageDataStart_ = pageStart_ + readBytes;
-  // Unread the bytes that were not consumed.
-  if (wasInBuffer) {
-    bufferStart_ += readBytes;
-  } else {
-    std::vector<uint64_t> start = {pageDataStart_};
-    dwio::common::PositionProvider position(start);
-    inputStream_->seekToPosition(position);
-    bufferStart_ = bufferEnd_ = nullptr;
-  }
+  inputStream_ = transport->returnInputStream();
+
   return pageHeader;
+
+  //  // Note that sizeof(PageHeader) may be longer than actually read
+  //  std::shared_ptr<thrift::ThriftBufferedTransport> transport;
+  //  std::unique_ptr<apache::thrift::protocol::TCompactProtocolT<
+  //      thrift::ThriftBufferedTransport>>
+  //      protocol;
+  //  char copy[sizeof(PageHeader)];
+  //  bool wasInBuffer = false;
+  //  if (bufferEnd_ == bufferStart_) {
+  //    const void* buffer;
+  //    int32_t size;
+  //    inputStream_->Next(&buffer, &size);
+  //    bufferStart_ = reinterpret_cast<const char*>(buffer);
+  //    bufferEnd_ = bufferStart_ + size;
+  //  }
+  //  if (bufferEnd_ - bufferStart_ >= sizeof(PageHeader)) {
+  //    wasInBuffer = true;
+  //    transport = std::make_shared<thrift::ThriftBufferedTransport>(
+  //        bufferStart_, sizeof(PageHeader));
+  //    protocol = std::make_unique<apache::thrift::protocol::TCompactProtocolT<
+  //        thrift::ThriftBufferedTransport>>(transport);
+  //  } else {
+  //    dwio::common::readBytes(
+  //        std::min<int64_t>(remainingSize, sizeof(PageHeader)),
+  //        inputStream_.get(),
+  //        &copy,
+  //        bufferStart_,
+  //        bufferEnd_);
+  //
+  //    transport = std::make_shared<thrift::ThriftBufferedTransport>(
+  //        copy, sizeof(PageHeader));
+  //    protocol = std::make_unique<apache::thrift::protocol::TCompactProtocolT<
+  //        thrift::ThriftBufferedTransport>>(transport);
+  //  }
+//  PageHeader pageHeader;
+//  uint64_t readBytes = pageHeader.read(protocol.get());
+//  pageDataStart_ = pageStart_ + readBytes;
+//  // Unread the bytes that were not consumed.
+//  if (wasInBuffer) {
+//    bufferStart_ += readBytes;
+//  } else {
+//    std::vector<uint64_t> start = {pageDataStart_};
+//    dwio::common::PositionProvider position(start);
+//    inputStream_->seekToPosition(position);
+//    bufferStart_ = bufferEnd_ = nullptr;
+//  }
+//  return pageHeader;
 }
 
 const char* PageReader::readBytes(int32_t size, BufferPtr& copy) {

@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <dwio/common/SeekableInputStream.h>
 #include <thrift/transport/TVirtualTransport.h>
 #include "velox/dwio/common/BufferedInput.h"
 
@@ -41,6 +42,51 @@ class ThriftBufferedTransport
   const uint8_t* inputBuf_;
   const uint64_t size_;
   uint64_t offset_;
+};
+
+class ThriftBufferedTransport2
+    : public apache::thrift::transport::TVirtualTransport<
+          ThriftBufferedTransport2> {
+ public:
+  ThriftBufferedTransport2(
+      std::unique_ptr<dwio::common::SeekableInputStream> inputStream)
+      : inputStream_(std::move(inputStream)), bufferStart_(0), bufferEnd_(0) {}
+
+  uint32_t read(uint8_t* outputBuf, uint32_t len) {
+    uint32_t readBytes = 0;
+
+    while (readBytes < len) {
+      if (bufferEnd_ == bufferStart_) {
+        const void* buffer;
+        int32_t size;
+        if (!inputStream_->Next(&buffer, &size)) {
+          break;
+        }
+
+        bufferStart_ = reinterpret_cast<const char*>(buffer);
+        bufferEnd_ = bufferStart_ + size;
+      }
+
+      uint32_t toReadBytes =
+          std::min<uint32_t>(bufferEnd_ - bufferStart_, len - readBytes);
+      memcpy(outputBuf, bufferStart_, toReadBytes);
+      bufferStart_ += toReadBytes;
+      readBytes += toReadBytes;
+    }
+
+    return readBytes;
+  }
+
+  std::unique_ptr<dwio::common::SeekableInputStream> returnInputStream() {
+    // rewind
+    inputStream_->BackUp(bufferEnd_ - bufferStart_);
+    return std::move(inputStream_);
+  }
+
+ private:
+  std::unique_ptr<dwio::common::SeekableInputStream> inputStream_;
+  const char* FOLLY_NULLABLE bufferStart_{nullptr};
+  const char* FOLLY_NULLABLE bufferEnd_{nullptr};
 };
 
 } // namespace facebook::velox::parquet::thrift

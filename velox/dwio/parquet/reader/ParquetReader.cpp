@@ -42,42 +42,73 @@ void ReaderBase::loadFileMetaData() {
   uint64_t readSize =
       preloadFile_ ? fileLength_ : std::min(fileLength_, DIRECTORY_SIZE_GUESS);
 
-  auto stream = input_->read(
-      fileLength_ - readSize, readSize, dwio::common::LogType::FOOTER);
+  //  auto stream = input_->read(
+  //      fileLength_ - readSize, readSize, dwio::common::LogType::FOOTER);
+  //
+  //  std::vector<char> copy(readSize);
+  //  const char* bufferStart = nullptr;
+  //  const char* bufferEnd = nullptr;
+  //  dwio::common::readBytes(
+  //      readSize, stream.get(), copy.data(), bufferStart, bufferEnd);
+  //  VELOX_CHECK(
+  //      strncmp(copy.data() + readSize - 4, "PAR1", 4) == 0,
+  //      "No magic bytes found at end of the Parquet file");
+  //
+  //  uint32_t footerLength =
+  //      *(reinterpret_cast<const uint32_t*>(copy.data() + readSize - 8));
+  //  VELOX_CHECK_LT(footerLength + 12, fileLength_);
+  //  int32_t footerOffsetInBuffer = readSize - 8 - footerLength;
+  //  if (footerLength > readSize - 8) {
+  //    footerOffsetInBuffer = 0;
+  //    auto missingLength = footerLength - readSize - 8;
+  //    stream = input_->read(
+  //        fileLength_ - footerLength - 8,
+  //        missingLength,
+  //        dwio::common::LogType::FOOTER);
+  //    copy.resize(footerLength);
+  //    std::memmove(copy.data() + missingLength, copy.data(), readSize - 8);
+  //    bufferStart = nullptr;
+  //    bufferEnd = nullptr;
+  //    dwio::common::readBytes(
+  //        missingLength, stream.get(), copy.data(), bufferStart, bufferEnd);
+  //  }
 
-  std::vector<char> copy(readSize);
-  const char* bufferStart = nullptr;
-  const char* bufferEnd = nullptr;
-  dwio::common::readBytes(
-      readSize, stream.get(), copy.data(), bufferStart, bufferEnd);
+  //  auto thriftTransport = std::make_shared<thrift::ThriftBufferedTransport>(
+  //      copy.data() + footerOffsetInBuffer, footerLength);
+  //  auto thriftProtocol =
+  //      std::make_unique<apache::thrift::protocol::TCompactProtocolT<
+  //          thrift::ThriftBufferedTransport>>(thriftTransport);
+  //  fileMetaData_ = std::make_unique<thrift::FileMetaData>();
+  //  fileMetaData_->read(thriftProtocol.get());
+
+  auto footerMetaDataStream =
+      input_->read(fileLength_ - 8, 8, dwio::common::LogType::FOOTER);
+
+  const void* footerMetaData = nullptr;
+  int32_t footerMetaDataSize = 0;
+  footerMetaDataStream->Next(&footerMetaData, &footerMetaDataSize);
+
   VELOX_CHECK(
-      strncmp(copy.data() + readSize - 4, "PAR1", 4) == 0,
+      footerMetaDataSize == 8,
+      "Invalid Parquet footer metadata size at end of the Parquet file: %d",
+      footerMetaDataSize);
+
+  int32_t footerLength = *(static_cast<const int32_t*>(footerMetaData));
+  VELOX_CHECK(
+      footerLength > 0, "Invalid Parquet file footer size %d", footerLength);
+  VELOX_CHECK(
+      strncmp(static_cast<const char*>(footerMetaData) + 4, "PAR1", 4) == 0,
       "No magic bytes found at end of the Parquet file");
 
-  uint32_t footerLength =
-      *(reinterpret_cast<const uint32_t*>(copy.data() + readSize - 8));
-  VELOX_CHECK_LT(footerLength + 12, fileLength_);
-  int32_t footerOffsetInBuffer = readSize - 8 - footerLength;
-  if (footerLength > readSize - 8) {
-    footerOffsetInBuffer = 0;
-    auto missingLength = footerLength - readSize - 8;
-    stream = input_->read(
-        fileLength_ - footerLength - 8,
-        missingLength,
-        dwio::common::LogType::FOOTER);
-    copy.resize(footerLength);
-    std::memmove(copy.data() + missingLength, copy.data(), readSize - 8);
-    bufferStart = nullptr;
-    bufferEnd = nullptr;
-    dwio::common::readBytes(
-        missingLength, stream.get(), copy.data(), bufferStart, bufferEnd);
-  }
-
-  auto thriftTransport = std::make_shared<thrift::ThriftBufferedTransport>(
-      copy.data() + footerOffsetInBuffer, footerLength);
+  auto fileMetaDataStream = input_->read(
+      fileLength_ - footerLength - 8,
+      footerLength,
+      dwio::common::LogType::FOOTER);
+  auto thriftTransport = std::make_shared<thrift::ThriftBufferedTransport2>(
+      std::move(fileMetaDataStream));
   auto thriftProtocol =
       std::make_unique<apache::thrift::protocol::TCompactProtocolT<
-          thrift::ThriftBufferedTransport>>(thriftTransport);
+          thrift::ThriftBufferedTransport2>>(thriftTransport);
   fileMetaData_ = std::make_unique<thrift::FileMetaData>();
   fileMetaData_->read(thriftProtocol.get());
 }
