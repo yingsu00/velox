@@ -171,6 +171,12 @@ class E2EFilterTestBase : public testing::Test {
       const std::vector<RowVectorPtr>& batches,
       bool forRowGroupSkip) = 0;
 
+  virtual void writeToFile(
+      const TypePtr& type,
+      const std::vector<RowVectorPtr>& batches,
+      bool forRowGroupSkip,
+      const std::string& name) {}
+
   virtual std::unique_ptr<dwio::common::Reader> makeReader(
       const dwio::common::ReaderOptions& opts,
       std::unique_ptr<dwio::common::BufferedInput> input) = 0;

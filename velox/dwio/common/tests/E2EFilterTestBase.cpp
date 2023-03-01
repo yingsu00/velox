@@ -285,7 +285,7 @@ void E2EFilterTestBase::testNoRowGroupSkip(
   auto spec = filterGenerator_->makeScanSpec(SubfieldFilters{});
 
   uint64_t timeWithNoFilter = 0;
-  readWithoutFilter(spec, batches, timeWithNoFilter);
+//  readWithoutFilter(spec, batches, timeWithNoFilter);
 
   for (auto i = 0; i < numCombinations; ++i) {
     std::vector<FilterSpec> specs =
@@ -332,10 +332,12 @@ void E2EFilterTestBase::testSenario(
 
   auto batches = makeDataset(customize, false);
   writeToMemory(rowType_, batches, false);
+  writeToFile(rowType_, batches, false, "/Users/yingsu/listAndMap_NoRGSkip.dwrf");
   testNoRowGroupSkip(batches, filterable, numCombinations);
 
   batches = makeDataset(customize, true);
   writeToMemory(rowType_, batches, true);
+  writeToFile(rowType_, batches, true, "/Users/yingsu/listAndMap_ForRGSkip.dwrf");
   testRowGroupSkip(batches, filterable);
 }
 

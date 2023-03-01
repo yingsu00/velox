@@ -82,6 +82,64 @@ class E2EFilterTest : public E2EFilterTestBase {
     writer_->close();
   }
 
+  void writeToFile(
+      const TypePtr& type,
+      const std::vector<RowVectorPtr>& batches,
+      bool forRowGroupSkip,
+      const std::string& name) override {
+    auto options = createWriterOptions(type);
+    int32_t flushCounter = 0;
+    // If we test row group skip, we have all the data in one stripe. For
+    // scan, we start  a stripe every 'flushEveryNBatches_' batches.
+    options.flushPolicyFactory = [&]() {
+      return std::make_unique<LambdaFlushPolicy>([&]() {
+        return forRowGroupSkip ? false
+        : (++flushCounter % flushEveryNBatches_ == 0);
+      });
+    };
+
+    auto sink = std::make_unique<LocalFileSink>(name);
+    //    sinkPtr_ = sink.get();
+
+    auto fileWriter = std::make_unique<Writer>(options, std::move(sink), *pool_);
+    for (auto& batch : batches) {
+      fileWriter->write(batch);
+    }
+    fileWriter->close();
+  }
+
+  TEST_F(E2EFilterTest, listAndMapCrash) {
+    auto file = std::make_shared<LocalReadFile>(
+        getExampleFilePath("listAndMap_NoRGSkip.dwrf"));
+    ReaderOptions readerOptions;
+    auto reader = DwrfReader::create(
+        std::make_unique<BufferedInput>(file, *pool_), readerOptions);
+    RowReaderOptions rowReaderOptions;
+    auto rowReader = reader->createRowReader(rowReaderOptions);
+    std::vector<RowVectorPtr> batches;
+    for (;;) {
+      VectorPtr vector;
+      if (rowReader->next(1024, vector) == 0) {
+        break;
+      }
+      batches.push_back(std::static_pointer_cast<RowVector>(vector));
+    }
+    constexpr const char* kColumns =
+        "long_val:bigint,"
+        "long_val_2:bigint,"
+        "int_val:int,"
+        "array_val:array<struct<array_member: array<int>>>,"
+        "map_val:map<bigint,struct<nested_map: map<int, int>>>";
+    rowType_ = test::DataSetBuilder::makeRowType(kColumns, true);
+    filterGenerator_ = std::make_unique<FilterGenerator>(rowType_, 1);
+    DataBuffer<char> buf(*pool_, file->size());
+    file->pread(0, file->size(), buf.data());
+    MemorySink sink(*pool_, file->size());
+    sink.write(std::move(buf));
+    sinkPtr_ = &sink;
+    testNoRowGroupSkip(batches, {"long_val", "long_val_2", "int_val"}, 10);
+  }
+
   void setUpRowReaderOptions(
       dwio::common::RowReaderOptions& opts,
       const std::shared_ptr<ScanSpec>& spec) override {
@@ -314,6 +372,25 @@ TEST_F(E2EFilterTest, nullCompactRanges) {
 
       true,
       {"tiny_val", "bool_val", "long_val", "tiny_null"},
+      20,
+      false,
+      false);
+}
+
+TEST_F(E2EFilterTest, nullCompactRanges2) {
+  // Makes a dataset with nulls at the beginning. Tries different
+  // filter combinations on progressively larger batches. tests for a
+  // bug in null compaction where null bits past end of nulls buffer
+  // were compacted while there actually were no nulls.
+
+  readSizes_ = {10};
+  testWithTypes(
+      "long_val:bigint",
+
+      [&]() { makeNotNull(500); },
+
+      true,
+      {"long_val"},
       20,
       false,
       false);

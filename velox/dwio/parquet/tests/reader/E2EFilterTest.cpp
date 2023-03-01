@@ -68,6 +68,22 @@ class E2EFilterTest : public E2EFilterTestBase {
     writer_->close();
   }
 
+  void writeToFile(
+      const TypePtr& type,
+      const std::vector<RowVectorPtr>& batches,
+      bool forRowGroupSkip,
+      const std::string& name) override {
+    auto sink = std::make_unique<LocalFileSink>(name);
+//    sinkPtr_ = sink.get();
+
+    auto fileWriter = std::make_unique<facebook::velox::parquet::Writer>(
+        std::move(sink), *pool_, rowGroupSize_, writerProperties_);
+    for (auto& batch : batches) {
+      fileWriter->write(batch);
+    }
+    fileWriter->close();
+  }
+
   std::unique_ptr<dwio::common::Reader> makeReader(
       const dwio::common::ReaderOptions& opts,
       std::unique_ptr<dwio::common::BufferedInput> input) override {
