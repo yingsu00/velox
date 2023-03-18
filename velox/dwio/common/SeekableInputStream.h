@@ -67,12 +67,14 @@ class SeekableArrayInputStream : public SeekableInputStream {
  private:
   // data may optionally be owned by *this via ownedData.
   std::unique_ptr<char[]> ownedData;
-  const char* data;
   std::function<std::tuple<const char*, uint64_t>()> dataRead;
+ public:
   uint64_t length;
   uint64_t position;
   uint64_t blockSize;
   void loadIfAvailable();
+
+  const char* data;
 
  public:
   SeekableArrayInputStream(

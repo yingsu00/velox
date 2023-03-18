@@ -57,6 +57,7 @@ class IntegerColumnReader : public dwio::common::SelectiveIntegerColumnReader {
       vector_size_t offset,
       RowSet rows,
       const uint64_t* /*incomingNulls*/) override {
+    printf("  IntegerColumnReader::read begin readOffset=%d\n", readOffset_);
     auto& data = formatData_->as<ParquetData>();
     VELOX_WIDTH_DISPATCH(
         parquetSizeOfIntKind(fileType_->type->kind()),
@@ -66,6 +67,7 @@ class IntegerColumnReader : public dwio::common::SelectiveIntegerColumnReader {
         nullptr);
     readCommon<IntegerColumnReader>(rows);
     readOffset_ += rows.back() + 1;
+    printf("  IntegerColumnReader::read end readOffset=%d\n", readOffset_);
   }
 
   template <typename ColumnVisitor>

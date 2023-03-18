@@ -94,6 +94,8 @@ void SelectiveStructColumnReaderBase::read(
     vector_size_t offset,
     RowSet rows,
     const uint64_t* incomingNulls) {
+  printf("  SelectiveStructColumnReaderBase::read begin readOffset=%d\n", readOffset_);
+
   prepareRead<char>(offset, rows, incomingNulls);
 
   RowSet activeRows = rows;
@@ -158,7 +160,12 @@ void SelectiveStructColumnReaderBase::read(
   assert(!children_.empty());
 
   for (size_t i = 0; i < childSpecs.size(); ++i) {
-    printf("Column %d\n", i);
+    printf("\nColumn %d\n", i);
+    printf(
+        " input activeRows size %d, firstRow=%d, lastRow=%d\n",
+        activeRows.size(),
+        activeRows.front(),
+        activeRows.back());
 
     auto& childSpec = childSpecs[i];
 
@@ -196,6 +203,12 @@ void SelectiveStructColumnReaderBase::read(
     } else {
       reader->read(offset, activeRows, structNulls);
     }
+
+    printf(
+        "\n  output activeRows size %d, firstRow=%d, lastRow=%d\n",
+        activeRows.size(),
+        activeRows.front(),
+        activeRows.back());
   }
 
 //  if (activeRows.empty()) {
@@ -217,6 +230,10 @@ void SelectiveStructColumnReaderBase::read(
 //>>>>>>> eaccd9f02 (Simplify nulls reading in Parquet reader)
   lazyVectorReadOffset_ = offset;
   readOffset_ = offset + rows.back() + 1;
+
+  printf(
+      "\n SelectiveStructColumnReaderBase::read end, readOffset_=%d\n",
+      readOffset_);
 }
 
 void SelectiveStructColumnReaderBase::recordParentNullsInChildren(

@@ -148,7 +148,8 @@ class DirectDecoder : public IntDecoder<isSigned> {
   }
 
   template <bool hasNulls, typename Visitor>
-  void fastPath(const uint64_t* FOLLY_NULLABLE nulls, Visitor& visitor) {
+  void
+  fastPath(const uint64_t* FOLLY_NULLABLE nulls, Visitor& visitor) {
     using T = typename Visitor::DataType;
     constexpr bool hasFilter =
         !std::
@@ -197,6 +198,7 @@ class DirectDecoder : public IntDecoder<isSigned> {
           return;
         }
       }
+
       if (super::useVInts) {
         if (Visitor::dense) {
           super::bulkRead(numNonNull, data);

@@ -87,6 +87,8 @@ void SelectiveColumnReader::prepareRead(
   if (scanSpec_->keepValues() && !scanSpec_->valueHook()) {
     valueRows_.clear();
   }
+
+//  ensureNullsCapacity(rows.back() + 1);
 }
 
 template <typename T, typename TVector>
@@ -371,7 +373,6 @@ void SelectiveColumnReader::filterNulls(
       }
     }
   }
-//  updateResultNullsStats();
 }
 
 template <typename T>

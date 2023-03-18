@@ -66,6 +66,7 @@ const std::vector<SelectiveColumnReader*>& SelectiveColumnReader::children()
 }
 
 void SelectiveColumnReader::seekTo(vector_size_t offset, bool readsNullsOnly) {
+  printf("  SelectiveColumnReader::seekTo offset=%d, readOffset_=%d\n", offset, readOffset_);
   if (offset == readOffset_) {
     return;
   }
@@ -80,6 +81,7 @@ void SelectiveColumnReader::seekTo(vector_size_t offset, bool readsNullsOnly) {
     numParentNulls_ = 0;
     parentNullsRecordedTo_ = 0;
     if (readsNullsOnly) {
+      printf("  skipNulls %d\n", distance);
       formatData_->skipNulls(distance, true);
     } else {
       skip(distance);
@@ -88,6 +90,14 @@ void SelectiveColumnReader::seekTo(vector_size_t offset, bool readsNullsOnly) {
   } else {
     VELOX_FAIL("Seeking backward on a ColumnReader");
   }
+}
+
+void SelectiveColumnReader::ensureNullsCapacity(vector_size_t numRows) {
+  auto numBytes = (numRows + 7) / 8;
+  if (!nullsInReadRange_ || nullsInReadRange_->capacity() < numBytes) {
+    nullsInReadRange_ = AlignedBuffer::allocate<char>(numBytes, &memoryPool_);
+  }
+  nullsInReadRange_->setSize(numBytes);
 }
 
 void SelectiveColumnReader::prepareResultNulls(

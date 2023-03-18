@@ -161,7 +161,7 @@ void SelectiveListColumnReader::read(
   readNulls(rows, 0, incomingNulls);
 
   RowSet activeRows = filterNulls<int32_t>(rows, false);
-  makeNestedRowSet(activeRows);
+  makeNestedRowSet(activeRows, rows.back());
 
   if (child_ && !nestedRows_.empty()) {
     child_->read(child_->readOffset(), nestedRows_, nullptr);
@@ -244,7 +244,7 @@ void SelectiveMapColumnReader::read(
 
   readNulls(rows, 0, incomingNulls);
   auto activeRows = filterNulls<int32_t>(rows, false);
-  makeNestedRowSet(activeRows);
+  makeNestedRowSet(activeRows, rows.back());
 
   if (keyReader_ && elementReader_ && !nestedRows_.empty()) {
     keyReader_->read(keyReader_->readOffset(), nestedRows_, nullptr);

@@ -124,7 +124,10 @@ void SelectiveIntegerColumnReader::processFilter(
           filter, rows, extractValues);
       break;
     case velox::common::FilterKind::kIsNull:
-      VELOX_FAIL("Filter kIsNull should have been processed", valueSize_);
+      readHelper<Reader, velox::common::IsNull, isDense>(
+          filter, rows, extractValues);
+      break;
+//      VELOX_FAIL("Filter kIsNull should have been processed", valueSize_);
     case velox::common::FilterKind::kIsNotNull:
       readHelper<Reader, velox::common::IsNotNull, isDense>(
           filter, rows, extractValues);

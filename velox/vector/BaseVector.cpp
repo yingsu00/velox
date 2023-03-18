@@ -470,15 +470,28 @@ std::string BaseVector::toString(bool recursive) const {
   return out.str();
 }
 
+//std::string BaseVector::toString(vector_size_t index) const {
+//  VELOX_CHECK_LT(index, length_, "Vector index should be less than length.");
+//  std::stringstream out;
+//  if (!nulls_) {
+//    out << "no nulls";
+//  } else if (isNullAt(index)) {
+//    out << "null";
+//  } else {
+//    out << "not null";
+//  }
+//  return out.str();
+//}
+
 std::string BaseVector::toString(vector_size_t index) const {
   VELOX_CHECK_LT(index, length_, "Vector index should be less than length.");
   std::stringstream out;
   if (!nulls_) {
     out << "no nulls";
   } else if (isNullAt(index)) {
-    out << "null";
+    out << 0;
   } else {
-    out << "not null";
+    out << 1;
   }
   return out.str();
 }

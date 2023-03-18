@@ -266,12 +266,21 @@ class SelectiveColumnReader {
     outputRows_.resize(size);
   }
 
+  void offsetOutputRows(
+      int32_t firstRow,
+      int32_t bias) {
+    offsetRows(outputRows_, firstRow, bias);
+  }
+
   // Adds 'bias' to outputt rows between 'firstRow' and end. Used
   // whenn combining data from multiple encoding runs, where the
   // output rows are first in terms of position in the encoding entry.
-  void offsetOutputRows(int32_t firstRow, int32_t bias) {
-    for (auto i = firstRow; i < outputRows_.size(); ++i) {
-      outputRows_[i] += bias;
+  static void offsetRows(
+      raw_vector<vector_size_t>& rows,
+      int32_t firstRow,
+      int32_t bias) {
+    for (auto i = firstRow; i < rows.size(); ++i) {
+      rows[i] += bias;
     }
   }
 
@@ -437,10 +446,12 @@ class SelectiveColumnReader {
   // True if we have an is null filter and optionally return column
   // values or we have an is not null filter and do not return column
   // values. This means that only null flags need be accessed.
-   bool readsNullsOnly() const;
+  bool readsNullsOnly() const;
 
   template <typename T>
   void ensureValuesCapacity(vector_size_t numRows);
+
+  void ensureNullsCapacity(vector_size_t numRows);
 
   // Prepares the result buffer for nulls for reading 'rows'. Leaves
   // 'extraSpace' bits worth of space in the nulls buffer.
@@ -455,7 +466,6 @@ class SelectiveColumnReader {
   RowSet filterNulls(RowSet rows, bool extractValues);
 
  protected:
-
   template <typename T>
   void prepareRead(
       vector_size_t offset,

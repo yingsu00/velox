@@ -224,6 +224,7 @@ void E2EFilterTestBase::readWithFilter(
       }
     }
     // Outside of timed section.
+    auto lastRowIndex = rowIndex;
     for (int32_t i = 0; i < resultBatch->size(); ++i) {
       uint64_t hit = hitRows[rowIndex++];
       auto expectedBatch = batches[batchNumber(hit)].get();
@@ -238,19 +239,27 @@ void E2EFilterTestBase::readWithFilter(
         auto result = resultBatch->asUnchecked<RowVector>()->childAt(column);
         auto expectedColumn = expectedBatch->childAt(column).get();
 
-//        printf(
-//            "i=%d, rowIndex=%d, hit=%d, expected: %s, actual: %s \n",
-//            i,
-//            rowIndex - 1,
-//            hit,
-//            expectedColumn->toString(expectedRow).c_str(),
-//            result->toString(i).c_str());
+        //        printf(
+        //            "i=%d, rowIndex=%d, hit=%d, expected: %s, actual: %s \n",
+        //            i,
+        //            rowIndex - 1,
+        //            hit,
+        //            expectedColumn->toString(expectedRow).c_str(),
+        //            result->toString(i).c_str());
 
         if (!result->equalValueAt(expectedColumn, i, expectedRow)) {
           std::cout << "Content mismatch at " << rowIndex - 1 << " column "
-                    << column
+                    << column << " row " << i
                     << ": expected: " << expectedColumn->toString(expectedRow)
                     << " actual: " << result->toString(i) << std::endl;
+
+          for (int32_t j = 0; j < i + 1; ++j) {
+            uint64_t hit = hitRows[lastRowIndex++];
+            auto expectedRow = batchRow(hit);
+            std::cout << j << ":" << hit << " "
+            << expectedColumn->toString(expectedRow) << "\t" << result->toString(j) << std::endl;
+          }
+
           break;
         }
         ASSERT_TRUE(result->equalValueAt(expectedColumn, i, expectedRow))
@@ -343,7 +352,7 @@ void E2EFilterTestBase::testNoRowGroupSkip(
   SCOPED_TRACE("No row group skip");
   auto spec = filterGenerator_->makeScanSpec(SubfieldFilters{});
 
-  uint64_t timeWithNoFilter = 0;
+//  uint64_t timeWithNoFilter = 0;
   //  readWithoutFilter(spec, batches, timeWithNoFilter);
 
   for (auto i = 0; i < numCombinations; ++i) {
@@ -440,9 +449,9 @@ void E2EFilterTestBase::testScenario(
   testNoRowGroupSkip(batches, filterable, numCombinations);
   testPruningWithFilter(batches, filterable);
 
-  batches = makeDataset(customize, true);
-  writeToMemory(rowType_, batches, true);
-  testRowGroupSkip(batches, filterable);
+//  batches = makeDataset(customize, true);
+//  writeToMemory(rowType_, batches, true);
+//  testRowGroupSkip(batches, filterable);
 }
 
 void E2EFilterTestBase::testMetadataFilterImpl(

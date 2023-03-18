@@ -132,12 +132,13 @@ class PageReader {
 
   // If the current page has nulls, returns a nulls bitmap owned by 'this'. This
   // is filled for 'numRows' bits.
-  const uint64_t* FOLLY_NULLABLE readNulls(int32_t numRows, BufferPtr& buffer);
+  const uint64_t* FOLLY_NULLABLE
+  readNulls(int32_t numValues, BufferPtr& buffer);
 
   // Skips the define decoder, if any, for 'numValues' top level
   // rows. Returns the number of non-nulls skipped. The range is the
   // current page.
-  int32_t skipNulls(int32_t numRows);
+  int32_t skipNulls(int32_t numValues);
 
   // Initializes a filter result cache for the dictionary in 'state'.
   void makeFilterCache(dwio::common::ScanState& state);
@@ -153,7 +154,7 @@ class PageReader {
   // is interpreted in terms of leaf rows, including leaf
   // nulls. Seeking ahead of pages covered by decodeRepDefs is not
   // allowed for non-top level columns.
-  void seekToPage(int64_t row);
+  void seekForwardToPage(int64_t row);
 
   // Preloads the repdefs for the column chunk. To avoid preloading,
   // would need a way too clone the input stream so that one stream
@@ -208,14 +209,16 @@ class PageReader {
   // last row touched on a previous call to skip() or
   // readWithVisitor(). This is the first row of the first data page
   // if first call.
-  void startVisit(folly::Range<const vector_size_t*> rows);
+  //  void startVisit(folly::Range<const vector_size_t*> rows);
 
   // Seeks to the next page in a range given by startVisit().  Returns
-  // the subset of 'rows' that are on the current page. The numbers in
+  // the subset of 'rowsRange' that are on the current page. The numbers in
   // rowsForPage are relative to the first unprocessed value on the page, for a
-  // new page 0 means the first value. If there are no rows in this page, return
-  // an empty range.
-  folly::Range<const vector_size_t*> rowsForPage();
+  // new page 0 means the first value. If there are no rowsRange in this page,
+  // return an empty range.
+  folly::Range<const vector_size_t*> rowsForPage(
+      const vector_size_t* rows,
+      vector_size_t numRows);
 
   // Calls the visitor, specialized on the data type since not all visitors
   // apply to all types.
@@ -311,6 +314,20 @@ class PageReader {
     }
   }
 
+  template <typename T>
+  void printArray(T* array, int num) {
+    for (int i = 0; i < num; i++) {
+      if (i % 16 == 0) {
+        printf("\n");
+      }
+      if (i % 4 == 0) {
+        printf(" ");
+      }
+      printf(" %lld", array[i]);
+    }
+    printf("\n");
+  }
+
   memory::MemoryPool& pool_;
 
   std::unique_ptr<dwio::common::SeekableInputStream> inputStream_;
@@ -378,7 +395,7 @@ class PageReader {
   thrift::Encoding::type encoding_;
 
   // Row number of first value in current page from start of ColumnChunk.
-  int64_t rowOfPage_{0};
+  int64_t rowOfPage_{0}; // rowOfFirstRowInPage
 
   // Number of rows in current page.
   int32_t numRowsInPage_{0};
@@ -413,23 +430,23 @@ class PageReader {
   // Below members Keep state between calls to readWithVisitor().
 
   // Original rows in Visitor.
-  const vector_size_t* FOLLY_NULLABLE visitorRows_{nullptr};
-  int32_t numVisitorRows_{0};
+  //  const vector_size_t* FOLLY_NULLABLE visitorRows_{nullptr};
+  //  int32_t numVisitorRows_{0};
 
   // 'rowOfPage_' at the start of readWithVisitor().
-  int64_t initialRowOfPage_{0};
+  //  int64_t initialRowOfPage_{0};
 
   // Index in 'visitorRows_' for the first row that is beyond the
   // current page. Equals 'numVisitorRows_' if all are on current page.
-  int32_t currentVisitorRow_{0};
+  int32_t currentVisitorRow_{0}; // currentRowIndex
 
   // Row relative to ColumnChunk for first unvisited row. 0 if nothing
   // visited.  The rows passed to readWithVisitor from rowsForPage()
   // are relative to this.
-  int64_t firstUnvisited_{0};
+  int64_t readOffset_{0}; // readOffset
 
   // Offset of 'visitorRows_[0]' relative too start of ColumnChunk.
-  int64_t visitBase_{0};
+  //  int64_t visitBase_{0};
 
   //  Temporary for rewriting rows to access in readWithVisitor when moving
   //  between pages. Initialized from the visitor.
@@ -437,7 +454,7 @@ class PageReader {
 
   // If 'rowsCopy_' is used, this is the difference between the rows in
   // 'rowsCopy_' and the row numbers in 'rows' given to readWithVisitor().
-  int32_t rowNumberBias_{0};
+  //  int32_t rowNumberBias_{0};
 
   // LevelInfo for reading nulls for the leaf column 'this' represents.
   ::parquet::internal::LevelInfo leafInfo_;
@@ -460,24 +477,35 @@ void PageReader::readWithVisitor(Visitor& visitor) {
   constexpr bool filterOnly =
       std::is_same_v<typename Visitor::Extract, dwio::common::DropValues>;
 
-  auto rows = visitor.rows();
   auto numRows = visitor.numRows();
+  auto rows = folly::Range<const vector_size_t*>(visitor.rows(), numRows);
   dwio::common::SelectiveColumnReader& reader = visitor.reader();
   rowsCopy_ = &visitor.rowsCopy();
 
-  startVisit(folly::Range<const vector_size_t*>(rows, numRows));
+  //  startVisit(rows);
+  currentVisitorRow_ = 0;
 
   bool mayProduceNulls = !filterOnly && visitor.allowNulls();
+  // Decoder::fastPath() and SelectiveColumnReader::filterNulls() needs to
+  // write into the resultNulls buffer in the reader, so we need to prepare it.
+  // We allocate it in one lump sum for all pages in this batch.
   if (mayProduceNulls) {
     reader.prepareResultNulls(rows, true, 0);
   }
 
   bool isMultiPage = false;
-  while (currentVisitorRow_ < numVisitorRows_) {
-    folly::Range<const vector_size_t*> rowsInPage = rowsForPage();
+  int i = 0;
+  while (currentVisitorRow_ < numRows) {
+    printf("\n  page %d\n", i++);
+    folly::Range<const vector_size_t*> rowsInPage =
+        rowsForPage(rows.data(), numRows);
 
-    //    printf("rowsInPage size %d, firstRow=%d, lastRow=%d\n",
-    //           rowsInPage.size(), rowsInPage.front(), rowsInPage.back());
+    printf(
+        "   rowsInPage size %d, firstRow=%d, lastRow=%d, readOffset_=%d\n",
+        rowsInPage.size(),
+        rowsInPage.front(),
+        rowsInPage.back(),
+        readOffset_);
 
     if (rowsInPage.empty()) {
       continue;
@@ -507,18 +535,22 @@ void PageReader::readWithVisitor(Visitor& visitor) {
     const uint64_t* nulls =
         readNulls(rowsInPage.back() + 1, reader.nullsInReadRange());
 
-    // callDecoder has to be before appending nulls to nullConcatenation_
+    // callDecoder() would compact nulls in resultNulls, and has to be called
+    // before appending compacted nulls to nullConcatenation_. callDecoder()
+    // might also not touch the resultNulls and keep the nulls in
+    // nullsInReadRange_
     if (!reader.readsNullsOnly()) {
       callDecoder(nulls, nullsFromFastPath, visitor);
-      reader.setReadOffset(reader.readOffset() + rowsInPage.back() + 1);
     } else {
+      // read from nullsInReadRange_ and put filtered results to resultNulls_
       reader.filterNulls<int64_t>(
           rowsInPage,
           visitor.filter().kind() == velox::common::FilterKind::kIsNull,
           !visitor.isDropValues());
     }
 
-    if (currentVisitorRow_ < numVisitorRows_ || isMultiPage) {
+    auto numRowsRead = numRowsInReader<hasFilter>(reader);
+    if (currentVisitorRow_ + rowsInPage.size() < numRows || isMultiPage) {
       if (mayProduceNulls) {
         if (!isMultiPage) {
           BufferPtr multiPageNulls = nullptr;
@@ -526,13 +558,22 @@ void PageReader::readWithVisitor(Visitor& visitor) {
         }
 
         if (!nulls) {
-          nullConcatenation_.appendOnes(
-              numRowsInReader<hasFilter>(reader) - numValuesBeforePage);
+          nullConcatenation_.appendOnes(numRowsRead - numValuesBeforePage);
+        } else if (reader.returnReaderNulls()) {
+          // Nulls from decoding go directly to result.
+          nullConcatenation_.append(
+              reader.nullsInReadRange()->template as<uint64_t>(),
+              0,
+              numRowsRead - numValuesBeforePage);
         } else {
+          // If callDecoder was not using fastpath, the nulls would be appended
+          // to the nulls from last page in resultNulls_. Therefore we need to
+          // copy from the first null index of the current page.
+          auto firstNullIndex = nullsFromFastPath ? 0 : numValuesBeforePage;
           nullConcatenation_.append(
               reader.mutableNulls(0),
-              0,
-              numRowsInReader<hasFilter>(reader) - numValuesBeforePage);
+              firstNullIndex,
+              firstNullIndex + numRowsRead - numValuesBeforePage);
         }
       }
       isMultiPage = true;
@@ -543,17 +584,21 @@ void PageReader::readWithVisitor(Visitor& visitor) {
     // read. This can happen on the first processed page as well if
     // the first page of scan did not contain any of the rows to
     // visit.
-    if (hasFilter && rowNumberBias_) {
-      reader.offsetOutputRows(numValuesBeforePage, rowNumberBias_);
+    auto rowNumberBias = rowOfPage_ - readOffset_;
+    if (hasFilter && currentVisitorRow_ != 0 && rowNumberBias != 0) {
+      reader.offsetOutputRows(numValuesBeforePage, rowNumberBias);
     }
+
+    currentVisitorRow_ += rowsInPage.size();
   }
 
   if (isMultiPage) {
     reader.setResultNulls(
         mayProduceNulls ? nullConcatenation_.buffer() : nullptr);
-  } else {
-    reader.updateResultNullsStats();
   }
+//  if (reader.returnReaderNulls())
+  reader.updateResultNullsStats();
+  readOffset_ += numRows;
 }
 
 } // namespace facebook::velox::parquet
