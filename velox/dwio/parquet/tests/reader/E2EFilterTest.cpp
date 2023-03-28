@@ -48,7 +48,8 @@ class E2EFilterTest : public E2EFilterTestBase {
       }
       makeNotNull(0);
     };
-    testScenario(
+
+    testSenario(
         columns, newCustomize, wrapInStruct, filterable, numCombinations);
   }
 
@@ -126,6 +127,7 @@ TEST_F(E2EFilterTest, integerDirect) {
       {"short_val", "int_val", "long_val"},
       20);
 }
+
 TEST_F(E2EFilterTest, compression) {
   for (const auto compression :
        {common::CompressionKind_SNAPPY,

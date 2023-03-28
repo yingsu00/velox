@@ -114,7 +114,7 @@ void SelectiveStringDictionaryColumnReader::readWithVisitor(
     decodeWithVisitor<velox::dwrf::RleDecoderV2<false>>(
         dictIndex_.get(), visitor);
   }
-  readOffset_ += numRows;
+//  readOffset_ += numRows;
 }
 
 template <typename TFilter, bool isDense, typename ExtractValues>

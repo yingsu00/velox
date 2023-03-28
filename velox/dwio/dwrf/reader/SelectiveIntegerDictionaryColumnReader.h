@@ -78,6 +78,6 @@ void SelectiveIntegerDictionaryColumnReader::readWithVisitor(
     decodeWithVisitor<velox::dwrf::RleDecoderV2<false>>(
         dataReader_.get(), dictVisitor);
   }
-  readOffset_ += numRows;
+//  readOffset_ += numRows;
 }
 } // namespace facebook::velox::dwrf

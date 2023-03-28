@@ -118,6 +118,7 @@ class ParquetData : public dwio::common::FormatData {
             numValues);
         presetNullsConsumed_ += numValues;
       }
+      printf(" readNulls presetNullsConsumed_ = %d\n", presetNullsConsumed_);
       return;
     }
     if (nullsOnly) {
@@ -141,6 +142,7 @@ class ParquetData : public dwio::common::FormatData {
       VELOX_DCHECK_LE(numValues, presetNullsSize_ - presetNullsConsumed_);
       presetNullsConsumed_ += numValues;
     }
+    printf(" skipNulls presetNullsConsumed_ = %d\n", presetNullsConsumed_);
     return numValues;
   }
 

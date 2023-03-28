@@ -227,6 +227,8 @@ class E2EFilterTestBase : public testing::Test {
         continue; // The hook is not called on nulls.
       }
       if (reference->valueAt(referenceIndex) != result->valueAt(i)) {
+//        std::cout << " Expected " << reference->valueAt(referenceIndex) ;
+//        std::cout << "\n Actual " << result->valueAt(i).toString() << std::endl;
         return false;
       }
     }

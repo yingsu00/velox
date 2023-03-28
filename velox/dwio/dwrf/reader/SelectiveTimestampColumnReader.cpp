@@ -99,7 +99,7 @@ void SelectiveTimestampColumnReader::readHelper(RowSet rows) {
   } else {
     decodeWithVisitor<velox::dwrf::RleDecoderV2<false>>(nano_.get(), visitor);
   }
-  readOffset_ += numRows;
+//  readOffset_ += numRows;
 }
 
 void SelectiveTimestampColumnReader::read(
@@ -114,6 +114,7 @@ void SelectiveTimestampColumnReader::read(
   } else {
     readHelper<false>(rows);
   }
+  readOffset_ += rows.back() + 1;
 }
 
 namespace {

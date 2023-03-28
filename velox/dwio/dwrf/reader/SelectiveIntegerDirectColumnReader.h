@@ -121,7 +121,7 @@ void SelectiveIntegerDirectColumnReader::readWithVisitor(
           "SelectiveIntegerDirectColumnReader::readWithVisitor get int128_t");
     }
   }
-  readOffset_ += numRows;
+//  readOffset_ += numRows;
 }
 
 } // namespace facebook::velox::dwrf

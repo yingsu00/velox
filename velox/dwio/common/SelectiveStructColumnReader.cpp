@@ -131,7 +131,13 @@ void SelectiveStructColumnReaderBase::read(
   auto& childSpecs = scanSpec_->children();
   VELOX_CHECK(!childSpecs.empty());
   for (size_t i = 0; i < childSpecs.size(); ++i) {
+
     auto& childSpec = childSpecs[i];
+
+    //    printf("\nColumn %s %d out of %d %s\n", childSpec->fieldName().c_str(), i,
+    //           childSpecs.size(), scanSpec_->fieldName().c_str());
+    //    printf(" Input rows %d, first %d, last %d\n", activeRows.size(),activeRows.front(), activeRows.back());
+
     if (isChildConstant(*childSpec)) {
       continue;
     }
@@ -163,6 +169,13 @@ void SelectiveStructColumnReaderBase::read(
       reader->read(offset, activeRows, structNulls);
     }
   }
+
+//  if (activeRows.empty()) {
+//    printf(" Output 0 rows\n");
+//  } else {
+//    printf(" Output rows %d, first %d, last %d\n", activeRows.size(),activeRows.front(), activeRows.back());
+//  }
+
   // If this adds nulls, the field readers will miss a value for each null added
   // here.
   recordParentNullsInChildren(offset, rows);

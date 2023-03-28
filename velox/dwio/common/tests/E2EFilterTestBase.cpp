@@ -103,7 +103,6 @@ void E2EFilterTestBase::readWithoutFilter(
   setUpRowReaderOptions(rowReaderOpts, spec);
   OwnershipChecker ownershipChecker;
   auto rowReader = reader->createRowReader(rowReaderOpts);
-
   auto batchIndex = 0;
   auto rowIndex = 0;
   auto resultBatch = BaseVector::create(rowType_, 1, leafPool_.get());
@@ -118,6 +117,7 @@ void E2EFilterTestBase::readWithoutFilter(
     }
 
     ownershipChecker.check(resultBatch);
+
     for (int32_t i = 0; i < resultBatch->size(); ++i) {
       ASSERT_TRUE(
           resultBatch->equalValueAt(batches[batchIndex].get(), i, rowIndex))
@@ -326,6 +326,7 @@ void E2EFilterTestBase::testNoRowGroupSkip(
   readWithoutFilter(spec, batches, timeWithNoFilter);
 
   for (auto i = 0; i < numCombinations; ++i) {
+//    printf("\n=================Combination %d=================\n", i);
     std::vector<FilterSpec> specs =
         filterGenerator_->makeRandomSpecs(filterable, 125);
     testFilterSpecs(batches, specs);

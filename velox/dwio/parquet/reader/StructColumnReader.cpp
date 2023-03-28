@@ -88,8 +88,10 @@ void StructColumnReader::read(
     vector_size_t offset,
     RowSet rows,
     const uint64_t* /*incomingNulls*/) {
+//  printf(" StructColumnReader::read begin readOffset_ %d\n", readOffset_);
   ensureRepDefs(*this, offset + rows.back() + 1 - readOffset_);
   SelectiveStructColumnReader::read(offset, rows, nullptr);
+//  printf(" StructColumnReader::read end readOffset_ %d\n", readOffset_);
 }
 
 void StructColumnReader::enqueueRowGroup(
