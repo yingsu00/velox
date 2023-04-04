@@ -86,10 +86,6 @@ class MapColumnReader : public dwio::common::SelectiveMapColumnReader {
     lengths_.readLengths(lengths, numLengths);
   }
 
-  /// Sets nulls and lengths of 'this' for the range of top level rows for which
-  /// these have been decoded in 'leaf'.
-  void setLengthsFromRepDefs(PageReader& leaf);
-
   /// advances 'this' to the end of the previously provided lengths/nulls. This
   /// is needed if lists are conditionally read from different structs that all
   /// end at different positions. Repeated children must use all lengths
@@ -128,44 +124,25 @@ class ListColumnReader : public dwio::common::SelectiveListColumnReader {
 
   void read(
       vector_size_t offset,
-      RowSet rows,
+      RowSet topRows,
       const uint64_t* FOLLY_NULLABLE /*incomingNulls*/) override;
-
-  void setLengths(BufferPtr lengths) {
-    lengths_.setLengths(lengths);
-  }
-  void readLengths(
-      int32_t* FOLLY_NONNULL lengths,
-      int32_t numLengths,
-      const uint64_t* FOLLY_NULLABLE /*nulls*/) override {
-    lengths_.readLengths(lengths, numLengths);
-  }
-
-  /// Sets nulls and lengths of 'this' for the range of top level rows for which
-  /// these have been decoded in 'leaf'.
-  void setLengthsFromRepDefs(PageReader& leaf);
-
-  /// advances 'this' to the end of the previously provided lengths/nulls. This
-  /// is needed if lists are conditionally read from different structs that all
-  /// end at different positions. Repeated children must use all lengths
-  /// supplied before receiving new lengths.
-  void skipUnreadLengths();
 
   void filterRowGroups(
       uint64_t rowGroupSize,
       const dwio::common::StatsContext&,
       dwio::common::FormatData::FilterRowGroupsResult&) const override;
 
+  void readLengths(
+      int32_t* FOLLY_NONNULL lengths,
+      int32_t numLengths,
+      const uint64_t* FOLLY_NULLABLE nulls) {
+    auto* rawOffsets = offsets_->asMutable<vector_size_t>();
+    auto* rawSizes = sizes_->asMutable<vector_size_t>();
+  }
+
  private:
-  RepeatedLengths lengths_;
+//  RepeatedLengths lengths_;
   ::parquet::internal::LevelInfo levelInfo_;
 };
-
-/// Sets nulls and lengths for 'reader' and its children for the
-/// next 'numTop' top level rows. 'reader' must be a complex type
-/// reader. 'reader' may be inside structs but may not be inside a
-/// repeated reader. The topmost repeated reader ensures repdefs for
-/// all its children.
-void ensureRepDefs(dwio::common::SelectiveColumnReader& reader, int32_t numTop);
 
 } // namespace facebook::velox::parquet

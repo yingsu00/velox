@@ -19,6 +19,7 @@
 //
 
 #include "velox/dwio/parquet/reader/ParquetColumnReader.h"
+
 #include "velox/dwio/common/SelectiveColumnReaderInternal.h"
 #include "velox/dwio/parquet/reader/BooleanColumnReader.h"
 #include "velox/dwio/parquet/reader/FloatingPointColumnReader.h"

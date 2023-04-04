@@ -141,10 +141,8 @@ TEST_F(NestedStructureDecoderTest, oneLevel) {
 // [null, [8, 9]]
 // This test would construct offsets/lengths/nulls for the second level ARRAY
 TEST_F(NestedStructureDecoderTest, secondLevelInTwo) {
-  uint8_t defs[] = {5, 5, 5, 5, 4, 5, 5, 4, 2, 5, 5, 5, 4,
-                    2, 2, 0, 2, 4, 2, 5, 5, 2, 5, 2, 5, 5};
-  uint8_t reps[] = {0, 1, 2, 0, 2, 1, 0, 2, 1, 1, 2, 0, 2,
-                    1, 1, 0, 0, 1, 1, 1, 0, 1, 1, 0, 1, 2};
+  uint8_t defs[] = {5, 5, 5, 5, 4, 5, 5, 4, 2, 5, 5, 5, 4, 2, 2, 0, 2, 4, 2, 5, 5, 2, 5, 2, 5, 5};
+  uint8_t reps[] = {0, 1, 2, 0, 2, 1, 0, 2, 1, 1, 2, 0, 2, 1, 1, 0, 0, 1, 1, 1, 0, 1, 1, 0, 1, 2};
   std::vector<vector_size_t> expectedOffsets({0,  1,  3,  5,  6,  8,  8,
                                               10, 12, 12, 12, 12, 13, 13,
                                               14, 15, 15, 16, 16, 18});
@@ -188,10 +186,8 @@ TEST_F(NestedStructureDecoderTest, secondLevelInTwo) {
 // [null]
 // This test would construct offsets/lengths/nulls for the top level
 TEST_F(NestedStructureDecoderTest, firstLevelInTwo) {
-  uint8_t defs[] = {5, 4, 5, 5, 4, 2, 5, 5, 5, 4, 2, 2,
-                    0, 2, 4, 2, 5, 5, 2, 5, 2, 5, 5, 2};
-  uint8_t reps[] = {0, 2, 1, 0, 2, 1, 1, 2, 0, 2, 1, 1,
-                    0, 0, 1, 1, 1, 0, 1, 1, 0, 1, 2, 0};
+  uint8_t defs[] = {5, 4, 5, 5, 4, 2, 5, 5, 5, 4, 2, 2, 0, 2, 4, 2, 5, 5, 2, 5, 2, 5, 5, 2};
+  uint8_t reps[] = {0, 2, 1, 0, 2, 1, 1, 2, 0, 2, 1, 1, 0, 0, 1, 1, 1, 0, 1, 1, 0, 1, 2, 0};
   std::vector<vector_size_t> expectedOffsets({0, 2, 5, 8, 8, 12, 15, 17, 18});
   std::vector<vector_size_t> expectedLengths({2, 3, 3, 0, 4, 3, 2, 1});
   std::vector<bool> expectedNulls({

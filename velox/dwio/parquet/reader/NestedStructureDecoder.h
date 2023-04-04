@@ -17,9 +17,12 @@
 #pragma once
 
 #include <common/base/RawVector.h>
+#include <vector/TypeAliases.h>
 #include "velox/buffer/Buffer.h"
 
 namespace facebook::velox::parquet {
+
+using RowSet = folly::Range<vector_size_t*>;
 
 struct NestedData {
   BufferPtr offsets;
@@ -58,25 +61,12 @@ class NestedStructureDecoder {
   /// elements are the number of elements in the designated level of collection.
   /// @param nullsBuffer The output buffer for the nulls bitmap.
   /// @return The number of elements for the current nested level.
-  static int64_t readOffsetsAndNulls(
-      const uint8_t* repetitionLevels,
-      const uint8_t* definitionLevels,
-      uint64_t numValues,
-      uint8_t maxRepeat,
-      uint8_t maxDefinition,
-      BufferPtr& offsetsBuffer,
-      BufferPtr& lengthsBuffer,
-      BufferPtr& nullsBuffer,
-      uint64_t& numNonEmptyCollections,
-      uint64_t& numNonNullCollections,
-      memory::MemoryPool& pool);
-
   static void readOffsetsAndNulls(
-      const uint8_t* repetitionLevels,
-      const uint8_t* definitionLevels,
-      uint64_t numValues,
-      uint32_t maxRepeat,
-      uint32_t maxDefinition,
+      const raw_vector<int16_t>& repetitionLevels,
+      const raw_vector<int16_t>& definitionLevels,
+      uint64_t numRepDefs,
+      uint16_t maxRepeat,
+      uint16_t maxDefinition,
       int64_t& lastOffset,
       bool& wasLastCollectionNull,
       uint32_t* offsets,
@@ -85,16 +75,63 @@ class NestedStructureDecoder {
       uint64_t& numNonNullCollections,
       memory::MemoryPool& pool);
 
-  static int64_t readNulls(
-      raw_vector<int16_t> repetitionLevels,
-      raw_vector<int16_t> definitionLevels,
+  static void readOffsetsAndNulls(
+      const raw_vector<int16_t>& repetitionLevels,
+      const raw_vector<int16_t>& definitionLevels,
       uint64_t numRepDefs,
-      uint8_t maxRepeat,
-      uint8_t maxDefinition,
+      uint16_t maxRepeat,
+      uint16_t maxDefinition,
+      BufferPtr& offsetsBuffer,
+      BufferPtr& lengthsBuffer,
       BufferPtr& nullsBuffer,
       uint64_t& numNonEmptyCollections,
       uint64_t& numNonNullCollections,
       memory::MemoryPool& pool);
+
+  static void readNulls(
+      const raw_vector<int16_t>& repetitionLevels,
+      const raw_vector<int16_t>& definitionLevels,
+      uint64_t numRepDefs,
+      uint16_t maxRepeat,
+      uint16_t maxDefinition,
+      BufferPtr& nullsBuffer,
+      uint64_t& numNonEmptyCollections,
+      uint64_t& numNonNullCollections,
+      memory::MemoryPool& pool);
+
+
+  static void filterNulls3(
+      folly::Range<vector_size_t*> topRows,
+      bool filterIsNotNull,
+      raw_vector<int16_t> repetitionLevels,
+      raw_vector<int16_t> definitionLevels,
+      uint64_t numRepDefs,
+      int16_t maxRepeat,
+      int16_t maxDefinition,
+      uint64_t& numNonEmptyCollections,
+      uint64_t& numNonNullCollections);
+
+  static RowSet filterNulls(
+      RowSet& topRows,
+      bool filterIsNotNull,
+      const raw_vector<int32_t>* FOLLY_NULLABLE topRowRepDefPositions,
+      const raw_vector<int16_t>* FOLLY_NULLABLE repetitionLevels,
+      const raw_vector<int16_t>* FOLLY_NULLABLE definitionLevels,
+      uint16_t maxRepeat,
+      uint16_t maxDefinition,
+      uint64_t& numNonEmptyCollections,
+      uint64_t& numNonNullCollections);
+
+  static void filterNulls2(
+      folly::Range<vector_size_t*> topRows,
+      bool filterIsNotNull,
+      const raw_vector<int32_t>& topRowRepDefPositions,
+      const raw_vector<int16_t>& repetitionLevels,
+      const raw_vector<int16_t>& definitionLevels,
+      uint16_t maxRepeat,
+      uint16_t maxDefinition,
+      uint64_t& numNonEmptyCollections,
+      uint64_t& numNonNullCollections);
 
  private:
   NestedStructureDecoder() {}

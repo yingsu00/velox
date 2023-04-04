@@ -50,7 +50,9 @@ class ParquetData : public dwio::common::FormatData {
         rowGroups_(rowGroups),
         maxDefine_(type_->maxDefine_),
         maxRepeat_(type_->maxRepeat_),
-        rowsInRowGroup_(-1) {}
+        rowsInRowGroup_(-1) {
+    type_->makeLevelInfo(levelInfo_);
+  }
 
   /// Prepares to read data for 'index'th row group.
   void enqueueRowGroup(uint32_t index, dwio::common::BufferedInput& input);
@@ -66,74 +68,53 @@ class ParquetData : public dwio::common::FormatData {
       const dwio::common::StatsContext& writerContext,
       FilterRowGroupsResult&) override;
 
-  PageReader* FOLLY_NONNULL reader() const {
-    return reader_.get();
-  }
-
   bool hasNulls() const override {
     return maxDefine_ > 0;
-  }
-
-  /// Sets nulls to be returned by readNulls(). Nulls for non-leaf readers come
-  /// from leaf repdefs which are gathered before descending the reader tree.
-  void setNulls(BufferPtr& nulls, int32_t numValues) {
-    if (nulls || numValues) {
-      VELOX_CHECK_EQ(presetNullsConsumed_, presetNullsSize_);
-    }
-    presetNulls_ = nulls;
-    presetNullsSize_ = numValues;
-    presetNullsConsumed_ = 0;
-  }
-
-  int32_t presetNullsLeft() const {
-    return presetNullsSize_ - presetNullsConsumed_;
   }
 
   void readNulls(
       vector_size_t numValues,
       const uint64_t* FOLLY_NULLABLE incomingNulls,
       BufferPtr& nulls,
-      bool nullsOnly = false) override {
-    // If the query accesses only nulls, read the nulls from the pages in range.
-    // If nulls are preread, return those minus any skipped.
-    if (presetNulls_) {
-      VELOX_CHECK_LE(numValues, presetNullsSize_ - presetNullsConsumed_);
-      if (!presetNullsConsumed_ && numValues == presetNullsSize_) {
-        nulls = std::move(presetNulls_);
-        presetNullsConsumed_ = numValues;
-      } else {
-        dwio::common::ensureCapacity<bool>(nulls, numValues, &pool_);
-        auto bits = nulls->asMutable<uint64_t>();
-        bits::copyBits(
-            presetNulls_->as<uint64_t>(),
-            presetNullsConsumed_,
-            bits,
-            0,
-            numValues);
-        presetNullsConsumed_ += numValues;
-      }
-      printf(" readNulls presetNullsConsumed_ = %d\n", presetNullsConsumed_);
-      return;
-    }
+      bool nullsOnly = false) override {}
 
-    // There are no column-level nulls in Parquet, only page-level ones, so this
-    // is always non-null.
-    nulls = nullptr;
-  }
-
-  uint64_t skipNulls(uint64_t numValues, bool /*nullsOnly*/) override {
-    if (presetNulls_) {
-      VELOX_DCHECK_LE(numValues, presetNullsSize_ - presetNullsConsumed_);
-      presetNullsConsumed_ += numValues;
-    }
-    printf(" skipNulls presetNullsConsumed_ = %d\n", presetNullsConsumed_);
-    return numValues;
-  }
+  uint64_t skipNulls(uint64_t numValues, bool nullsOnly) override {}
 
   uint64_t skip(uint64_t numRows) override {
     reader_->skip(numRows);
     return numRows;
   }
+
+  PageReader* FOLLY_NONNULL reader() const {
+    return reader_.get();
+  }
+
+  void setRepDefs(
+      const raw_vector<int16_t>& definitionLevels,
+      const raw_vector<int16_t>& repetitionLevels) {
+    definitionLevels_ = &definitionLevels;
+    repetitionLevels_ = &repetitionLevels;
+  }
+
+  int32_t readLengthsOffsetsAndNulls(
+      BufferPtr& lengths,
+      BufferPtr& offsets,
+      BufferPtr& nulls);
+
+  /// Returns lengths and/or nulls   from 'begin' to 'end' for the level of
+  /// 'info' using 'mode'. 'maxItems' is the maximum number of nulls and lengths
+  /// to produce. 'lengths' is only filled for mode kList. 'nulls' is filled
+  /// from bit position 'nullsStartIndex'. Returns the number of lengths/nulls
+  /// filled.
+  static int32_t getLengthsAndNulls(
+      LevelMode mode,
+      const ::parquet::internal::LevelInfo& info,
+      const int16_t* repLevelBegin,
+      const int16_t* defLevelBegin,
+      int32_t numRepDefs,
+      int32_t* FOLLY_NULLABLE lengths,
+      uint64_t* FOLLY_NULLABLE nulls,
+      int32_t nullsStartIndex);
 
   /// Applies 'visitor' to the data in the column of 'this'. See
   /// PageReader::readWithVisitor().
@@ -173,17 +154,14 @@ class ParquetData : public dwio::common::FormatData {
 
   const uint32_t maxDefine_;
   const uint32_t maxRepeat_;
+  // Definition levels for the current batch.
+  const raw_vector<int16_t>* definitionLevels_;
+  // Repetition levels for the current batch.
+  const raw_vector<int16_t>* repetitionLevels_;
+  ::parquet::internal::LevelInfo levelInfo_;
+
   int64_t rowsInRowGroup_;
   std::unique_ptr<PageReader> reader_;
-
-  // Nulls derived from leaf repdefs for non-leaf readers.
-  BufferPtr presetNulls_;
-
-  // Number of valid bits in 'presetNulls_'.
-  int32_t presetNullsSize_{0};
-
-  // Count of leading skipped positions in 'presetNulls_'
-  int32_t presetNullsConsumed_{0};
 };
 
 } // namespace facebook::velox::parquet

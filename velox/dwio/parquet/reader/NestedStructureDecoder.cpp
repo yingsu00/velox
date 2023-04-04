@@ -21,11 +21,11 @@
 
 namespace facebook::velox::parquet {
 void NestedStructureDecoder::readOffsetsAndNulls(
-    const uint8_t* repetitionLevels,
-    const uint8_t* definitionLevels,
+    const raw_vector<int16_t>& repetitionLevels,
+    const raw_vector<int16_t>& definitionLevels,
     uint64_t numRepDefs,
-    uint32_t maxRepeat,
-    uint32_t maxDefinition,
+    uint16_t maxRepeat,
+    uint16_t maxDefinition,
     int64_t& lastOffset,
     bool& wasLastCollectionNull,
     uint32_t* offsets,
@@ -39,8 +39,8 @@ void NestedStructureDecoder::readOffsetsAndNulls(
 
   int64_t offset = lastOffset;
   for (int64_t i = 0; i < numRepDefs; ++i) {
-    uint8_t definitionLevel = definitionLevels[i];
-    uint8_t repetitionLevel = repetitionLevels[i];
+    int16_t definitionLevel = definitionLevels[i];
+    int16_t repetitionLevel = repetitionLevels[i];
 
     // empty means it belongs to a row that is null in one of its ancestor
     // levels.
@@ -68,12 +68,12 @@ void NestedStructureDecoder::readOffsetsAndNulls(
   lastOffset = offset;
 }
 
-int64_t NestedStructureDecoder::readOffsetsAndNulls(
-    const uint8_t* repetitionLevels,
-    const uint8_t* definitionLevels,
+void NestedStructureDecoder::readOffsetsAndNulls(
+    const raw_vector<int16_t>& repetitionLevels,
+    const raw_vector<int16_t>& definitionLevels,
     uint64_t numRepDefs,
-    uint8_t maxRepeat,
-    uint8_t maxDefinition,
+    uint16_t maxRepeat,
+    uint16_t maxDefinition,
     BufferPtr& offsetsBuffer,
     BufferPtr& lengthsBuffer,
     BufferPtr& nullsBuffer,
@@ -115,23 +115,22 @@ int64_t NestedStructureDecoder::readOffsetsAndNulls(
     lengths[i] = offsets[i + 1] - offsets[i];
   }
 
-  return numNonEmptyCollections;
+  //  return numNonEmptyCollections;
 }
 
-
-int64_t NestedStructureDecoder::readNulls(
-    raw_vector<int16_t> repetitionLevels,
-    raw_vector<int16_t> definitionLevels,
+void NestedStructureDecoder::readNulls(
+    const raw_vector<int16_t>& repetitionLevels,
+    const raw_vector<int16_t>& definitionLevels,
     uint64_t numRepDefs,
-    uint8_t maxRepeat,
-    uint8_t maxDefinition,
+    uint16_t maxRepeat,
+    uint16_t maxDefinition,
     BufferPtr& nullsBuffer,
     uint64_t& numNonEmptyCollections,
     uint64_t& numNonNullCollections,
     memory::MemoryPool& pool) {
   // Use the child level's max repetition value, which is +1 to the current
   // level's value
-  const uint8_t childMaxRepeat = maxRepeat + 1;
+  const uint16_t childMaxRepeat = maxRepeat + 1;
 
   dwio::common::ensureCapacity<uint8_t>(
       nullsBuffer, bits::nbytes(numRepDefs), &pool);
@@ -140,8 +139,8 @@ int64_t NestedStructureDecoder::readNulls(
   numNonEmptyCollections = 0;
   numNonNullCollections = 0;
   for (int64_t i = 0; i < numRepDefs; ++i) {
-    uint8_t definitionLevel = definitionLevels[i];
-    uint8_t repetitionLevel = childMaxRepeat == 1 ? 0 : repetitionLevels[i];
+    int16_t definitionLevel = definitionLevels[i];
+    int16_t repetitionLevel = childMaxRepeat == 1 ? 0 : repetitionLevels[i];
 
     // empty means it belongs to a row that is null in one of its ancestor
     // levels. Pay attention the difference between !isNull and isNotNull.
@@ -156,7 +155,154 @@ int64_t NestedStructureDecoder::readNulls(
     numNonEmptyCollections += isCollectionBegin;
   }
 
-  return numNonEmptyCollections;
+  //  return numNonEmptyCollections;
+}
+
+RowSet NestedStructureDecoder::filterNulls(
+    RowSet& topRows,
+    bool filterIsNotNull,
+    const raw_vector<int32_t>* topRowRepDefPositions,
+    const raw_vector<int16_t>* repetitionLevels,
+    const raw_vector<int16_t>* definitionLevels,
+    uint16_t maxRepeat,
+    uint16_t maxDefinition,
+    uint64_t& numNonEmptyCollections,
+    uint64_t& numNonNullCollections) {
+  const uint16_t childMaxRepeat = maxRepeat + 1;
+  bool isTopLevel = maxRepeat == 0;
+
+  VELOX_CHECK_NE(isTopLevel, repetitionLevels != nullptr);
+
+  numNonEmptyCollections = 0;
+  numNonNullCollections = 0;
+
+  int32_t numTopRows = topRows.size();
+  int32_t numTopRowsPassed = 0;
+
+  if (numTopRows == topRows.back() + 1) {
+    bool topRowPass = true;
+    int32_t topRow = 0;
+
+    for (int64_t i = 0; i < numTopRows; ++i) {
+      int16_t repetitionLevel = isTopLevel ? (*repetitionLevels)[i] : 0;
+      int16_t definitionLevel = definitionLevels? (*definitionLevels)[i] : 0;
+
+      bool isToRow = repetitionLevel == 0;
+      topRowPass |= isToRow;
+
+      // We don't need to check if it's collection begin
+      bool isNotNull = definitionLevel >= maxDefinition;
+      topRowPass &= (filterIsNotNull & isNotNull);
+
+      topRows[numTopRowsPassed] = topRow;
+      numTopRowsPassed += topRowPass;
+      topRow += isToRow;
+    }
+  } else {
+    VELOX_CHECK(topRowRepDefPositions);
+
+    // TODO: Can be further optimized when topRows density > 5%
+    for (int i = 0; i < numTopRows; i++) {
+      bool topRowPass = true;
+
+      vector_size_t topRow = topRows[i];
+      int32_t repDefIndex = (*topRowRepDefPositions)[topRow];
+      while (repDefIndex < (*topRowRepDefPositions)[topRow + 1] && topRowPass) {
+        int16_t repetitionLevel = isTopLevel ? (*repetitionLevels)[i] : 0;
+        int16_t definitionLevel = definitionLevels? (*definitionLevels)[i] : 0;
+        repDefIndex++;
+
+        bool isEmpty = definitionLevel < (maxDefinition - 1);
+        bool isCollectionBegin = (repetitionLevel < childMaxRepeat) & !isEmpty;
+        if (!isCollectionBegin) {
+          continue;
+        }
+
+        bool isNotNull = definitionLevel >= maxDefinition;
+        topRowPass &= (filterIsNotNull & isNotNull);
+      }
+
+      topRows[numTopRowsPassed] = topRow;
+      numTopRowsPassed += topRowPass;
+    }
+  }
+
+  return topRows;
+}
+
+void NestedStructureDecoder::filterNulls2(
+    folly::Range<vector_size_t*> topRows,
+    bool filterIsNotNull,
+    const raw_vector<int32_t>& topRowRepDefPositions,
+    const raw_vector<int16_t>& repetitionLevels,
+    const raw_vector<int16_t>& definitionLevels,
+    uint16_t maxRepeat,
+    uint16_t maxDefinition,
+    uint64_t& numNonEmptyCollections,
+    uint64_t& numNonNullCollections) {
+  numNonEmptyCollections = 0;
+  numNonNullCollections = 0;
+
+  int32_t numTopRows = topRows.size();
+  int32_t numTopRowsPassed = 0;
+
+  for (int i = 0; i < numTopRows; i++) {
+    vector_size_t topRow = topRows[i];
+    bool topRowPass = true;
+    int32_t repDefIndex = topRowRepDefPositions[topRow];
+    while (repDefIndex < topRowRepDefPositions[topRow + 1] && topRowPass) {
+      // We don't need to check if it's collection begin
+      bool isNotNull = definitionLevels[repDefIndex++] >= maxDefinition;
+      topRowPass &= (filterIsNotNull & isNotNull);
+    }
+
+    topRows[numTopRowsPassed] = topRow;
+    numTopRowsPassed += topRowPass;
+  }
+}
+
+void NestedStructureDecoder::filterNulls3(
+    folly::Range<vector_size_t*> topRows,
+    bool filterIsNotNull,
+    raw_vector<int16_t> repetitionLevels,
+    raw_vector<int16_t> definitionLevels,
+    uint64_t numRepDefs,
+    int16_t maxRepeat,
+    int16_t maxDefinition,
+    uint64_t& numNonEmptyCollections,
+    uint64_t& numNonNullCollections) {
+  const uint8_t childMaxRepeat = maxRepeat + 1;
+
+  numNonEmptyCollections = 0;
+  numNonNullCollections = 0;
+  int32_t topRowInputIndex = 0;
+  int32_t topRowOutputIndex = 0;
+  int32_t currentTopRow = 0;
+  bool topRowPass = true;
+  for (int64_t i = 0; i < numRepDefs; ++i) {
+    int16_t repetitionLevel = childMaxRepeat == 1 ? 0 : repetitionLevels[i];
+    bool isTopRow = repetitionLevel == 0;
+    if (currentTopRow != topRows[topRowInputIndex]) {
+      continue;
+    }
+
+    int16_t definitionLevel = definitionLevels[i];
+    // empty means it belongs to a row that is null in one of its ancestor
+    // levels. Pay attention the difference between !isNull and isNotNull.
+    bool isEmpty = definitionLevel < (maxDefinition - 1);
+    bool isNull = definitionLevel == (maxDefinition - 1);
+    bool isNotNull = definitionLevel >= maxDefinition;
+    bool isCollectionBegin = (repetitionLevel < childMaxRepeat) & !isEmpty;
+
+    topRowPass &= !isEmpty && (filterIsNotNull & isNotNull);
+    topRows[topRowOutputIndex] = currentTopRow;
+
+    //      numNonNullCollections += isNotNull & isCollectionBegin;
+    //      numNonEmptyCollections += isCollectionBegin;
+    topRowInputIndex += isTopRow;
+    topRowOutputIndex += isTopRow & topRowPass;
+    currentTopRow += isTopRow;
+  }
 }
 
 } // namespace facebook::velox::parquet
