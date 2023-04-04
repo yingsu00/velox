@@ -274,13 +274,13 @@ void SelectiveStringDictionaryColumnReader::read(
 void SelectiveStringDictionaryColumnReader::getValues(
     RowSet rows,
     VectorPtr* result) {
-  if (readsNullsOnly()) {
-    rawStringBuffer_ = nullptr;
-    rawStringSize_ = 0;
-    rawStringUsed_ = 0;
-    getFlatValues<StringView, StringView>(rows, result, type_);
-    return;
-  }
+//  if (readsNullsOnly()) {
+//    rawStringBuffer_ = nullptr;
+//    rawStringSize_ = 0;
+//    rawStringUsed_ = 0;
+//    getFlatValues<StringView, StringView>(rows, result, type_);
+//    return;
+//  }
 
   if (!dictionaryValues_) {
     makeDictionaryBaseVector();

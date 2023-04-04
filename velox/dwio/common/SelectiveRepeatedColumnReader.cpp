@@ -155,7 +155,7 @@ void SelectiveListColumnReader::read(
   child_->seekTo(childTargetReadOffset_, false);
   prepareRead<char>(offset, rows, incomingNulls);
 
-//  auto activeRows = applyFilter(rows);
+//  auto activeRows = applyNullFilters(rows);
 //  makeNestedRowSet(activeRows, rows.back());
 
   readNulls(rows, 0, incomingNulls);
@@ -239,7 +239,7 @@ void SelectiveMapColumnReader::read(
 
   prepareRead<char>(offset, rows, incomingNulls);
 
-//  auto activeRows = applyFilter(rows);
+//  auto activeRows = applyNullFilters(rows);
 //  makeNestedRowSet(activeRows, rows.back());
 
   readNulls(rows, 0, incomingNulls);

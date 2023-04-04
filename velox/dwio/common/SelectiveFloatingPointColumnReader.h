@@ -41,7 +41,8 @@ class SelectiveFloatingPointColumnReader : public SelectiveColumnReader {
   }
 
   template <typename Reader>
-  void readCommon(RowSet rows);
+  void
+  readCommon(vector_size_t offset, RowSet rows, const uint64_t* incomingNulls);
 
   void getValues(RowSet rows, VectorPtr* result) override {
     getFlatValues<TRequested, TRequested>(rows, result, requestedType_);
@@ -152,7 +153,10 @@ void SelectiveFloatingPointColumnReader<TData, TRequested>::processValueHook(
 template <typename TData, typename TRequested>
 template <typename Reader>
 void SelectiveFloatingPointColumnReader<TData, TRequested>::readCommon(
-    RowSet rows) {
+    vector_size_t offset,
+    RowSet rows,
+    const uint64_t* incomingNulls) {
+//  prepareRead<TRequested>(offset, rows, incomingNulls);
   bool isDense = rows.back() == rows.size() - 1;
   if (scanSpec_->keepValues()) {
     if (scanSpec_->valueHook()) {

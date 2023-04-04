@@ -37,7 +37,7 @@ namespace common {
 // SelectiveColumnReader. This is owned by the TableScan Operator and
 // is passed to SelectiveColumnReaders at construction.  This is
 // mutable by readers to reflect filter order and other adaptation.
-class ScanSpec {
+class   ScanSpec {
  public:
   static constexpr column_index_t kNoChannel = ~0;
   static constexpr const char* kMapKeysFieldName = "keys";
@@ -191,6 +191,10 @@ class ScanSpec {
   // but the tree being constructed must see a single, unchanging
   // order.
   const std::vector<ScanSpec*>& stableChildren();
+
+  const std::shared_ptr<ScanSpec>& parent() const {
+    return parent_;
+  }
 
   // Returns a read sequence number. This can b used for tagging
   // lazy vectors with a generation number so that we can check that
@@ -408,6 +412,8 @@ class ScanSpec {
   // asynchronously constructing reader trees for read-ahead, while
   // 'children_' is reorderable by a running scan.
   std::vector<ScanSpec*> stableChildren_;
+
+  std::shared_ptr<ScanSpec> parent_;
 
   mutable std::optional<bool> hasFilter_;
   ValueHook* valueHook_ = nullptr;
