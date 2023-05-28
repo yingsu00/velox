@@ -14,8 +14,14 @@
 
 add_library(
   velox_hive_connector OBJECT
-  HiveConfig.cpp HiveConnector.cpp HiveDataSink.cpp HivePartitionUtil.cpp
-  FileHandle.cpp PartitionIdGenerator.cpp)
+  HiveConfig.cpp
+  HiveConnector.cpp
+  HiveDataSink.cpp
+  HivePartitionUtil.cpp
+  FileHandle.cpp
+  PartitionIdGenerator.cpp
+  HiveDataSource.cpp
+  TableHandle.cpp)
 
 target_link_libraries(
   velox_hive_connector velox_connector velox_dwio_dwrf_reader
