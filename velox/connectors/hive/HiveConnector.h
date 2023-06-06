@@ -18,6 +18,7 @@
 #include "velox/connectors/hive/HiveDataSink.h"
 #include "velox/connectors/hive/HiveDataSource.h"
 #include "velox/dwio/common/DataSink.h"
+#include "velox/connectors/hive/iceberg/IcebergDataSource.h"
 
 namespace facebook::velox::connector::hive {
 
@@ -38,17 +39,33 @@ class HiveConnector : public Connector {
       const std::unordered_map<
           std::string,
           std::shared_ptr<connector::ColumnHandle>>& columnHandles,
-      ConnectorQueryCtx* connectorQueryCtx) override {
-    return std::make_shared<HiveDataSource>(
-        outputType,
-        tableHandle,
-        columnHandles,
-        &fileHandleFactory_,
-        connectorQueryCtx->memoryPool(),
-        connectorQueryCtx->expressionEvaluator(),
-        connectorQueryCtx->allocator(),
-        connectorQueryCtx->scanId(),
-        executor_);
+      ConnectorQueryCtx* connectorQueryCtx,
+      std::shared_ptr<velox::connector::ConnectorSplit> connectorSplit) override {
+    if (connectorSplit->connectorId == "hive") {
+      return std::make_shared<HiveDataSource>(
+          outputType,
+          tableHandle,
+          columnHandles,
+          &fileHandleFactory_,
+          connectorQueryCtx->memoryPool(),
+          connectorQueryCtx->expressionEvaluator(),
+          connectorQueryCtx->allocator(),
+          connectorQueryCtx->scanId(),
+          executor_,
+          connectorSplit);
+    } else if (connectorSplit->connectorId == "hive_iceberg") {
+      return std::make_shared<iceberg::HiveIcebergDataSource>(
+          outputType,
+          tableHandle,
+          columnHandles,
+          &fileHandleFactory_,
+          connectorQueryCtx->memoryPool(),
+          connectorQueryCtx->expressionEvaluator(),
+          connectorQueryCtx->allocator(),
+          connectorQueryCtx->scanId(),
+          executor_,
+          connectorSplit);
+    }
   }
 
   bool supportsSplitPreload() override {

@@ -21,7 +21,7 @@ add_library(
   FileHandle.cpp
   PartitionIdGenerator.cpp
   HiveDataSource.cpp
-  TableHandle.cpp)
+  TableHandle.cpp iceberg/DeleteFile.cpp iceberg/DeleteFile.h iceberg/IcebergSplit.cpp iceberg/IcebergSplit.h iceberg/IcebergDataSource.cpp iceberg/IcebergDataSource.h)
 
 target_link_libraries(
   velox_hive_connector velox_connector velox_dwio_dwrf_reader

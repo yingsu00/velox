@@ -251,7 +251,8 @@ HiveDataSource::HiveDataSource(
     core::ExpressionEvaluator* expressionEvaluator,
     memory::MemoryAllocator* allocator,
     const std::string& scanId,
-    folly::Executor* executor)
+    folly::Executor* executor,
+    std::shared_ptr<velox::connector::ConnectorSplit> /*connectorSplit*/)
     : fileHandleFactory_(fileHandleFactory),
       readerOpts_(pool),
       pool_(pool),

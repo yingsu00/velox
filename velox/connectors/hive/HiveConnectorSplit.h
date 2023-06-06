@@ -72,4 +72,5 @@ struct HiveConnectorSplit : public connector::ConnectorSplit {
   }
 };
 
+
 } // namespace facebook::velox::connector::hive

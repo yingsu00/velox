@@ -42,7 +42,8 @@ class HiveDataSource : public DataSource {
       core::ExpressionEvaluator* expressionEvaluator,
       memory::MemoryAllocator* allocator,
       const std::string& scanId,
-      folly::Executor* executor);
+      folly::Executor* executor,
+      std::shared_ptr<velox::connector::ConnectorSplit> /*connectorSplit*/);
 
   void addSplit(std::shared_ptr<ConnectorSplit> split) override;
 
@@ -80,6 +81,13 @@ class HiveDataSource : public DataSource {
       memory::MemoryPool* pool);
 
  protected:
+  void buildReadColumns(
+      const RowTypePtr& outputType,
+      const std::shared_ptr<HiveTableHandle>& hiveTableHandle,
+      const std::unordered_map<
+          std::string,
+          std::shared_ptr<connector::ColumnHandle>>& columnHandles);
+
   virtual uint64_t readNext(uint64_t size) {
     return rowReader_->next(size, output_);
   }
@@ -94,12 +102,18 @@ class HiveDataSource : public DataSource {
   }
 
   std::shared_ptr<HiveConnectorSplit> split_;
+  std::shared_ptr<common::ScanSpec> scanSpec_;
   FileHandleFactory* fileHandleFactory_;
   dwio::common::ReaderOptions readerOpts_;
   memory::MemoryPool* pool_;
   VectorPtr output_;
   RowTypePtr readerOutputType_;
+  std::unique_ptr<dwio::common::Reader> reader_;
   std::unique_ptr<dwio::common::RowReader> rowReader_;
+  core::ExpressionEvaluator* expressionEvaluator_;
+  memory::MemoryAllocator* const allocator_;
+  const std::string& scanId_;
+  folly::Executor* executor_;
 
  private:
   // Evaluates remainingFilter_ on the specified vector. Returns number of rows
@@ -134,17 +148,17 @@ class HiveDataSource : public DataSource {
   std::unordered_map<std::string, std::shared_ptr<HiveColumnHandle>>
       partitionKeys_;
   std::shared_ptr<dwio::common::IoStatistics> ioStats_;
-  std::shared_ptr<common::ScanSpec> scanSpec_;
+
   std::shared_ptr<common::MetadataFilter> metadataFilter_;
   dwio::common::RowReaderOptions rowReaderOpts_;
-  std::unique_ptr<dwio::common::Reader> reader_;
+
   std::unique_ptr<exec::ExprSet> remainingFilterExprSet_;
   bool emptySplit_;
 
   dwio::common::RuntimeStatistics runtimeStats_;
 
   FileHandleCachedPtr fileHandle_;
-  core::ExpressionEvaluator* expressionEvaluator_;
+
   uint64_t completedRows_ = 0;
 
   // Reusable memory for remaining filter evaluation.
@@ -152,8 +166,6 @@ class HiveDataSource : public DataSource {
   SelectivityVector filterRows_;
   exec::FilterEvalCtx filterEvalCtx_;
 
-  memory::MemoryAllocator* const allocator_;
-  const std::string& scanId_;
-  folly::Executor* executor_;
+
 };
 } // namespace facebook::velox::connector::hive
