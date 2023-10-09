@@ -60,8 +60,8 @@ class SplitReader {
       std::unordered_map<std::string, std::shared_ptr<HiveColumnHandle>>*
           partitionKeys,
       FileHandleFactory* fileHandleFactory,
+      ConnectorQueryCtx* connectorQueryCtx,
       folly::Executor* executor,
-      const ConnectorQueryCtx* connectorQueryCtx,
       std::shared_ptr<io::IoStatistics> ioStats);
 
   SplitReader(
@@ -72,8 +72,8 @@ class SplitReader {
       std::unordered_map<std::string, std::shared_ptr<HiveColumnHandle>>*
           partitionKeys,
       FileHandleFactory* fileHandleFactory,
+      ConnectorQueryCtx* connectorQueryCtx,
       folly::Executor* executor,
-      const ConnectorQueryCtx* connectorQueryCtx,
       std::shared_ptr<io::IoStatistics> ioStats);
 
   virtual ~SplitReader() = default;
@@ -132,8 +132,8 @@ class SplitReader {
   std::unique_ptr<dwio::common::Reader> baseReader_;
   std::unique_ptr<dwio::common::RowReader> baseRowReader_;
   FileHandleFactory* const fileHandleFactory_;
+  ConnectorQueryCtx* const connectorQueryCtx_;
   folly::Executor* const executor_;
-  const ConnectorQueryCtx* const connectorQueryCtx_;
   std::shared_ptr<io::IoStatistics> ioStats_;
 
  private:
