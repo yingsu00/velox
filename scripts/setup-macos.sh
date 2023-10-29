@@ -24,6 +24,8 @@
 # You can also run individual functions below by specifying them as arguments:
 # $ scripts/setup-macos.sh install_googletest install_fmt
 #
+INSTALL_PREREQUISITES="Y"
+PROMPT_ALWAYS_RESPOND="y"
 
 set -e # Exit on error.
 set -x # Print commands that are executed.
