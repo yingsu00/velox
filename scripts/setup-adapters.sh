@@ -131,7 +131,16 @@ function install_hdfs_deps {
     sed -i "/FIND_PACKAGE(GoogleTest REQUIRED)/d" ./CMakeLists.txt
     sed -i "s/dumpversion/dumpfullversion/" ./CMake/Platform.cmake
     # Dependencies for Hadoop testing
-    wget_and_untar https://archive.apache.org/dist/hadoop/common/hadoop-2.10.1/hadoop-2.10.1.tar.gz hadoop
+    export HADOOP_VERSION=2.10.1
+        if [[ "${artifactory_user}" != "" ]] && [[ "${artifactory_token}" != "" ]]; then
+          mkdir -p hadoop
+          pushd hadoop
+          curl -u ${artifactory_user}:${artifactory_token} https://na.artifactory.swg-devops.com/artifactory/hyc-cpd-skywalker-team-lakehouse-on-prem-docker-local/hadoop/hadoop-${HADOOP_VERSION}/hadoop-${HADOOP_VERSION}.tar.gz -o hadoop-${HADOOP_VERSION}.tar.gz
+          tar -xz --strip-components=1 -f hadoop-${HADOOP_VERSION}.tar.gz
+          popd
+        else
+          wget_and_untar https://archive.apache.org/dist/hadoop/common/hadoop-2.10.1/hadoop-2.10.1.tar.gz hadoop
+        fi
     cp -a hadoop /usr/local/
   fi
   cmake_install

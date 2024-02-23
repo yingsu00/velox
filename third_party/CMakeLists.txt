@@ -56,12 +56,29 @@ if(VELOX_ENABLE_ARROW)
                                       ${THRIFT_INCLUDE_DIR})
   set_property(TARGET thrift PROPERTY IMPORTED_LOCATION ${THRIFT_LIB})
 
+  set(ARTIFACTORY_USER "")
+  set(ARTIFACTORY_TOKEN "")
+
+  if(DEFINED ENV{artifactory_user})
+    set(ARTIFACTORY_USER $ENV{artifactory_user})
+  endif()
+  if(DEFINED ENV{artifactory_token})
+    set(ARTIFACTORY_TOKEN $ENV{artifactory_token})
+  endif()
+
   set(VELOX_ARROW_BUILD_VERSION 15.0.0)
   set(VELOX_ARROW_BUILD_SHA256_CHECKSUM
       01dd3f70e85d9b5b933ec92c0db8a4ef504a5105f78d2d8622e84279fb45c25d)
-  set(VELOX_ARROW_SOURCE_URL
-      "https://archive.apache.org/dist/arrow/arrow-${VELOX_ARROW_BUILD_VERSION}/apache-arrow-${VELOX_ARROW_BUILD_VERSION}.tar.gz"
-  )
+  if((NOT "${ARTIFACTORY_USER}" STREQUAL "") AND (NOT "${ARTIFACTORY_TOKEN}" STREQUAL ""))
+    set(VELOX_ARROW_SOURCE_URL
+            "https://na.artifactory.swg-devops.com/artifactory/hyc-cpd-skywalker-team-lakehouse-on-prem-docker-local/arrow/arrow-${VELOX_ARROW_BUILD_VERSION}/apache-arrow-${VELOX_ARROW_BUILD_VERSION}.tar.gz"
+    )
+  else()
+    set(VELOX_ARROW_SOURCE_URL
+            "https://archive.apache.org/dist/arrow/arrow-${VELOX_ARROW_BUILD_VERSION}/apache-arrow-${VELOX_ARROW_BUILD_VERSION}.tar.gz"
+    )
+  endif()
+
 
   resolve_dependency_url(ARROW)
 
