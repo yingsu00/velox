@@ -163,6 +163,10 @@ HiveDataSource::HiveDataSource(
   ioStats_ = std::make_shared<io::IoStatistics>();
 }
 
+HiveDataSource::~HiveDataSource() {
+  std::cout << "Ying ~HiveDataSource Split Count : " << splitCount_ << std::endl;
+}
+
 std::unique_ptr<SplitReader> HiveDataSource::createSplitReader() {
   return SplitReader::create(
       split_,
@@ -185,6 +189,9 @@ void HiveDataSource::addSplit(std::shared_ptr<ConnectorSplit> split) {
   VELOX_CHECK(split_, "Wrong type of split");
 
   VLOG(1) << "Adding split " << split_->toString();
+
+  splitCount_++;
+  std::cout << "Ying Split " << splitCount_ << " " << split_->toString() << std::endl;
 
   if (splitReader_) {
     splitReader_.reset();

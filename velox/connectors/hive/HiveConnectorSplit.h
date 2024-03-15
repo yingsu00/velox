@@ -70,15 +70,23 @@ struct HiveConnectorSplit : public connector::ConnectorSplit {
         infoColumns(_infoColumns) {}
 
   std::string toString() const override {
+    std::string result("");
     if (tableBucketNumber.has_value()) {
-      return fmt::format(
+      result += fmt::format(
           "Hive: {} {} - {} {}",
           filePath,
           start,
           length,
           tableBucketNumber.value());
+    } else {
+      result += fmt::format("Hive: {} {} - {}", filePath, start, length);
     }
-    return fmt::format("Hive: {} {} - {}", filePath, start, length);
+
+    for (auto entry : partitionKeys) {
+      result += fmt::format(" Partition keys {}:{}", entry.first, entry.second);
+    }
+
+    return result;
   }
 
   std::string getFileName() const {
