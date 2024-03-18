@@ -582,6 +582,7 @@ StopReason Driver::runInternal(
                   op,
                   curOperatorId_,
                   kOpMethodGetOutput);
+              VLOG(1) << "op->getOutput() finished. intermediateResult: " << intermediateResult;
               if (intermediateResult) {
                 VELOX_CHECK(
                     intermediateResult->size() > 0,
@@ -608,6 +609,7 @@ StopReason Driver::runInternal(
                   });
               {
                 auto lockedStats = nextOp->stats().wlock();
+                VLOG(1) << " addInputVector inputPositions=" << intermediateResult->size();
                 lockedStats->addInputVector(
                     resultBytes, intermediateResult->size());
               }
@@ -627,6 +629,7 @@ StopReason Driver::runInternal(
               continue;
             } else {
               stop = task()->shouldStop();
+              VLOG(1) << " intermediateResult is null. stop=" << stop;
               if (stop != StopReason::kNone) {
                 guard.notThrown();
                 return stop;
@@ -654,6 +657,7 @@ StopReason Driver::runInternal(
                   op,
                   curOperatorId_,
                   kOpMethodIsFinished);
+              VLOG(1) << " op->isFinished()=" << finished;
               if (finished) {
                 auto timer = createDeltaCpuWallTimer(
                     [op, this](const CpuWallTiming& timing) {

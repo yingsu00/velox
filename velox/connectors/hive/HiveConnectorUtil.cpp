@@ -578,29 +578,66 @@ bool testFilters(
   auto totalRows = reader->numberOfRows();
   const auto& fileTypeWithId = reader->typeWithId();
   const auto& rowType = reader->rowType();
+  VLOG(1) << "testFilters begin rowType=" << rowType->toString()
+          << " rowType->size()=" << rowType->size()
+          << " scanSpec->fieldName()=" << scanSpec->fieldName()
+          << " scanSpec->children().size()=" << scanSpec->children().size();
+  std::string partitionKeyStr("");
+  for (auto& entry : partitionKey) {
+    partitionKeyStr += fmt::format("{}:{} ", entry.first, entry.second);
+  }
+  VLOG(1) << " partitionKeys: " << partitionKeyStr;
+  if (totalRows.has_value()) {
+    VLOG(1) << " totalRows=" << totalRows.value();
+  }
+
   for (const auto& child : scanSpec->children()) {
+    VLOG(1) << " child spec " << child->fieldName() << " has filter? "
+            << child->filter();
+
     if (child->filter()) {
       const auto& name = child->fieldName();
+      VLOG(1) << " filter=" << child->filter()->toString()
+              << " child->filter()->deterministic="
+              << child->filter()->deterministic
+              << " child->filter()->testNull()=" << child->filter()->testNull();
+      VLOG(1) << " rowType->containsChild(name) "
+              << rowType->containsChild(name);
       if (!rowType->containsChild(name)) {
         // If missing column is partition key.
         auto iter = partitionKey.find(name);
+        VLOG(1) << " rowType contains column " << name << " Is it partition key? " << (iter != partitionKey.end());
         if (iter != partitionKey.end() && iter->second.has_value()) {
-          return applyPartitionFilter(
+          VLOG(1) << " found partition key and it has value "
+                  << iter->second.value();
+          if(!applyPartitionFilter(
               (*partitionKeysHandle)[name]->dataType()->kind(),
               iter->second.value(),
-              child->filter());
-        }
-        // Column is missing. Most likely due to schema evolution.
-        if (child->filter()->isDeterministic() &&
-            !child->filter()->testNull()) {
+              child->filter())) {
+            VLOG(1) << " Skipping " << filePath
+                    << " based on stats and filter for partitioning column "
+                    << child->fieldName() << " with value " << iter->second.value();
+            return false;
+          } else {
+            VLOG(1) << " applyPartitionFilter passed";
+          }
+        } else if (child->filter()->isDeterministic() &&
+              !child->filter()->testNull()) {
+          // Column is missing. Most likely due to schema evolution.
+          VLOG(1) << " Skipping " << filePath << " for column "
+                  << name << " with NULL value ";
           return false;
+        } else {
+          VLOG(1) << " something else";
         }
       } else {
         const auto& typeWithId = fileTypeWithId->childByName(name);
         auto columnStats = reader->columnStatistics(typeWithId->id());
-        if (columnStats != nullptr &&
-            !testFilter(
-                child->filter(),
+        VLOG(1) << " rowType containsChild " << name << " columnStats "
+                << columnStats.get();
+        if (columnStats != nullptr) {
+          if (!testFilter(
+                  child->filter(),
                 columnStats.get(),
                 totalRows.value(),
                 typeWithId->type())) {
@@ -608,11 +645,15 @@ bool testFilters(
                   << " based on stats and filter for column "
                   << child->fieldName();
           return false;
+          } else {
+            VLOG(1) << " normal case, filter passed";
+          }
         }
       }
     }
   }
 
+  VLOG(1) << "testFilters end filter passed";
   return true;
 }
 

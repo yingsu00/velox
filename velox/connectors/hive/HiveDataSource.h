@@ -46,6 +46,8 @@ class HiveDataSource : public DataSource {
       const ConnectorQueryCtx* connectorQueryCtx,
       const std::shared_ptr<HiveConfig>& hiveConfig);
 
+  ~HiveDataSource();
+
   void addSplit(std::shared_ptr<ConnectorSplit> split) override;
 
   std::optional<RowVectorPtr> next(uint64_t size, velox::ContinueFuture& future)
@@ -130,6 +132,8 @@ class HiveDataSource : public DataSource {
   std::atomic<uint64_t> totalRemainingFilterTime_{0};
   core::ExpressionEvaluator* expressionEvaluator_;
   uint64_t completedRows_ = 0;
+//  uint64_t totalOutputRows_ = 0;
+//  uint64_t totalSplits_ = 0;
 
   // Reusable memory for remaining filter evaluation.
   VectorPtr filterResult_;

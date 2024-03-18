@@ -526,6 +526,9 @@ struct ColumnReaderStatistics {
 };
 
 struct RuntimeStatistics {
+  // Total number of splits received.
+  int64_t totalSplits{0};
+
   // Number of splits skipped based on statistics.
   int64_t skippedSplits{0};
 
@@ -535,10 +538,14 @@ struct RuntimeStatistics {
   // Number of strides (row groups) skipped based on statistics.
   int64_t skippedStrides{0};
 
+  int64_t totalScannedRows{0};
+  int64_t totalOutputRows{0};
+
   ColumnReaderStatistics columnReaderStatistics;
 
   std::unordered_map<std::string, RuntimeCounter> toMap() {
     return {
+        {"totalSplits_", RuntimeCounter(totalSplits)},
         {"skippedSplits", RuntimeCounter(skippedSplits)},
         {"skippedSplitBytes",
          RuntimeCounter(skippedSplitBytes, RuntimeCounter::Unit::kBytes)},

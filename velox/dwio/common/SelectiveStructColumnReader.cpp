@@ -58,6 +58,10 @@ void SelectiveStructColumnReaderBase::next(
     VectorPtr& result,
     const Mutation* mutation) {
   process::TraceContext trace("SelectiveStructColumnReaderBase::next");
+  VLOG(1) << "SelectiveStructColumnReaderBase::next begin children_.size()"
+          << children_.size()
+          << " scanSpec_->children()=" << scanSpec_->children().size();
+
   if (children_.empty()) {
     if (mutation) {
       if (mutation->deletedRows) {
@@ -78,10 +82,13 @@ void SelectiveStructColumnReaderBase::next(
     auto& childSpecs = scanSpec_->children();
     for (auto& childSpec : childSpecs) {
       VELOX_CHECK(childSpec->isConstant());
+      VLOG(1) << " childSpec->fieldName=" << childSpec->fieldName()
+              << " childSpec->projectOut()=" << childSpec->projectOut();
       if (childSpec->projectOut()) {
         auto channel = childSpec->channel();
         resultRowVector->childAt(channel) = BaseVector::wrapInConstant(
             numValues, 0, childSpec->constantValue());
+        VLOG(1) << " returning constant vector of size " << numValues;
       }
     }
     return;

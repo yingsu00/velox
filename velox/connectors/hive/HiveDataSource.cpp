@@ -128,11 +128,11 @@ HiveDataSource::HiveDataSource(
       readerRowTypes.push_back(input->type());
     }
     remainingFilterSubfields = remainingFilterExpr->extractSubfields();
-    if (VLOG_IS_ON(1)) {
-      VLOG(1) << fmt::format(
-          "Extracted subfields from remaining filter: [{}]",
-          fmt::join(remainingFilterSubfields, ", "));
-    }
+    //    if (VLOG_IS_ON(1)) {
+    VLOG(1) << fmt::format(
+        "Extracted subfields from remaining filter: [{}]",
+        fmt::join(remainingFilterSubfields, ", "));
+    //    }
     for (auto& subfield : remainingFilterSubfields) {
       auto& name = getColumnName(subfield);
       auto it = subfields.find(name);
@@ -161,6 +161,15 @@ HiveDataSource::HiveDataSource(
   }
 
   ioStats_ = std::make_shared<io::IoStatistics>();
+}
+
+HiveDataSource::~HiveDataSource() {
+  VLOG(2) << " totalSplits : " << runtimeStats_.totalSplits
+          << " skippedSplits : " << runtimeStats_.skippedSplits
+          << " skippedSplitBytes : " << runtimeStats_.skippedSplitBytes
+          << " skippedStrides : " << runtimeStats_.skippedStrides
+          << " totalScannedRows : " << runtimeStats_.totalScannedRows
+          << " totalOutputRows : " << runtimeStats_.totalOutputRows;
 }
 
 std::unique_ptr<SplitReader> HiveDataSource::createSplitReader() {
@@ -195,6 +204,11 @@ void HiveDataSource::addSplit(std::shared_ptr<ConnectorSplit> split) {
   // so we initialize it beforehand.
   splitReader_->configureReaderOptions(randomSkip_);
   splitReader_->prepareSplit(metadataFilter_, runtimeStats_);
+
+  VLOG(1) << "HiveDataSource::addSplit end. splitReader_=" << splitReader_.get();
+  if (splitReader_) {
+    VLOG(1) << " emptySplit=" << splitReader_->emptySplit();
+  }
 }
 
 std::optional<RowVectorPtr> HiveDataSource::next(
@@ -202,7 +216,9 @@ std::optional<RowVectorPtr> HiveDataSource::next(
     velox::ContinueFuture& /*future*/) {
   VELOX_CHECK(split_ != nullptr, "No split to process. Call addSplit first.");
 
+  VLOG(1) << "HiveDataSource::next begin splitReader_=" << splitReader_.get();
   if (splitReader_ && splitReader_->emptySplit()) {
+    VLOG(1) << " emptySplit is true, returning";
     resetSplit();
     return nullptr;
   }
@@ -212,7 +228,11 @@ std::optional<RowVectorPtr> HiveDataSource::next(
   }
 
   auto rowsScanned = splitReader_->next(size, output_);
-  completedRows_ += rowsScanned;
+  runtimeStats_.totalScannedRows += rowsScanned;
+
+  VLOG(1) << " splitReader_->next finished. rowsScanned=" << rowsScanned
+          << " runtimeStats_.totalScannedRows="
+          << runtimeStats_.totalScannedRows;
 
   if (rowsScanned) {
     VELOX_CHECK(
@@ -261,6 +281,7 @@ std::optional<RowVectorPtr> HiveDataSource::next(
           exec::wrapChild(rowsRemaining, remainingIndices, child));
     }
 
+    runtimeStats_.totalOutputRows += rowsRemaining;
     return std::make_shared<RowVector>(
         pool_, outputType_, BufferPtr(nullptr), rowsRemaining, outputColumns);
   }

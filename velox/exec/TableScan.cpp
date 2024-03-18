@@ -227,17 +227,26 @@ RowVectorPtr TableScan::getOutput() {
               (getCurrentTimeMicro() - ioTimeStartMicros) * 1'000,
               RuntimeCounter::Unit::kNanos));
 
+      VLOG(1) << " TableScan::getOutput has value " << dataOptional.has_value();
       if (!dataOptional.has_value()) {
         blockingReason_ = BlockingReason::kWaitForConnector;
         return nullptr;
       }
 
       curStatus_ = "getOutput: updating stats_.rawInput";
-      lockedStats->rawInputPositions = dataSource_->getCompletedRows();
-      lockedStats->rawInputBytes = dataSource_->getCompletedBytes();
+      lockedStats->rawInputPositions += dataSource_->getCompletedRows();
+      lockedStats->rawInputBytes += dataSource_->getCompletedBytes();
+
+      VLOG(1) << " TableScan::getOutput updating stats rawInputPositions "
+              << lockedStats->rawInputPositions;
+
       auto data = dataOptional.value();
       if (data) {
+        VLOG(1) << " TableScan::getOutput data->size()=" << data->size();
         if (data->size() > 0) {
+          VLOG(1) << " TableScan::getOutput updating stats inputPositions "
+                  << data->size();
+
           lockedStats->addInputVector(data->estimateFlatSize(), data->size());
           constexpr int kMaxSelectiveBatchSizeMultiplier = 4;
           maxFilteringRatio_ = std::max(

@@ -144,10 +144,15 @@ void SplitReader::prepareSplit(
   VELOX_CHECK_NE(
       baseReaderOpts_.getFileFormat(), dwio::common::FileFormat::UNKNOWN);
 
+  VLOG(1) << " SplitReader::prepareSplit begin. emptySplit_=" << emptySplit_
+          << " baseRowReader_ " << baseRowReader_.get();
+
   std::shared_ptr<FileHandle> fileHandle;
   try {
     fileHandle = fileHandleFactory_->generate(hiveSplit_->filePath).second;
+    VLOG(1) << " created fileHandle " << fileHandle;
   } catch (const VeloxRuntimeError& e) {
+    VLOG(1) << " failed to create fileHandle. ErrorCode= " << e.errorCode();
     if (e.errorCode() == error_code::kFileNotFound &&
         hiveConfig_->ignoreMissingFiles(
             connectorQueryCtx_->sessionProperties())) {
@@ -174,6 +179,8 @@ void SplitReader::prepareSplit(
   emptySplit_ = false;
   if (baseReader_->numberOfRows() == 0) {
     emptySplit_ = true;
+    VLOG(1)
+        << " baseReader_->numberOfRows() == 0. emptySplit_ = true. Returning";
     return;
   }
 
@@ -188,6 +195,9 @@ void SplitReader::prepareSplit(
     emptySplit_ = true;
     ++runtimeStats.skippedSplits;
     runtimeStats.skippedSplitBytes += hiveSplit_->length;
+    VLOG(1) << " testFilters failed. runtimeStats.skippedSplits="
+            << runtimeStats.skippedSplits << " baseRowReader_ "
+            << baseRowReader_.get();
     return;
   }
 
@@ -205,6 +215,9 @@ void SplitReader::prepareSplit(
   // before setting up for the next one to avoid doubling the peak memory usage.
   baseRowReader_.reset();
   baseRowReader_ = baseReader_->createRowReader(baseRowReaderOpts_);
+
+  VLOG(1) << " SplitReader::prepareSplit end. emptySplit_=" << emptySplit_
+          << " baseRowReader_ " << baseRowReader_.get();
 }
 
 std::vector<TypePtr> SplitReader::adaptColumns(
@@ -281,6 +294,9 @@ std::vector<TypePtr> SplitReader::adaptColumns(
 }
 
 uint64_t SplitReader::next(int64_t size, VectorPtr& output) {
+  VLOG(1) << " SplitReader::next begin. emptySplit_=" << emptySplit_
+          << " baseRowReader_ " << baseRowReader_.get();
+
   if (!baseReaderOpts_.randomSkip()) {
     return baseRowReader_->next(size, output);
   }
