@@ -65,7 +65,9 @@ class SplitReader {
       const std::shared_ptr<io::IoStatistics>& ioStats,
       FileHandleFactory* fileHandleFactory,
       folly::Executor* executor,
-      const std::shared_ptr<common::ScanSpec>& scanSpec);
+      const std::shared_ptr<common::ScanSpec>& scanSpec,
+      std::shared_ptr<exec::ExprSet>& remainingFilterExprSet,
+      core::ExpressionEvaluator* expressionEvaluator);
 
   SplitReader(
       const std::shared_ptr<const hive::HiveConnectorSplit>& hiveSplit,
@@ -100,6 +102,8 @@ class SplitReader {
   bool emptySplit() const;
 
   void resetSplit();
+
+  std::shared_ptr<const dwio::common::TypeWithId> baseFileSchema();
 
   int64_t estimatedRowSize() const;
 

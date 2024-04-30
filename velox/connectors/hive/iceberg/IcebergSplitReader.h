@@ -37,9 +37,11 @@ class IcebergSplitReader : public SplitReader {
       const std::shared_ptr<io::IoStatistics>& ioStats,
       FileHandleFactory* fileHandleFactory,
       folly::Executor* executor,
-      const std::shared_ptr<common::ScanSpec>& scanSpec);
+      const std::shared_ptr<common::ScanSpec>& scanSpec,
+      std::shared_ptr<exec::ExprSet>& remainingFilterExprSet,
+      core::ExpressionEvaluator* expressionEvaluator);
 
-  ~IcebergSplitReader() override = default;
+  ~IcebergSplitReader() override;
 
   void prepareSplit(
       std::shared_ptr<common::MetadataFilter> metadataFilter,
@@ -48,6 +50,18 @@ class IcebergSplitReader : public SplitReader {
   uint64_t next(uint64_t size, VectorPtr& output) override;
 
  private:
+  // The ScanSpec may need to be updated for different partitions if the split
+  // comes with single column equality delete files. So we need to keep a copy
+  // of the original ScanSpec.
+  std::shared_ptr<common::ScanSpec> originalScanSpec_;
+
+  // Keep a copy of original remaining filters if this split is from a new
+  // partition and the new expressions from the equality delete file is not
+  // empty.
+  std::shared_ptr<exec::ExprSet> originalRemainingFilters_;
+
+  std::shared_ptr<exec::ExprSet>& remainingFilterExprSet_;
+
   // The read offset to the beginning of the split in number of rows for the
   // current batch for the base data file
   uint64_t baseReadOffset_;
@@ -58,5 +72,7 @@ class IcebergSplitReader : public SplitReader {
   std::list<std::unique_ptr<PositionalDeleteFileReader>>
       positionalDeleteFileReaders_;
   BufferPtr deleteBitmap_;
+
+  core::ExpressionEvaluator* expressionEvaluator_;
 };
 } // namespace facebook::velox::connector::hive::iceberg
