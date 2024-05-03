@@ -204,14 +204,14 @@ void EqualityDeleteFileReader::readMultipleColumnDeleteValues(
         isNotEqualInputs.push_back(
             std::make_shared<FieldAccessTypedExpr>(type, name));
         isNotEqualInputs.push_back(std::make_shared<ConstantTypedExpr>(value));
-        auto isNotEqualExpr =
-            std::make_shared<CallTypedExpr>(BOOLEAN(), isNotEqualInputs, "neq");
+        auto isNotEqualExpr = std::make_shared<CallTypedExpr>(
+            BOOLEAN(), isNotEqualInputs, "presto.default.neq");
 
         disconjunctInputs.push_back(isNotEqualExpr);
       }
 
-      auto disconjunctNotEqualExpr =
-          std::make_shared<CallTypedExpr>(BOOLEAN(), disconjunctInputs, "or");
+      auto disconjunctNotEqualExpr = std::make_shared<CallTypedExpr>(
+          BOOLEAN(), disconjunctInputs, "presto.default.or");
       expressionInputs.push_back(disconjunctNotEqualExpr);
     }
   }

@@ -140,7 +140,12 @@ void IcebergSplitReader::prepareSplit(
       *originalRemainingFilters_ = *remainingFilterExprSet_;
 
       auto newExpr = std::make_shared<exec::Expr>(
-          BOOLEAN(), std::move(expressions), "and", true, true, true);
+          BOOLEAN(),
+          std::move(expressions),
+          "presto.default.and",
+          true,
+          true,
+          true);
       remainingFilterExprSet_.reset(new exec::ExprSet(
           std::vector<std::shared_ptr<exec::Expr>>{newExpr},
           remainingFilterExprSet_->execCtx()));
