@@ -62,7 +62,7 @@ void PageReader::advanceToNextDataPage() {
 }
 
 void PageReader::seekForwardToPage(int64_t row) {
-  printf(" seekToPage to row %d\n", row);
+  //  printf(" seekToPage to row %d\n", row);
   //  printf("  inputStream_ %llx\n",
   //  dynamic_cast<dwio::common::SeekableArrayInputStream*>(inputStream_.get()));
   //  printf("  inputStream_->data %llx\n",
@@ -1009,49 +1009,69 @@ int32_t PageReader::readNulls(int32_t numValues, BufferPtr& buffer) {
   }
 }
 
-//int32_t PageReader::readNulls(RowSet& topRows, BufferPtr& nullsBuffer) {
-//  VELOX_CHECK_NE(1, maxDefine_);
-//}
+// int32_t PageReader::readNulls(RowSet& topRows, BufferPtr& nullsBuffer) {
+//   VELOX_CHECK_NE(1, maxDefine_);
+// }
 
-RowSet PageReader::applyNullFilters(
-    RowSet topRows,
+RowSet PageReader::applyUpperLevelFilters(
+    RowSet& topRows,
     const common::ScanSpec* leafSpec) {
   auto spec = leafSpec;
-  while (spec) {
-    if (spec->hasFilter()) {
-      auto filter = spec->filter();
-      VELOX_CHECK(
-          filter->kind() == velox::common::FilterKind::kIsNull ||
-              filter->kind() == velox::common::FilterKind::kIsNotNull,
-          "Unsupported filter for column {}, only IS NULL and IS NOT NULL are supported now: {}",
-          spec->fieldName(),
-          filter->toString());
-
-      uint64_t numNonEmptyCollections = 0;
-      uint64_t numNonNullCollections = 0;
-      bool isNotNull = filter->kind() == velox::common::FilterKind::kIsNotNull;
-
-      NestedStructureDecoder::filterNulls(
-          topRows,
-          isNotNull,
-          &topRowRepDefIndexes_,
-          &repetitionLevels_,
-          &definitionLevels_,
-          maxRepeat_,
-          maxDefine_,
-          numNonEmptyCollections,
-          numNonNullCollections);
-    }
+  // So far we only support top level filters
+  while (spec && spec->parent()) {
     spec = spec->parent().get();
   }
 
+  if (spec->hasFilter()) {
+    auto filter = spec->filter();
+    VELOX_CHECK(
+        filter->kind() == velox::common::FilterKind::kIsNull ||
+            filter->kind() == velox::common::FilterKind::kIsNotNull,
+        "Unsupported filter for column {}, only IS NULL and IS NOT NULL are supported now: {}",
+        spec->fieldName(),
+        filter->toString());
+
+    uint64_t numNonEmptyCollections = 0;
+    uint64_t numNonNullCollections = 0;
+    bool isNotNull = filter->kind() == velox::common::FilterKind::kIsNotNull;
+
+    NestedStructureDecoder::filterNulls(
+        topRows,
+        isNotNull,
+        &topRowRepDefIndexes_,
+        repetitionLevels_.data(),
+        definitionLevels_.data(),
+        maxRepeat_,
+        maxDefine_,
+        numNonEmptyCollections,
+        numNonNullCollections);
+  }
+  spec = spec->parent().get();
+
   return topRows;
+}
+
+void PageReader::countTopRows() {
+  if (maxRepeat_ > 0) {
+    // numTopRowsInPage_ might be 1 for left over from last page
+    auto repetitions = repetitionLevels_.data() + repetitionLevels_.size();
+
+    topRowRepDefIndexes_.reserve(numRepDefsInPage_);
+    numTopRowsInPage_ = 0;
+    for (int i = 0; i < numRepDefsInPage_; i++) {
+      // Top level rows cannot be empty, therefore only needs to check
+      // repetition level
+      topRowRepDefIndexes_[numTopRowsInPage_] = i;
+      numTopRowsInPage_ += (repetitions[i] == 0);
+    }
+  } else {
+    numTopRowsInPage_ = numRepDefsInPage_;
+  }
 }
 
 folly::Range<const vector_size_t*> PageReader::topRowsForPage(
     const vector_size_t* topRows,
     vector_size_t numTopRows,
-    int32_t numTopRowsInPage,
     int32_t currentTopRow) {
   if (currentTopRow == numTopRows) {
     return folly::Range(topRows + numTopRows, topRows + numTopRows);
@@ -1059,7 +1079,7 @@ folly::Range<const vector_size_t*> PageReader::topRowsForPage(
 
   // Then check how many of the rowsRange to visit are on the same page as the
   // current one.
-  int32_t firstOnNextPage = currentTopRow + numTopRowsInPage;
+  int32_t firstOnNextPage = currentTopRow + numTopRowsInPage_;
   auto begin = topRows + currentTopRow;
   auto end = topRows + numTopRows;
   auto it = std::lower_bound(begin, end, firstOnNextPage);

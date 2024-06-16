@@ -159,6 +159,10 @@ void SelectiveListColumnReader::read(
 //  makeNestedRowSet(activeRows, rows.back());
 
   readNulls(rows, 0, incomingNulls);
+  if (readsNullsOnly()) {
+    filterNulls<int64_t>(rows, scanSpec_->keepValues());
+    return;
+  }
 
   RowSet activeRows = filterNulls<int32_t>(rows, false);
   makeNestedRowSet(activeRows, rows.back());

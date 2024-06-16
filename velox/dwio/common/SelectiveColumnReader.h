@@ -455,7 +455,7 @@ class SelectiveColumnReader {
 
   // Prepares the result buffer for nulls for reading 'rows'. Leaves
   // 'extraSpace' bits worth of space in the nulls buffer.
-  void prepareResultNulls(RowSet rows, bool hasNulls, int32_t extraRows = 0);
+  void prepareResultNulls(RowSet rows, int32_t extraRows);
 
   // Filters 'rows' according to 'is_null'. Only applies to cases where
   // readsNullsOnly() is true.

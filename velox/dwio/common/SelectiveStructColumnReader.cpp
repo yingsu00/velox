@@ -94,9 +94,11 @@ void SelectiveStructColumnReaderBase::read(
     vector_size_t offset,
     RowSet rows,
     const uint64_t* incomingNulls) {
-  printf("  SelectiveStructColumnReaderBase::read begin readOffset=%d\n", readOffset_);
+//  printf("  SelectiveStructColumnReaderBase::read begin readOffset=%d\n", readOffset_);
 
+  numReads_ = scanSpec_->newRead();
   prepareRead<char>(offset, rows, incomingNulls);
+  readNulls(rows, 0, incomingNulls);
 
   RowSet activeRows = rows;
   if (hasMutation_) {
@@ -115,47 +117,22 @@ void SelectiveStructColumnReaderBase::read(
     }
     activeRows = outputRows_;
   }
-
-//  const uint64_t* structNulls =
-//      nullsInReadRange_ ? nullsInReadRange_->as<uint64_t>() : nullptr;
-//  // a struct reader may have a null/non-null filter
-//  if (scanSpec_->filter()) {
-//    auto kind = scanSpec_->filter()->kind();
-//    VELOX_CHECK(
-//        kind == velox::common::FilterKind::kIsNull ||
-//        kind == velox::common::FilterKind::kIsNotNull);
-//    filterNulls<int32_t>(
-//        activeRows, kind == velox::common::FilterKind::kIsNull, false);
-//    if (outputRows_.empty()) {
-//      recordParentNullsInChildren(offset, rows);
-//      return;
-//    }
-//    activeRows = outputRows_;
-//  }
-//
-//  auto& childSpecs = scanSpec_->children();
-//  VELOX_CHECK(!childSpecs.empty());
-
-
-  readNulls(rows, 0, incomingNulls);
-  if (readsNullsOnly()) {
-    filterNulls<int64_t>(
-        rows,
-        scanSpec_->filter()->kind() == velox::common::FilterKind::kIsNull,
-        scanSpec_->keepValues());
-    return;
-  }
-
-  numReads_ = scanSpec_->newRead();
-
   const uint64_t* structNulls =
       nullsInReadRange_ ? nullsInReadRange_->as<uint64_t>() : nullptr;
-  filterNulls<int32_t>(activeRows, false);
-  if (activeRows.empty()) {
-    recordParentNullsInChildren(offset, rows);
-    return;
+  // a struct reader may have a null/non-null filter
+  if (scanSpec_->filter()) {
+    auto kind = scanSpec_->filter()->kind();
+    VELOX_CHECK(
+        kind == velox::common::FilterKind::kIsNull ||
+        kind == velox::common::FilterKind::kIsNotNull);
+    filterNulls<int32_t>(
+        activeRows, kind == velox::common::FilterKind::kIsNull, false);
+    if (outputRows_.empty()) {
+      recordParentNullsInChildren(offset, rows);
+      return;
+    }
+    activeRows = outputRows_;
   }
-
   auto& childSpecs = scanSpec_->children();
   assert(!children_.empty());
 
@@ -220,9 +197,9 @@ void SelectiveStructColumnReaderBase::read(
   lazyVectorReadOffset_ = offset;
   readOffset_ = offset + rows.back() + 1;
 
-  printf(
-      "\n SelectiveStructColumnReaderBase::read end, readOffset_=%d\n",
-      readOffset_);
+//  printf(
+//      "\n SelectiveStructColumnReaderBase::read end, readOffset_=%d\n",
+//      readOffset_);
 }
 
 void SelectiveStructColumnReaderBase::recordParentNullsInChildren(

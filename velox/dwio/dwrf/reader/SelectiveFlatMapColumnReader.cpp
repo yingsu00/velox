@@ -255,7 +255,7 @@ class SelectiveFlatMapReader : public SelectiveStructColumnReaderBase {
     VELOX_DCHECK(!hasMutation());
     auto activeRows = rows;
 
-    readNulls(rows, 0, incomingNulls);
+//    readNulls(rows, 0, incomingNulls);
     auto* mapNulls =
         nullsInReadRange_ ? nullsInReadRange_->as<uint64_t>() : nullptr;
     if (scanSpec_->filter()) {

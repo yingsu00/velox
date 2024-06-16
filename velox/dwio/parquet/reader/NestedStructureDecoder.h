@@ -22,7 +22,7 @@
 
 namespace facebook::velox::parquet {
 
-using RowSet = folly::Range<const int32_t*>;
+using RowSet = folly::Range<int32_t*>;
 //using RowSet = folly::Range<vector_size_t*>;
 
 struct NestedData {
@@ -108,9 +108,7 @@ class NestedStructureDecoder {
       int16_t* definitionLevels,
       uint64_t numRepDefs,
       int16_t maxRepeat,
-      int16_t maxDefinition,
-      uint64_t& numNonEmptyCollections,
-      uint64_t& numNonNullCollections);
+      int16_t maxDefinition);
 
   static RowSet filterNulls(
       RowSet& topRows,
@@ -119,9 +117,7 @@ class NestedStructureDecoder {
       const int16_t* FOLLY_NULLABLE repetitionLevels,
       const int16_t* FOLLY_NULLABLE definitionLevels,
       uint16_t maxRepeat,
-      uint16_t maxDefinition,
-      uint64_t& numNonEmptyCollections,
-      uint64_t& numNonNullCollections);
+      uint16_t maxDefinition);
 
   static void filterNulls2(
       RowSet& topRows,
@@ -130,9 +126,7 @@ class NestedStructureDecoder {
       const int16_t* repetitionLevels,
       const int16_t* definitionLevels,
       uint16_t maxRepeat,
-      uint16_t maxDefinition,
-      uint64_t& numNonEmptyCollections,
-      uint64_t& numNonNullCollections);
+      uint16_t maxDefinition);
 
  private:
   NestedStructureDecoder() {}

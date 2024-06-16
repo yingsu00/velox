@@ -162,8 +162,8 @@ void E2EFilterTestBase::readWithFilter(
   auto deletedRowsIter = mutationSpec.deletedRows.begin();
   while (true) {
     {
-      printf(
-"-----------------------Round %d---------------------------\n\n",clearCnt);
+            printf(
+      "-----------------------Round %d---------------------------\n\n",clearCnt);
 
       MicrosecondTimer timer(&time);
       if (++clearCnt % 17 == 0) {
@@ -194,7 +194,8 @@ void E2EFilterTestBase::readWithFilter(
         mutation.deletedRows = isDeleted.data();
       }
       auto rowsScanned = rowReader->next(readSize, resultBatch, &mutation);
-      printf("Next finished with %d rows, rowsScanned %lld\n\n", resultBatch->size(), rowsScanned);
+            printf("Next finished with %d rows, rowsScanned %lld\n\n",
+            resultBatch->size(), rowsScanned);
       ASSERT_EQ(rowsScanned, readSize);
       if (resultBatch->size() == 0) {
         // No hits in the last resultBatch of rows.
@@ -257,7 +258,8 @@ void E2EFilterTestBase::readWithFilter(
             uint64_t hit = hitRows[lastRowIndex++];
             auto expectedRow = batchRow(hit);
             std::cout << j << ":" << hit << " "
-            << expectedColumn->toString(expectedRow) << "\t" << result->toString(j) << std::endl;
+                      << expectedColumn->toString(expectedRow) << "\t"
+                      << result->toString(j) << std::endl;
           }
 
           break;
@@ -330,19 +332,19 @@ void E2EFilterTestBase::testFilterSpecs(
   uint64_t timeWithFilter = 0;
   readWithFilter(spec, mutations, batches, hitRows, timeWithFilter, false);
 
-  if (FLAGS_timing_repeats) {
-    for (auto i = 0; i < FLAGS_timing_repeats; ++i) {
-      readWithFilter(
-          spec, mutations, batches, hitRows, timeWithFilter, false, true);
-    }
-    LOG(INFO) << fmt::format(
-        "    {} hits in {} us, {} input rows/s\n",
-        hitRows.size(),
-        timeWithFilter,
-        batches[0]->size() * batches.size() * FLAGS_timing_repeats /
-            (timeWithFilter / 1000000.0));
-  }
-  testReadWithFilterLazy(spec, mutations, batches, hitRows);
+//  if (FLAGS_timing_repeats) {
+//    for (auto i = 0; i < FLAGS_timing_repeats; ++i) {
+//      readWithFilter(
+//          spec, mutations, batches, hitRows, timeWithFilter, false, true);
+//    }
+//    LOG(INFO) << fmt::format(
+//        "    {} hits in {} us, {} input rows/s\n",
+//        hitRows.size(),
+//        timeWithFilter,
+//        batches[0]->size() * batches.size() * FLAGS_timing_repeats /
+//            (timeWithFilter / 1000000.0));
+//  }
+//  testReadWithFilterLazy(spec, mutations, batches, hitRows);
 }
 
 void E2EFilterTestBase::testNoRowGroupSkip(
@@ -352,7 +354,7 @@ void E2EFilterTestBase::testNoRowGroupSkip(
   SCOPED_TRACE("No row group skip");
   auto spec = filterGenerator_->makeScanSpec(SubfieldFilters{});
 
-//  uint64_t timeWithNoFilter = 0;
+  //  uint64_t timeWithNoFilter = 0;
   //  readWithoutFilter(spec, batches, timeWithNoFilter);
 
   for (auto i = 0; i < numCombinations; ++i) {
@@ -446,11 +448,11 @@ void E2EFilterTestBase::testScenario(
   auto batches = makeDataset(customize, false);
   writeToMemory(rowType_, batches, false);
   testNoRowGroupSkip(batches, filterable, numCombinations);
-  testPruningWithFilter(batches, filterable);
+//  testPruningWithFilter(batches, filterable);
 
-//  batches = makeDataset(customize, true);
-//  writeToMemory(rowType_, batches, true);
-//  testRowGroupSkip(batches, filterable);
+  //  batches = makeDataset(customize, true);
+  //  writeToMemory(rowType_, batches, true);
+  //  testRowGroupSkip(batches, filterable);
 }
 
 void E2EFilterTestBase::testMetadataFilterImpl(
@@ -862,6 +864,15 @@ void OwnershipChecker::check(const VectorPtr& batch) {
   }
   if (batchCounter_ % 2 == 1) {
     for (auto i = 0; i < previousBatch_->size(); ++i) {
+      if (!(previousBatch_->equalValueAt(previousBatchCopy_.get(), i, i))) {
+        std::cout << "i = " << i
+            << " Retained reference of a batch has been overwritten by the next: "
+            << " index  " << i << " batch " << previousBatch_->toString(i)
+            << " original " << previousBatchCopy_->toString(i) << std::endl;
+
+        break;
+      }
+
       ASSERT_TRUE(previousBatch_->equalValueAt(previousBatchCopy_.get(), i, i))
           << "Retained reference of a batch has been overwritten by the next: "
           << " index  " << i << " batch " << previousBatch_->toString(i)

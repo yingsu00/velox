@@ -153,7 +153,7 @@ class E2EFilterTest : public E2EFilterTestBase {
       flatmapNodeIdsAsStruct_;
 };
 
-TEST_F(E2EFilterTest, integerDirect3) {
+TEST_F(E2EFilterTest, integerDirect) {
   testWithTypes(
       "short_val:smallint,"
       "int_val:int,"
@@ -162,6 +162,17 @@ TEST_F(E2EFilterTest, integerDirect3) {
       [&]() { makeAllNulls("long_null"); },
       true,
       {"short_val", "int_val", "long_val"},
+      20,
+      true,
+      true);
+}
+
+TEST_F(E2EFilterTest, integerDirect3) {
+  testWithTypes(
+      "long_val:bigint",
+      [&](){  },
+      false,
+      {"long_val"},
       20,
       true,
       true);

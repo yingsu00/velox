@@ -61,6 +61,8 @@ SelectiveListColumnReader::SelectiveListColumnReader(
   // count the number of selected sub-columns
   const auto& cs = stripe.getColumnSelector();
   auto& childType = requestedType_->childAt(0);
+
+
   VELOX_CHECK(
       cs.shouldReadNode(childType->id),
       "SelectiveListColumnReader must select the values stream");

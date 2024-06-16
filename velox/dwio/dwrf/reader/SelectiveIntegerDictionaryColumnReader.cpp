@@ -83,10 +83,7 @@ void SelectiveIntegerDictionaryColumnReader::read(
 
   readNulls(rows, 0, incomingNulls);
   if (readsNullsOnly()) {
-    filterNulls<int64_t>(
-        rows,
-        scanSpec_->filter()->kind() == velox::common::FilterKind::kIsNull,
-        scanSpec_->keepValues());
+    filterNulls<int64_t>(rows, scanSpec_->keepValues());
     return;
   }
 

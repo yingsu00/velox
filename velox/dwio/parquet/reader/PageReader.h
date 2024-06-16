@@ -118,8 +118,8 @@ class PageReader {
   // current page.
   int32_t skipNulls(int32_t numValues);
 
-  RowSet applyNullFilters(
-      RowSet topRows,
+  RowSet applyUpperLevelFilters(
+      RowSet& topRows,
       const common::ScanSpec* leafSpec);
 
   // Initializes a filter result cache for the dictionary in 'state'.
@@ -202,8 +202,9 @@ class PageReader {
   folly::Range<const vector_size_t*> topRowsForPage(
       const vector_size_t* topRows,
       vector_size_t numTopRows,
-      int32_t numTopRowsInPage,
       int32_t currentTopRow);
+
+  void countTopRows();
 
   // Calls the visitor, specialized on the data type since not all visitors
   // apply to all types.
@@ -488,42 +489,32 @@ void PageReader::readWithVisitor(Visitor& visitor) {
         definitionLevels_.resize(definitionLevels_.size() + numRepDefsInPage_);
         wideDefineDecoder_->GetBatch(definitions, numRepDefsInPage_);
       }
+
+      // We have to count top rows before reading leaf level nulls
+      countTopRows();
     }
     // If isTopLevel_, and this page doesn't contain rows, no need to read rep
     // defs and data If it's not top level, find out numTopRowsInPage
 
-    int32_t numTopRowsInPage = numRepDefsInPage_;
-    if (maxRepeat_ > 0) {
-      // numTopRowsInPage_ might be 1 for left over from last page
-      auto repetitions = repetitionLevels_.data() + repetitionLevels_.size();
-
-      topRowRepDefIndexes_.reserve(numTopRows);
-      uint32_t topRowId = currentTopRow;
-      for (int i = 0; i < numRepDefsInPage_; i++) {
-        // Top level rows cannot be empty, therefore only needs to check
-        // repetition level
-        topRowRepDefIndexes_[topRowId] = i;
-        topRowId += (repetitions[i] == 0);
-      }
-      numTopRowsInPage = topRowId - currentTopRow;
-    }
 
     // If there is rows in page, get top level rowsets in this page
     folly::Range<const vector_size_t*> topRowsInPage = topRowsForPage(
-        topRows.data(), numTopRows, numTopRowsInPage, currentTopRow);
-
-    topRows = applyNullFilters(topRows, reader.scanSpec());
-
-    // If it's not top level, translate the rowsets to leaf level. Note that
-    // it may contain partial rows
-    if (topRowsInPage.empty()) {
+        topRows.data(), numTopRows, currentTopRow);
+    if (topRowsInPage.empty() && numTopRowsInPage_ > 0) {
       continue;
     }
 
-    // Need to
+    if (!isTopLevel_) {
+      topRows = applyUpperLevelFilters(topRows, reader.scanSpec());
+    }
 
-    numLeafRowsInPage_ =
-        readNulls(numRepDefsInPage_, reader.nullsInReadRange());
+    if (reader.readsNullsOnly()) {
+
+    } else {
+      numLeafRowsInPage_ =
+          readNulls(numRepDefsInPage_, reader.nullsInReadRange());
+    }
+
 
     auto& scanState = reader.scanState();
     if (isDictionary()) {
@@ -542,7 +533,7 @@ void PageReader::readWithVisitor(Visitor& visitor) {
     }
 
     // read
-    numTopRows -= numTopRowsInPage;
+    numTopRowsInPage_ -= topRowsInPage.size();
     lastReadOffset_ = readOffset_;
     //    readOffset_ += numRows;
   }

@@ -165,16 +165,11 @@ RowSet NestedStructureDecoder::filterNulls(
     const int16_t* repetitionLevels,
     const int16_t* definitionLevels,
     uint16_t maxRepeat,
-    uint16_t maxDefinition,
-    uint64_t& numNonEmptyCollections,
-    uint64_t& numNonNullCollections) {
+    uint16_t maxDefinition) {
   const uint16_t childMaxRepeat = maxRepeat + 1;
   bool isTopLevel = maxRepeat == 0;
 
   VELOX_CHECK_NE(isTopLevel, repetitionLevels != nullptr);
-
-  numNonEmptyCollections = 0;
-  numNonNullCollections = 0;
 
   int32_t numTopRows = topRows.size();
   int32_t numTopRowsPassed = 0;
@@ -187,8 +182,8 @@ RowSet NestedStructureDecoder::filterNulls(
       int16_t repetitionLevel = isTopLevel ? repetitionLevels[i] : 0;
       int16_t definitionLevel = definitionLevels? definitionLevels[i] : 0;
 
-      bool isToRow = repetitionLevel == 0;
-      topRowPass |= isToRow;
+      bool isTopRow = repetitionLevel == 0;
+      topRowPass |= isTopRow;
 
       // We don't need to check if it's collection begin
       bool isNotNull = definitionLevel >= maxDefinition;
@@ -196,7 +191,7 @@ RowSet NestedStructureDecoder::filterNulls(
 
       topRows[numTopRowsPassed] = topRow;
       numTopRowsPassed += topRowPass;
-      topRow += isToRow;
+      topRow += isTopRow;
     }
   } else {
     VELOX_CHECK(topRowRepDefPositions);
@@ -237,11 +232,7 @@ void NestedStructureDecoder::filterNulls2(
     const int16_t* repetitionLevels,
     const int16_t* definitionLevels,
     uint16_t maxRepeat,
-    uint16_t maxDefinition,
-    uint64_t& numNonEmptyCollections,
-    uint64_t& numNonNullCollections) {
-  numNonEmptyCollections = 0;
-  numNonNullCollections = 0;
+    uint16_t maxDefinition) {
 
   int32_t numTopRows = topRows.size();
   int32_t numTopRowsPassed = 0;
@@ -268,13 +259,9 @@ void NestedStructureDecoder::filterNulls3(
     int16_t* definitionLevels,
     uint64_t numRepDefs,
     int16_t maxRepeat,
-    int16_t maxDefinition,
-    uint64_t& numNonEmptyCollections,
-    uint64_t& numNonNullCollections) {
+    int16_t maxDefinition) {
   const uint8_t childMaxRepeat = maxRepeat + 1;
 
-  numNonEmptyCollections = 0;
-  numNonNullCollections = 0;
   int32_t topRowInputIndex = 0;
   int32_t topRowOutputIndex = 0;
   int32_t currentTopRow = 0;
