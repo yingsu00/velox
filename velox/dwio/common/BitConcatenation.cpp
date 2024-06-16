@@ -61,10 +61,32 @@ void BitConcatenation::appendOnes(int32_t numOnes) {
 }
 
 uint64_t* FOLLY_NONNULL BitConcatenation::ensureSpace(int32_t numBits) {
+  printf(
+      " BitConcatenation::ensureSpace begin\n");
   if (!*buffer_) {
     *buffer_ = AlignedBuffer::allocate<bool>(numBits_ + numBits, &pool_, true);
+    printf(
+        " BitConcatenation::ensureSpace after allocate. size %d, capacity=%d, isMutable=%d, pool=%llx, data=%llx\n",
+        buffer_->get()->size(),
+        buffer_->get()->capacity(),
+        buffer_->get()->isMutable(),
+        buffer_->get()->pool(),
+        buffer_->get()->as<char>());
   } else if (numBits_ + numBits > (*buffer_)->capacity() * 8) {
+    printf(
+        " BitConcatenation::ensureSpace before reallocate. size %d, capacity=%d, isMutable=%d, pool=%llx\n",
+        buffer_->get()->size(),
+        buffer_->get()->capacity(),
+        buffer_->get()->isMutable(),
+        buffer_->get()->pool());
     AlignedBuffer::reallocate<bool>(buffer_, 2 * (numBits_ + numBits));
+    printf(
+        " BitConcatenation::ensureSpace after reallocate. size %d, capacity=%d, isMutable=%d, pool=%llx, data=%llx\n",
+        buffer_->get()->size(),
+        buffer_->get()->capacity(),
+        buffer_->get()->isMutable(),
+        buffer_->get()->pool(),
+        buffer_->get()->as<char>());
   }
   return (*buffer_)->asMutable<uint64_t>();
 }

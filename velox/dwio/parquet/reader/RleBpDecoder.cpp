@@ -107,14 +107,14 @@ void RleBpDecoder::readBits(
     toRead -= consumed;
     remainingValues_ -= consumed;
   }
-  printf(
-      "readBits end \nbufferStart_ %llx, numValues %d, numWritten %d, remainingValues_ %d,value_ %d, bitOffset_=%d\n",
-      bufferStart_,
-      numValues,
-      numWritten,
-      remainingValues_,
-      value_,
-      bitOffset_);
+//  printf(
+//      "readBits end \nbufferStart_ %llx, numValues %d, numWritten %d, remainingValues_ %d,value_ %d, bitOffset_=%d\n",
+//      bufferStart_,
+//      numValues,
+//      numWritten,
+//      remainingValues_,
+//      value_,
+//      bitOffset_);
 }
 
 void RleBpDecoder::readHeader() {

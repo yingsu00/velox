@@ -103,7 +103,7 @@ void E2EFilterTestBase::readWithoutFilter(
     {
       MicrosecondTimer timer(&time);
       hasData = rowReader->next(1000, resultBatch);
-      printf("\nnext finished with %d rows\n", resultBatch->size());
+      printf("\nnext finished with %d rows\n\n", resultBatch->size());
     }
     if (!hasData) {
       break;

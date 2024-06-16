@@ -344,6 +344,7 @@ class AlignedBuffer : public Buffer {
     auto size = checkedMultiply(numElements, sizeof(T));
     Buffer* old = buffer->get();
     VELOX_CHECK(old, "Buffer doesn't exist in reallocate");
+    printf("old buffer pool \n", old->pool_);
     old->checkEndGuard();
     VELOX_DCHECK(
         dynamic_cast<ImplClass<T>*>(old) != nullptr,
@@ -508,6 +509,7 @@ class AlignedBuffer : public Buffer {
   }
 
   void checkEndGuardImpl() const override {
+//    printf("checkEndGuardImpl data_=%llx, capacity_=%d, kEndGuard=%llx\n", data_,capacity_,kEndGuard);
     if (*reinterpret_cast<uint64_t*>(data_ + capacity_) != kEndGuard) {
       VELOX_FAIL("Write past Buffer capacity() {}", capacity_);
     }
