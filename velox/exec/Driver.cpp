@@ -504,6 +504,7 @@ StopReason Driver::runInternal(
     std::shared_ptr<Driver>& self,
     std::shared_ptr<BlockingState>& blockingState,
     RowVectorPtr& result) {
+  VLOG(3) << this << this->toString() << " Driver::runInternal begin. ";
   const auto now = getCurrentTimeMicro();
   const auto queuedTimeUs = now - queueTimeStartUs_;
   // Update the next operator's queueTime.
@@ -605,6 +606,10 @@ StopReason Driver::runInternal(
             op,
             curOperatorId_,
             kOpMethodIsBlocked);
+        VLOG(3) << this << " Driver::runInternal 1 called isBlocked on op: "
+                << op->toString() << " blockingReason_: "
+                << blockingReasonToString(blockingReason_);
+
         if (blockingReason_ != BlockingReason::kNotBlocked) {
           blockedOperatorId_ = curOperatorId_;
           checkIsBlockFutureValid(op, future);
@@ -622,6 +627,11 @@ StopReason Driver::runInternal(
               nextOp,
               curOperatorId_ + 1,
               kOpMethodIsBlocked);
+          VLOG(3) << this
+                  << " Driver::runInternal 2 called isBlocked on nextOp: "
+                  << nextOp->toString() << " blockingReason_: "
+                  << blockingReasonToString(blockingReason_);
+
           if (blockingReason_ != BlockingReason::kNotBlocked) {
             blockedOperatorId_ = curOperatorId_ + 1;
             checkIsBlockFutureValid(nextOp, future);
@@ -637,6 +647,10 @@ StopReason Driver::runInternal(
               nextOp,
               curOperatorId_ + 1,
               kOpMethodNeedsInput);
+          VLOG(3) << this
+                  << " Driver::runInternal 3 called needsInput on nextOp: "
+                  << nextOp->toString() << " needsInput: " << needsInput;
+
           if (needsInput) {
             uint64_t resultBytes = 0;
             RowVectorPtr intermediateResult;
@@ -653,6 +667,11 @@ StopReason Driver::runInternal(
                   op,
                   curOperatorId_,
                   kOpMethodGetOutput);
+              VLOG(3) << this
+                      << " Driver::runInternal 4 called getOutput on op: "
+                      << op->toString()
+                      << " intermediateResult: " << intermediateResult;
+
               if (intermediateResult) {
                 VELOX_CHECK(
                     intermediateResult->size() > 0,
@@ -693,6 +712,9 @@ StopReason Driver::runInternal(
                   nextOp,
                   curOperatorId_ + 1,
                   kOpMethodAddInput);
+              VLOG(3) << this
+                      << " Driver::runInternal 5 called addInput on nextOp: "
+                      << nextOp->toString();
 
               // The next iteration will see if operators_[i + 1] has
               // output now that it got input.
@@ -715,6 +737,11 @@ StopReason Driver::runInternal(
                   op,
                   curOperatorId_,
                   kOpMethodIsBlocked);
+              VLOG(3) << this
+                      << " Driver::runInternal 6 called isBlocked on op: "
+                      << op->toString() << " blockingReason_: "
+                      << blockingReasonToString(blockingReason_);
+
               if (blockingReason_ != BlockingReason::kNotBlocked) {
                 blockedOperatorId_ = curOperatorId_;
                 checkIsBlockFutureValid(op, future);
@@ -729,6 +756,10 @@ StopReason Driver::runInternal(
                   op,
                   curOperatorId_,
                   kOpMethodIsFinished);
+              VLOG(3) << this
+                      << " Driver::runInternal 7 called isFinished on op: "
+                      << op->toString() << " finished: " << finished;
+
               if (finished) {
                 auto timer = createDeltaCpuWallTimer(
                     [op, this](const CpuWallTiming& elapsedTime) {
@@ -744,6 +775,10 @@ StopReason Driver::runInternal(
                     nextOp,
                     curOperatorId_ + 1,
                     kOpMethodNoMoreInput);
+                VLOG(3)
+                    << this
+                    << " Driver::runInternal 8 called noMoreInput on nextOp: "
+                    << nextOp->toString() << " finished: " << finished;
                 break;
               }
             }
@@ -764,6 +799,9 @@ StopReason Driver::runInternal(
                 op,
                 curOperatorId_,
                 kOpMethodGetOutput);
+            VLOG(3) << this << " Driver::runInternal called getOutput on op: "
+                    << op->toString() << " result: " << result;
+
             if (result) {
               VELOX_CHECK(
                   result->size() > 0,
@@ -791,6 +829,8 @@ StopReason Driver::runInternal(
               op,
               curOperatorId_,
               kOpMethodIsFinished);
+          VLOG(3) << this << " Driver::runInternal called isFinished on op: "
+                  << op->toString() << " finished: " << finished;
           if (finished) {
             guard.notThrown();
             close();
@@ -1034,7 +1074,7 @@ std::vector<Operator*> Driver::operators() const {
 std::string Driver::toString() const {
   std::stringstream out;
   out << "{Driver." << driverCtx()->pipelineId << "." << driverCtx()->driverId
-      << ": ";
+      << ", taskId: " << driverCtx()->task->taskId();
   if (state_.isTerminated) {
     out << "terminated, ";
   }
