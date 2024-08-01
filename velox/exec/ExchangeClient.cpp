@@ -120,6 +120,11 @@ ExchangeClient::next(uint32_t maxBytes, bool* atEnd, ContinueFuture* future) {
   std::vector<std::unique_ptr<SerializedPage>> pages;
   {
     std::lock_guard<std::mutex> l(queue_->mutex());
+
+    if (!future) {
+      VLOG(1) << "Ying: ExchangeClient::next future is null";
+    }
+
     if (closed_) {
       *atEnd = true;
       return pages;
@@ -146,6 +151,8 @@ ExchangeClient::next(uint32_t maxBytes, bool* atEnd, ContinueFuture* future) {
 void ExchangeClient::request(std::vector<RequestSpec>&& requestSpecs) {
   auto self = shared_from_this();
   for (auto& spec : requestSpecs) {
+//    VLOG(1) << " ExchangeClient::request " << spec.toString();
+
     auto future = folly::SemiFuture<ExchangeSource::Response>::makeEmpty();
     if (spec.maxBytes == 0) {
       future = spec.source->requestDataSizes(kRequestDataSizesMaxWait);
