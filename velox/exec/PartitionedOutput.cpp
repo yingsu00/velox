@@ -62,12 +62,16 @@ BlockingReason Destination::advance(
   }
   current_->append(
       output, folly::Range(&rows_[firstRow], rowIdx_ - firstRow), scratch);
-  // Update output state variable.
+
+
+  BlockingReason blockingReason = BlockingReason::kNotBlocked;
+  if (shouldFlush || (eagerFlush_ && rowsInCurrent_ > 0)) {
+    blockingReason = flush(bufferManager, bufferReleaseFn, future);
+  }
+
+  // Update output state variable after flushing is done
   if (rowIdx_ == rows_.size()) {
     *atEnd = true;
-  }
-  if (shouldFlush || (eagerFlush_ && rowsInCurrent_ > 0)) {
-    return flush(bufferManager, bufferReleaseFn, future);
   }
   return BlockingReason::kNotBlocked;
 }
@@ -232,6 +236,10 @@ void PartitionedOutput::estimateRowSizes() {
 }
 
 void PartitionedOutput::addInput(RowVectorPtr input) {
+  numReceivedPages++;
+  if (numReceivedPages == 1) {
+    VLOG(1) << "PartitionedOutput addInput received first input";
+  }
   initializeInput(std::move(input));
 
   initializeDestinations();
