@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 #include "velox/exec/OutputBuffer.h"
+
 #include "velox/core/QueryConfig.h"
 #include "velox/exec/Task.h"
 
@@ -23,87 +24,106 @@ using core::PartitionedOutputNode;
 
 void ArbitraryBuffer::noMoreData() {
   // Drop duplicate end markers.
-  if (!pages_.empty() && pages_.back() == nullptr) {
-    return;
-  }
-  pages_.push_back(nullptr);
+  return pages_.withWLock([](auto& pages) {
+    if (!pages.empty() && pages.back() == nullptr) {
+      return;
+    }
+    pages.push_back(nullptr);
+  });
 }
 
 void ArbitraryBuffer::enqueue(std::unique_ptr<SerializedPage> page) {
   VELOX_CHECK_NOT_NULL(page, "Unexpected null page");
-  VELOX_CHECK(!hasNoMoreData(), "Arbitrary buffer has set no more data marker");
-  pages_.push_back(std::shared_ptr<SerializedPage>(page.release()));
+  VELOX_CHECK(
+      !hasNoMoreData(), "Arbitrary buffer has set no more data marker");
+  pages_.withWLock([&](auto& pages) {
+    pages.push_back(std::shared_ptr<SerializedPage>(page.release()));
+  });
 }
 
 void ArbitraryBuffer::getAvailablePageSizes(std::vector<int64_t>& out) const {
-  out.reserve(out.size() + pages_.size());
-  for (const auto& page : pages_) {
-    if (page != nullptr) {
-      out.push_back(page->size());
+  pages_.withRLock([&](auto& pages) {
+    out.reserve(out.size() + pages.size());
+    for (const auto& page : pages) {
+      if (page != nullptr) {
+        out.push_back(page->size());
+      }
     }
-  }
+  });
 }
 
 std::vector<std::shared_ptr<SerializedPage>> ArbitraryBuffer::getPages(
     uint64_t maxBytes) {
-  if (maxBytes == 0 && !pages_.empty() && pages_.front() == nullptr) {
-    // Always give out an end marker when this buffer is finished and fully
-    // consumed.  When multiple `DestinationBuffer' polling the same
-    // `ArbitraryBuffer', we can simplify the code in
-    // `DestinationBuffer::getData' since we will always get a null marker and
-    // not going through the callback path, eliminate the chance of getting
-    // stuck.
-    VELOX_CHECK_EQ(pages_.size(), 1);
-    return {nullptr};
-  }
-  std::vector<std::shared_ptr<SerializedPage>> pages;
-  uint64_t bytesRemoved{0};
-  while (bytesRemoved < maxBytes && !pages_.empty()) {
-    if (pages_.front() == nullptr) {
-      // NOTE: keep the end marker in arbitrary buffer to signal all the
-      // destination buffers after the buffers have all been consumed.
-      VELOX_CHECK_EQ(pages_.size(), 1);
-      pages.push_back(nullptr);
-      break;
+  std::vector<std::shared_ptr<SerializedPage>> retrievedPages;
+  pages_.withRLock([&](auto& pages) {
+    if (maxBytes == 0 && !pages.empty() && pages.front() == nullptr) {
+      // Always give out an end marker when this buffer is finished and fully
+      // consumed.  When multiple `DestinationBuffer' polling the same
+      // `ArbitraryBuffer', we can simplify the code in
+      // `DestinationBuffer::getData' since we will always get a null marker and
+      // not going through the callback path, eliminate the chance of getting
+      // stuck.
+      VELOX_CHECK_EQ(pages.size(), 1);
+      retrievedPages.push_back(nullptr);
     }
-    bytesRemoved += pages_.front()->size();
-    pages.push_back(std::move(pages_.front()));
-    pages_.pop_front();
+  });
+
+  if (retrievedPages.size() == 1 && retrievedPages[0] == nullptr) {
+    return retrievedPages;
   }
-  return pages;
+
+  uint64_t bytesRemoved{0};
+  pages_.withWLock([&](auto& pages) {
+    while (bytesRemoved < maxBytes && !pages.empty()) {
+      if (pages.front() == nullptr) {
+        // NOTE: keep the end marker in arbitrary buffer to signal all the
+        // destination buffers after the buffers have all been consumed.
+        VELOX_CHECK_EQ(pages.size(), 1);
+        retrievedPages.push_back(nullptr);
+        break;
+      }
+      bytesRemoved += pages.front()->size();
+      retrievedPages.push_back(std::move(pages.front()));
+      pages.pop_front();
+    }
+  });
+
+  return retrievedPages;
 }
 
 std::string ArbitraryBuffer::toString() const {
-  return fmt::format(
-      "[ARBITRARY_BUFFER PAGES[{}] NO MORE DATA[{}]]",
-      pages_.size() - !!hasNoMoreData(),
-      hasNoMoreData());
+  return pages_.withRLock([&](auto& pages) {
+    return fmt::format(
+        "[ARBITRARY_BUFFER PAGES[{}] NO MORE DATA[{}]]",
+        pages.size() - !!hasNoMoreData(),
+        hasNoMoreData());
+  });
 }
 
-void DestinationBuffer::Stats::recordEnqueue(const SerializedPage& data) {
+void DestinationBuffer::recordEnqueue(const SerializedPage& data) {
   const auto numRows = data.numRows();
   VELOX_CHECK(numRows.has_value(), "SerializedPage's numRows must be valid");
-  bytesBuffered += data.size();
-  rowsBuffered += numRows.value();
-  ++pagesBuffered;
+  bytesBuffered_ += data.size();
+  rowsBuffered_ += numRows.value();
+  ++pagesBuffered_;
 }
 
-void DestinationBuffer::Stats::recordAcknowledge(const SerializedPage& data) {
+void DestinationBuffer::recordAcknowledge(const SerializedPage& data) {
   const auto numRows = data.numRows();
   VELOX_CHECK(numRows.has_value(), "SerializedPage's numRows must be valid");
   const int64_t size = data.size();
-  bytesBuffered -= size;
-  VELOX_DCHECK_GE(bytesBuffered, 0, "bytesBuffered must be non-negative");
-  rowsBuffered -= numRows.value();
-  VELOX_DCHECK_GE(rowsBuffered, 0, "rowsBuffered must be non-negative");
-  --pagesBuffered;
-  VELOX_DCHECK_GE(pagesBuffered, 0, "pagesBuffered must be non-negative");
-  bytesSent += size;
-  rowsSent += numRows.value();
-  ++pagesSent;
+  bytesBuffered_ -= size;
+  VELOX_DCHECK_GE(bytesBuffered_, 0, "bytesBuffered must be non-negative");
+  rowsBuffered_ -= numRows.value();
+  VELOX_DCHECK_GE(rowsBuffered_, 0, "rowsBuffered must be non-negative");
+  --pagesBuffered_;
+  VELOX_DCHECK_GE(pagesBuffered_, 0, "pagesBuffered must be non-negative");
+  bytesSent_ += size;
+  rowsSent_ += numRows.value();
+  ++pagesSent_;
 }
 
-void DestinationBuffer::Stats::recordDelete(const SerializedPage& data) {
+void DestinationBuffer::recordDelete(const SerializedPage& data) {
   recordAcknowledge(data);
 }
 
@@ -119,81 +139,98 @@ DestinationBuffer::Data DestinationBuffer::getData(
     loadData(arbitraryBuffer, maxBytes);
   }
 
-  if (sequence - sequence_ >= data_.size()) {
-    if (sequence - sequence_ > data_.size()) {
-      VLOG(1) << this << " Out of order get: " << sequence << " over "
-              << sequence_ << " Setting second notify " << notifySequence_
-              << " / " << sequence;
-    }
-    if (maxBytes == 0) {
-      std::vector<int64_t> remainingBytes;
-      if (arbitraryBuffer) {
-        arbitraryBuffer->getAvailablePageSizes(remainingBytes);
-      }
-      if (!remainingBytes.empty()) {
-        return {{}, std::move(remainingBytes), true};
-      }
-    }
-    notify_ = std::move(notify);
-    aliveCheck_ = std::move(activeCheck);
-    if (sequence - sequence_ > data_.size()) {
-      notifySequence_ = std::min(notifySequence_, sequence);
-    } else {
-      notifySequence_ = sequence;
-    }
-    notifyMaxBytes_ = maxBytes;
-    return {};
-  }
-
-  std::vector<std::unique_ptr<folly::IOBuf>> data;
+  std::vector<std::unique_ptr<folly::IOBuf>> retrievedData;
   uint64_t resultBytes = 0;
-  auto i = sequence - sequence_;
-  if (maxBytes > 0) {
-    for (; i < data_.size(); ++i) {
-      // nullptr is used as end marker
-      if (data_[i] == nullptr) {
-        VELOX_CHECK_EQ(i, data_.size() - 1, "null marker found in the middle");
-        data.push_back(nullptr);
-        break;
-      }
-      data.push_back(data_[i]->getIOBuf());
-      resultBytes += data_[i]->size();
-      if (resultBytes >= maxBytes) {
-        ++i;
-        break;
-      }
-    }
-  }
   bool atEnd = false;
   std::vector<int64_t> remainingBytes;
-  remainingBytes.reserve(data_.size() - i);
-  for (; i < data_.size(); ++i) {
-    if (data_[i] == nullptr) {
-      VELOX_CHECK_EQ(i, data_.size() - 1, "null marker found in the middle");
-      atEnd = true;
-      break;
+
+  return data_.withRLock([&](auto& data) {
+    if (sequence - sequence_ >= data.size()) {
+      if (sequence - sequence_ > data.size()) {
+        VLOG(1) << this << " Out of order get: " << sequence << " over "
+                << sequence_ << " Setting second notify " << notifySequence_
+                << " / " << sequence;
+      }
+      if (maxBytes == 0) {
+        //        std::vector<int64_t> remainingBytes;
+        if (arbitraryBuffer) {
+          arbitraryBuffer->getAvailablePageSizes(remainingBytes);
+        }
+        if (!remainingBytes.empty()) {
+          return DestinationBuffer::Data{{}, std::move(remainingBytes), true};
+        }
+      }
+
+      {
+        std::unique_lock<std::shared_mutex> rLock(notifyMutex_);
+        notify_ = std::move(notify);
+        aliveCheck_ = std::move(activeCheck);
+        if (sequence - sequence_ > data.size()) {
+          notifySequence_ = std::min(notifySequence_, sequence);
+        } else {
+          notifySequence_ = sequence;
+        }
+        notifyMaxBytes_ = maxBytes;
+      }
+
+      return DestinationBuffer::Data{};
     }
-    remainingBytes.push_back(data_[i]->size());
-  }
-  if (!atEnd && arbitraryBuffer) {
-    arbitraryBuffer->getAvailablePageSizes(remainingBytes);
-  }
-  if (data.empty() && remainingBytes.empty() && atEnd) {
-    data.push_back(nullptr);
-  }
-  return {std::move(data), std::move(remainingBytes), true};
+
+    //    std::vector<std::unique_ptr<folly::IOBuf>> data;
+    //    uint64_t resultBytes = 0;
+    auto i = sequence - sequence_;
+    if (maxBytes > 0) {
+      for (; i < data.size(); ++i) {
+        // nullptr is used as end marker
+        if (data[i] == nullptr) {
+          VELOX_CHECK_EQ(i, data.size() - 1, "null marker found in the middle");
+          retrievedData.push_back(nullptr);
+          break;
+        }
+        retrievedData.push_back(data[i]->getIOBuf());
+        resultBytes += data[i]->size();
+        if (resultBytes >= maxBytes) {
+          ++i;
+          break;
+        }
+      }
+    }
+    //    bool atEnd = false;
+    //    std::vector<int64_t> remainingBytes;
+    remainingBytes.reserve(data.size() - i);
+    for (; i < data.size(); ++i) {
+      if (data[i] == nullptr) {
+        VELOX_CHECK_EQ(i, data.size() - 1, "null marker found in the middle");
+        atEnd = true;
+        break;
+      }
+      remainingBytes.push_back(data[i]->size());
+    }
+
+    if (!atEnd && arbitraryBuffer) {
+      arbitraryBuffer->getAvailablePageSizes(remainingBytes);
+    }
+    if (retrievedData.empty() && remainingBytes.empty() && atEnd) {
+      retrievedData.push_back(nullptr);
+    }
+    return DestinationBuffer::Data{
+        std::move(retrievedData), std::move(remainingBytes), true};
+  });
 }
 
-void DestinationBuffer::enqueue(std::shared_ptr<SerializedPage> data) {
+void DestinationBuffer::enqueue(std::shared_ptr<SerializedPage> newData) {
   // Drop duplicate end markers.
-  if (data == nullptr && !data_.empty() && data_.back() == nullptr) {
-    return;
+  data_.withRLock([&](auto& data) {
+    if (newData == nullptr && !data.empty() && data.back() == nullptr) {
+      return;
+    }
+  });
+
+  if (newData != nullptr) {
+    recordEnqueue(*newData);
   }
 
-  if (data != nullptr) {
-    stats_.recordEnqueue(*data);
-  }
-  data_.push_back(std::move(data));
+  data_.withWLock([&](auto& data) { data.push_back(std::move(newData)); });
 }
 
 DataAvailable DestinationBuffer::getAndClearNotify() {
@@ -201,17 +238,22 @@ DataAvailable DestinationBuffer::getAndClearNotify() {
     VELOX_CHECK_NULL(aliveCheck_);
     return DataAvailable();
   }
+
   DataAvailable result;
-  result.callback = notify_;
-  result.sequence = notifySequence_;
-  auto data = getData(notifyMaxBytes_, notifySequence_, nullptr, nullptr);
-  result.data = std::move(data.data);
-  result.remainingBytes = std::move(data.remainingBytes);
+  {
+    std::shared_lock<std::shared_mutex> rLock(notifyMutex_);
+    result.callback = notify_;
+    result.sequence = notifySequence_;
+    auto data = getData(notifyMaxBytes_, notifySequence_, nullptr, nullptr);
+    result.data = std::move(data.data);
+    result.remainingBytes = std::move(data.remainingBytes);
+  }
   clearNotify();
   return result;
 }
 
 void DestinationBuffer::clearNotify() {
+  std::unique_lock<std::shared_mutex> wLock(notifyMutex_);
   notify_ = nullptr;
   aliveCheck_ = nullptr;
   notifySequence_ = 0;
@@ -220,21 +262,27 @@ void DestinationBuffer::clearNotify() {
 
 void DestinationBuffer::finish() {
   VELOX_CHECK_NULL(notify_, "notify must be cleared before finish");
-  VELOX_CHECK(data_.empty(), "data must be fetched before finish");
-  stats_.finished = true;
+  data_.withRLock([&](auto& data) {
+    VELOX_CHECK(data.empty(), "data must be fetched before finish");
+  });
+  finished_ = true;
 }
 
 void DestinationBuffer::maybeLoadData(ArbitraryBuffer* buffer) {
   VELOX_CHECK(!buffer->empty() || buffer->hasNoMoreData());
-  if (notify_ == nullptr) {
-    return;
+  {
+    std::shared_lock<std::shared_mutex> rLock(notifyMutex_);
+
+    if (notify_ == nullptr) {
+      return;
+    }
+    if (aliveCheck_ != nullptr && !aliveCheck_()) {
+      // Skip load data to an inactive destination buffer.
+      clearNotify();
+      return;
+    }
+    loadData(buffer, notifyMaxBytes_);
   }
-  if (aliveCheck_ != nullptr && !aliveCheck_()) {
-    // Skip load data to an inactive destination buffer.
-    clearNotify();
-    return;
-  }
-  loadData(buffer, notifyMaxBytes_);
 }
 
 void DestinationBuffer::loadData(ArbitraryBuffer* buffer, uint64_t maxBytes) {
@@ -244,67 +292,136 @@ void DestinationBuffer::loadData(ArbitraryBuffer* buffer, uint64_t maxBytes) {
   }
 }
 
+// std::vector<std::shared_ptr<SerializedPage>> DestinationBuffer::acknowledge(
+//     int64_t sequence,
+//     bool fromGetData) {
+//   const int64_t numDeleted = sequence - sequence_;
+//   if (numDeleted == 0 && fromGetData) {
+//     // If called from getData, it is expected that there will be
+//     // nothing to delete because a previous acknowledgement has been
+//     // received before the getData. This is not guaranteed though
+//     // because the messages may arrive out of order. Note that getData
+//     // implicitly acknowledges all messages with a lower sequence
+//     // number than the one in getData.
+//     return {};
+//   }
+//   if (numDeleted <= 0) {
+//     // Acknowledges come out of order, e.g. ack of 10 and 9 have
+//     // swapped places in flight.
+//     VLOG(1) << this << " Out of order ack: " << sequence << " over "
+//             << sequence_;
+//     return {};
+//   }
+//
+//   VELOX_CHECK_LE(
+//       numDeleted, data_.size(), "Ack received for a not yet produced item");
+//   std::vector<std::shared_ptr<SerializedPage>> freed;
+//   for (auto i = 0; i < numDeleted; ++i) {
+//     if (data_[i] == nullptr) {
+//       VELOX_CHECK_EQ(i, data_.size() - 1, "null marker found in the middle");
+//       break;
+//     }
+//     stats_.recordAcknowledge(*data_[i]);
+//     freed.push_back(std::move(data_[i]));
+//   }
+//   data_.erase(data_.begin(), data_.begin() + numDeleted);
+//   sequence_ += numDeleted;
+//   return freed;
+// }
+
 std::vector<std::shared_ptr<SerializedPage>> DestinationBuffer::acknowledge(
     int64_t sequence,
     bool fromGetData) {
-  const int64_t numDeleted = sequence - sequence_;
-  if (numDeleted == 0 && fromGetData) {
-    // If called from getData, it is expected that there will be
-    // nothing to delete because a previous acknowledgement has been
-    // received before the getData. This is not guaranteed though
-    // because the messages may arrive out of order. Note that getData
-    // implicitly acknowledges all messages with a lower sequence
-    // number than the one in getData.
-    return {};
-  }
-  if (numDeleted <= 0) {
-    // Acknowledges come out of order, e.g. ack of 10 and 9 have
-    // swapped places in flight.
-    VLOG(1) << this << " Out of order ack: " << sequence << " over "
-            << sequence_;
+  if (!validateSequenceNumber(sequence, fromGetData)) {
     return {};
   }
 
-  VELOX_CHECK_LE(
-      numDeleted, data_.size(), "Ack received for a not yet produced item");
   std::vector<std::shared_ptr<SerializedPage>> freed;
-  for (auto i = 0; i < numDeleted; ++i) {
-    if (data_[i] == nullptr) {
-      VELOX_CHECK_EQ(i, data_.size() - 1, "null marker found in the middle");
-      break;
+  data_.withWLock([&](auto& data) {
+    const int64_t numDeleted = sequence - sequence_;
+    for (auto i = 0; i < numDeleted; ++i) {
+      if (data[i] == nullptr) {
+        VELOX_CHECK_EQ(i, data.size() - 1, "null marker found in the middle");
+        break;
+      }
+      recordAcknowledge(*data[i]);
+      freed.push_back(std::move(data[i]));
     }
-    stats_.recordAcknowledge(*data_[i]);
-    freed.push_back(std::move(data_[i]));
-  }
-  data_.erase(data_.begin(), data_.begin() + numDeleted);
-  sequence_ += numDeleted;
+
+    data.erase(data.begin(), data.begin() + numDeleted);
+    sequence_ += numDeleted;
+  });
+
   return freed;
 }
 
 std::vector<std::shared_ptr<SerializedPage>>
 DestinationBuffer::deleteResults() {
   std::vector<std::shared_ptr<SerializedPage>> freed;
-  for (auto i = 0; i < data_.size(); ++i) {
-    if (data_[i] == nullptr) {
-      VELOX_CHECK_EQ(i, data_.size() - 1, "null marker found in the middle");
-      break;
+  data_.withWLock([&](auto& data) {
+    for (auto i = 0; i < data.size(); ++i) {
+      if (data[i] == nullptr) {
+        VELOX_CHECK_EQ(i, data.size() - 1, "null marker found in the middle");
+        break;
+      }
+      recordDelete(*data[i]);
+      freed.push_back(std::move(data[i]));
     }
-    stats_.recordDelete(*data_[i]);
-    freed.push_back(std::move(data_[i]));
-  }
-  data_.clear();
+
+    data.clear();
+  });
+
   return freed;
 }
 
 DestinationBuffer::Stats DestinationBuffer::stats() const {
-  return stats_;
+  //  return stats_;
+  return DestinationBuffer::Stats(
+      finished_,
+      bytesBuffered_,
+      rowsBuffered_,
+      pagesBuffered_,
+      bytesSent_,
+      rowsSent_,
+      pagesSent_);
 }
 
 std::string DestinationBuffer::toString() {
   std::stringstream out;
-  out << "[available: " << data_.size() << ", " << "sequence: " << sequence_
-      << ", " << (notify_ ? "notify registered, " : "") << this << "]";
+  data_.withRLock([&](auto& data) {
+    out << "[available: " << data.size() << ", " << "sequence: " << sequence_
+        << ", " << (notify_ ? "notify registered, " : "") << this << "]";
+  });
   return out.str();
+}
+
+bool DestinationBuffer::validateSequenceNumber(
+    const int64_t sequence,
+    bool fromGetData) {
+  if (sequence < sequence_ && fromGetData) {
+    // If called from getData, it is expected that there will be
+    // nothing to delete because a previous acknowledgement has been
+    // received before the getData. This is not guaranteed though
+    // because the messages may arrive out of order. Note that getData
+    // implicitly acknowledges all messages with a lower sequence
+    // number than the one in getData.
+    return false;
+  }
+
+  return data_.withRLock([&](auto& data) {
+    const int64_t numDeleted = sequence - sequence_;
+    if (numDeleted <= 0) {
+      // Acknowledges come out of order, e.g. ack of 10 and 9 have
+      // swapped places in flight.
+      VLOG(1) << this << " Out of order ack: " << sequence << " over "
+              << sequence_;
+      return false;
+    }
+
+    VELOX_CHECK_LE(
+        numDeleted, data.size(), "Ack received for a not yet produced item");
+    return true;
+  });
 }
 
 namespace {
@@ -335,39 +452,39 @@ OutputBuffer::OutputBuffer(
       arbitraryBuffer_(
           isArbitrary() ? std::make_unique<ArbitraryBuffer>() : nullptr),
       numDrivers_(numDrivers) {
-  buffers_.reserve(numDestinations);
-  for (int i = 0; i < numDestinations; i++) {
-    buffers_.push_back(std::make_unique<DestinationBuffer>());
-  }
+  buffers_.withWLock([&](auto& buffers) {
+    buffers.reserve(numDestinations);
+    for (int i = 0; i < numDestinations; i++) {
+      buffers.push_back(std::make_unique<DestinationBuffer>());
+    }
+  });
   finishedBufferStats_.resize(numDestinations);
+  if (isPartitioned()) {
+    noMoreBuffers_ = true;
+  }
 }
 
 void OutputBuffer::updateOutputBuffers(int numBuffers, bool noMoreBuffers) {
   if (isPartitioned()) {
-    VELOX_CHECK_EQ(buffers_.size(), numBuffers);
+    VELOX_CHECK_EQ(buffersSize(), numBuffers);
     VELOX_CHECK(noMoreBuffers);
     noMoreBuffers_ = true;
     return;
   }
 
-  std::vector<ContinuePromise> promises;
-  bool isFinished;
-  {
-    std::lock_guard<std::mutex> l(mutex_);
-
-    if (numBuffers > buffers_.size()) {
-      addOutputBuffersLocked(numBuffers);
-    }
-
-    if (!noMoreBuffers) {
-      return;
-    }
-
-    noMoreBuffers_ = true;
-    isFinished = isFinishedLocked();
-    updateAfterAcknowledgeLocked(dataToBroadcast_, promises);
+  if (numBuffers > buffersSize()) {
+    addOutputBuffersLocked(numBuffers);
   }
 
+  if (!noMoreBuffers) {
+    return;
+  }
+
+  noMoreBuffers_ = true;
+  bool isFinished = isFinishedLocked();
+
+  std::vector<ContinuePromise> promises;
+  updateAfterAcknowledgeLocked(dataToBroadcast_, promises);
   releaseAfterAcknowledge(dataToBroadcast_, promises);
   if (isFinished) {
     task_->setAllOutputConsumed();
@@ -377,7 +494,7 @@ void OutputBuffer::updateOutputBuffers(int numBuffers, bool noMoreBuffers) {
 void OutputBuffer::updateNumDrivers(uint32_t newNumDrivers) {
   bool isNoMoreDrivers{false};
   {
-    std::lock_guard<std::mutex> l(mutex_);
+    std::lock_guard<std::mutex> l(finishMutex_);
     numDrivers_ = newNumDrivers;
     // If we finished all drivers, ensure we register that we are 'done'.
     if (numDrivers_ == numFinished_) {
@@ -392,20 +509,23 @@ void OutputBuffer::updateNumDrivers(uint32_t newNumDrivers) {
 void OutputBuffer::addOutputBuffersLocked(int numBuffers) {
   VELOX_CHECK(!noMoreBuffers_);
   VELOX_CHECK(!isPartitioned());
-  buffers_.reserve(numBuffers);
-  for (int32_t i = buffers_.size(); i < numBuffers; ++i) {
-    auto buffer = std::make_unique<DestinationBuffer>();
-    if (isBroadcast()) {
-      for (const auto& data : dataToBroadcast_) {
-        buffer->enqueue(data);
+
+  buffers_.withWLock([&](auto& buffers) {
+    buffers.reserve(numBuffers);
+    for (int32_t i = buffers.size(); i < numBuffers; ++i) {
+      auto buffer = std::make_unique<DestinationBuffer>();
+      if (isBroadcast()) {
+        for (const auto& data : dataToBroadcast_) {
+          buffer->enqueue(data);
+        }
+        if (atEnd_) {
+          buffer->enqueue(nullptr);
+        }
       }
-      if (atEnd_) {
-        buffer->enqueue(nullptr);
-      }
+      buffers.emplace_back(std::move(buffer));
     }
-    buffers_.emplace_back(std::move(buffer));
-  }
-  finishedBufferStats_.resize(numBuffers);
+    finishedBufferStats_.resize(numBuffers);
+  });
 }
 
 void OutputBuffer::updateStatsWithEnqueuedPageLocked(
@@ -434,12 +554,15 @@ void OutputBuffer::updateStatsWithFreedPagesLocked(
 
 void OutputBuffer::updateTotalBufferedBytesMsLocked() {
   const auto nowMs = getCurrentTimeMs();
-  if (bufferedBytes_ > 0) {
-    const auto deltaMs = nowMs - bufferStartMs_;
-    totalBufferedBytesMs_ += bufferedBytes_ * deltaMs;
-  }
+  {
+    std::lock_guard<std::shared_mutex> l(bufferMsMutex_);
 
-  bufferStartMs_ = nowMs;
+    if (bufferedBytes_ > 0) {
+      const auto deltaMs = nowMs - bufferStartMs_;
+      totalBufferedBytesMs_ += bufferedBytes_ * deltaMs;
+    }
+    bufferStartMs_ = nowMs;
+  }
 }
 
 bool OutputBuffer::enqueue(
@@ -451,35 +574,37 @@ bool OutputBuffer::enqueue(
       task_->isRunning(), "Task is terminated, cannot add data to output.");
   std::vector<DataAvailable> dataAvailableCallbacks;
   bool blocked = false;
-  {
-    std::lock_guard<std::mutex> l(mutex_);
-    VELOX_CHECK_LT(destination, buffers_.size());
+  //  {
+  //    std::lock_guard<std::mutex> l(mutex_);
+  VELOX_CHECK_LT(destination, buffersSize());
 
-    updateStatsWithEnqueuedPageLocked(data->size(), data->numRows().value());
+  updateStatsWithEnqueuedPageLocked(data->size(), data->numRows().value());
 
-    switch (kind_) {
-      case PartitionedOutputNode::Kind::kBroadcast:
-        VELOX_CHECK_EQ(destination, 0, "Bad destination {}", destination);
-        enqueueBroadcastOutputLocked(std::move(data), dataAvailableCallbacks);
-        break;
-      case PartitionedOutputNode::Kind::kArbitrary:
-        VELOX_CHECK_EQ(destination, 0, "Bad destination {}", destination);
-        enqueueArbitraryOutputLocked(std::move(data), dataAvailableCallbacks);
-        break;
-      case PartitionedOutputNode::Kind::kPartitioned:
-        enqueuePartitionedOutputLocked(
-            destination, std::move(data), dataAvailableCallbacks);
-        break;
-      default:
-        VELOX_UNREACHABLE(PartitionedOutputNode::kindString(kind_));
-    }
-
-    if (bufferedBytes_ >= maxSize_ && future) {
-      promises_.emplace_back("OutputBuffer::enqueue");
-      *future = promises_.back().getSemiFuture();
-      blocked = true;
-    }
+  switch (kind_) {
+    case PartitionedOutputNode::Kind::kBroadcast:
+      VELOX_CHECK_EQ(destination, 0, "Bad destination {}", destination);
+      enqueueBroadcastOutputLocked(std::move(data), dataAvailableCallbacks);
+      break;
+    case PartitionedOutputNode::Kind::kArbitrary:
+      VELOX_CHECK_EQ(destination, 0, "Bad destination {}", destination);
+      enqueueArbitraryOutputLocked(std::move(data), dataAvailableCallbacks);
+      break;
+    case PartitionedOutputNode::Kind::kPartitioned:
+      enqueuePartitionedOutputLocked(
+          destination, std::move(data), dataAvailableCallbacks);
+      break;
+    default:
+      VELOX_UNREACHABLE(PartitionedOutputNode::kindString(kind_));
   }
+
+  if (bufferedBytes_ >= maxSize_ && future) {
+    promises_.withWLock([&future](auto& promises) {
+      promises.emplace_back("OutputBuffer::enqueue");
+      *future = promises.back().getSemiFuture();
+    });
+    blocked = true;
+  }
+  //  }
 
   // Outside mutex_.
   for (auto& callback : dataAvailableCallbacks) {
@@ -497,18 +622,17 @@ void OutputBuffer::enqueueBroadcastOutputLocked(
   VELOX_DCHECK(dataAvailableCbs.empty());
 
   std::shared_ptr<SerializedPage> sharedData(data.release());
-  for (auto& buffer : buffers_) {
-    if (buffer != nullptr) {
-      buffer->enqueue(sharedData);
-      dataAvailableCbs.emplace_back(buffer->getAndClearNotify());
+  buffers_.withRLock([&](auto& buffers) {
+    for (auto& buffer : buffers) {
+      if (buffer != nullptr) {
+        buffer->enqueue(sharedData);
+        dataAvailableCbs.emplace_back(buffer->getAndClearNotify());
+      }
     }
-  }
-
-  // NOTE: we don't need to add new buffer to 'dataToBroadcast_' if there is no
-  // more output buffers.
-  if (!noMoreBuffers_) {
-    dataToBroadcast_.emplace_back(sharedData);
-  }
+  });
+  // NOTE: we don't need to add new buffer to 'dataToBroadcast_' if there is
+  // no more output buffers.
+  dataToBroadcast_.emplace_back(sharedData);
 }
 
 void OutputBuffer::enqueueArbitraryOutputLocked(
@@ -520,21 +644,25 @@ void OutputBuffer::enqueueArbitraryOutputLocked(
   VELOX_CHECK(!arbitraryBuffer_->hasNoMoreData());
 
   arbitraryBuffer_->enqueue(std::move(data));
-  VELOX_CHECK_LT(nextArbitraryLoadBufferIndex_, buffers_.size());
-  int32_t bufferId = nextArbitraryLoadBufferIndex_;
-  for (int32_t i = 0; i < buffers_.size();
-       ++i, bufferId = (bufferId + 1) % buffers_.size()) {
-    if (arbitraryBuffer_->empty()) {
-      nextArbitraryLoadBufferIndex_ = bufferId;
-      break;
+
+  buffers_.withRLock([&](auto& buffers) {
+    VELOX_CHECK_LT(nextArbitraryLoadBufferIndex_, buffers.size());
+    int32_t bufferId = nextArbitraryLoadBufferIndex_;
+    for (int32_t i = 0; i < buffers.size();
+         ++i, bufferId = (bufferId + 1) % buffers.size()) {
+      if (arbitraryBuffer_->empty()) {
+        nextArbitraryLoadBufferIndex_ = bufferId;
+        break;
+      }
+
+      auto* buffer = buffers[bufferId].get();
+      if (buffer == nullptr) {
+        continue;
+      }
+      buffer->maybeLoadData(arbitraryBuffer_.get());
+      dataAvailableCbs.emplace_back(buffer->getAndClearNotify());
     }
-    auto* buffer = buffers_[bufferId].get();
-    if (buffer == nullptr) {
-      continue;
-    }
-    buffer->maybeLoadData(arbitraryBuffer_.get());
-    dataAvailableCbs.emplace_back(buffer->getAndClearNotify());
-  }
+  });
 }
 
 void OutputBuffer::enqueuePartitionedOutputLocked(
@@ -542,11 +670,11 @@ void OutputBuffer::enqueuePartitionedOutputLocked(
     std::unique_ptr<SerializedPage> data,
     std::vector<DataAvailable>& dataAvailableCbs) {
   VELOX_DCHECK(isPartitioned());
+  VELOX_DCHECK(noMoreBuffers_);
   VELOX_CHECK_NULL(arbitraryBuffer_);
   VELOX_DCHECK(dataAvailableCbs.empty());
 
-  VELOX_CHECK_LT(destination, buffers_.size());
-  auto* buffer = buffers_[destination].get();
+  DestinationBuffer* buffer = safeGetBuffer(destination);
   if (buffer != nullptr) {
     buffer->enqueue(std::move(data));
     dataAvailableCbs.emplace_back(buffer->getAndClearNotify());
@@ -568,9 +696,8 @@ void OutputBuffer::noMoreDrivers() {
 }
 
 void OutputBuffer::checkIfDone(bool oneDriverFinished) {
-  std::vector<DataAvailable> finished;
   {
-    std::lock_guard<std::mutex> l(mutex_);
+    std::lock_guard<std::mutex> l(finishMutex_);
     if (oneDriverFinished) {
       ++numFinished_;
     }
@@ -582,22 +709,28 @@ void OutputBuffer::checkIfDone(bool oneDriverFinished) {
     if (!atEnd_) {
       return;
     }
-    if (isArbitrary()) {
-      arbitraryBuffer_->noMoreData();
-      for (auto& buffer : buffers_) {
+  }
+
+  std::vector<DataAvailable> finished;
+  if (isArbitrary()) {
+    arbitraryBuffer_->noMoreData();
+    buffers_.withRLock([&](auto& buffers) {
+      for (auto& buffer : buffers) {
         if (buffer != nullptr) {
           buffer->maybeLoadData(arbitraryBuffer_.get());
           finished.push_back(buffer->getAndClearNotify());
         }
       }
-    } else {
-      for (auto& buffer : buffers_) {
+    });
+  } else {
+    buffers_.withRLock([&](auto& buffers) {
+      for (auto& buffer : buffers) {
         if (buffer != nullptr) {
           buffer->enqueue(nullptr);
           finished.push_back(buffer->getAndClearNotify());
         }
       }
-    }
+    });
   }
 
   // Notify outside of mutex.
@@ -607,7 +740,7 @@ void OutputBuffer::checkIfDone(bool oneDriverFinished) {
 }
 
 bool OutputBuffer::isFinished() {
-  std::lock_guard<std::mutex> l(mutex_);
+//  std::lock_guard<std::mutex> l(finishMutex_);
   return isFinishedLocked();
 }
 
@@ -617,35 +750,38 @@ bool OutputBuffer::isFinishedLocked() {
   if (isBroadcast() && !noMoreBuffers_) {
     return false;
   }
-  for (auto& buffer : buffers_) {
-    if (buffer != nullptr) {
-      return false;
+
+  bool isFinished = true;
+  buffers_.withRLock([&isFinished](auto& buffers) {
+    for (auto& buffer : buffers) {
+      if (buffer != nullptr) {
+        isFinished = false;
+        break;
+      }
     }
-  }
-  return true;
+  });
+  return isFinished;
 }
 
 void OutputBuffer::acknowledge(int destination, int64_t sequence) {
   std::vector<std::shared_ptr<SerializedPage>> freed;
   std::vector<ContinuePromise> promises;
-  {
-    std::lock_guard<std::mutex> l(mutex_);
-    VELOX_CHECK_LT(destination, buffers_.size());
-    auto* buffer = buffers_[destination].get();
-    if (!buffer) {
-      VLOG(1) << "Ack received after final ack for destination " << destination
-              << " and sequence " << sequence;
-      return;
-    }
-    freed = buffer->acknowledge(sequence, false);
-    updateAfterAcknowledgeLocked(freed, promises);
+
+  DestinationBuffer* buffer = safeGetBuffer(destination);
+  if (!buffer) {
+    VLOG(1) << "Ack received after final ack for destination " << destination
+            << " and sequence " << sequence;
+    return;
   }
+
+  freed = buffer->acknowledge(sequence, false);
+  updateAfterAcknowledgeLocked(freed, promises);
   releaseAfterAcknowledge(freed, promises);
 }
 
 void OutputBuffer::updateAfterAcknowledgeLocked(
     const std::vector<std::shared_ptr<SerializedPage>>& freed,
-    std::vector<ContinuePromise>& promises) {
+    std::vector<ContinuePromise>& updatedPromises) {
   uint64_t freedBytes{0};
   int freedPages{0};
   for (const auto& free : freed) {
@@ -663,7 +799,9 @@ void OutputBuffer::updateAfterAcknowledgeLocked(
   updateStatsWithFreedPagesLocked(freedPages, freedBytes);
 
   if (bufferedBytes_ < continueSize_) {
-    promises = std::move(promises_);
+    promises_.withWLock([&](auto& promises) {
+      updatedPromises = std::move(promises);
+    });
   }
 }
 
@@ -672,26 +810,27 @@ bool OutputBuffer::deleteResults(int destination) {
   std::vector<ContinuePromise> promises;
   bool isFinished;
   DataAvailable dataAvailable;
-  {
-    std::lock_guard<std::mutex> l(mutex_);
-    VELOX_CHECK_LT(destination, buffers_.size());
-    auto* buffer = buffers_[destination].get();
-    if (buffer == nullptr) {
-      VLOG(1) << "Extra delete received for destination " << destination;
-      return false;
-    }
-    freed = buffer->deleteResults();
-    dataAvailable = buffer->getAndClearNotify();
-    buffer->finish();
-    VELOX_CHECK_LT(destination, finishedBufferStats_.size());
-    finishedBufferStats_[destination] = buffers_[destination]->stats();
-    buffers_[destination] = nullptr;
-    ++numFinalAcknowledges_;
-    isFinished = isFinishedLocked();
-    updateAfterAcknowledgeLocked(freed, promises);
+
+  DestinationBuffer* buffer = safeGetBuffer(destination);
+  if (!buffer) {
+    VLOG(1) << "Extra delete received for destination " << destination;
+    return false;
   }
 
-  // Outside of mutex.
+  freed = buffer->deleteResults();
+  dataAvailable = buffer->getAndClearNotify();
+  buffer->finish();
+
+  buffers_.withWLock([&](auto& buffers) {
+    VELOX_CHECK_LT(destination, finishedBufferStats_.size());
+    finishedBufferStats_[destination] = buffer->stats();
+    buffers[destination] = nullptr;
+  });
+
+  ++numFinalAcknowledges_;
+  isFinished = isFinishedLocked();
+  updateAfterAcknowledgeLocked(freed, promises);
+
   dataAvailable.notify();
 
   if (!promises.empty()) {
@@ -714,27 +853,24 @@ void OutputBuffer::getData(
   DestinationBuffer::Data data;
   std::vector<std::shared_ptr<SerializedPage>> freed;
   std::vector<ContinuePromise> promises;
-  {
-    std::lock_guard<std::mutex> l(mutex_);
 
-    if (!isPartitioned() && destination >= buffers_.size()) {
-      addOutputBuffersLocked(destination + 1);
-    }
-
-    VELOX_CHECK_LT(destination, buffers_.size());
-    auto* buffer = buffers_[destination].get();
-    if (buffer) {
-      freed = buffer->acknowledge(sequence, true);
-      updateAfterAcknowledgeLocked(freed, promises);
-      data = buffer->getData(
-          maxBytes, sequence, notify, activeCheck, arbitraryBuffer_.get());
-    } else {
-      data.data.emplace_back(nullptr);
-      data.immediate = true;
-      VLOG(1) << "getData received after deleteResults for destination "
-              << destination << " and sequence " << sequence;
-    }
+  if (!isPartitioned() && destination >= buffersSize()) {
+    addOutputBuffersLocked(destination + 1);
   }
+
+  auto* buffer = safeGetBuffer(destination);
+  if (buffer) {
+    freed = buffer->acknowledge(sequence, true);
+    updateAfterAcknowledgeLocked(freed, promises);
+    data = buffer->getData(
+        maxBytes, sequence, notify, activeCheck, arbitraryBuffer_.get());
+  } else {
+    data.data.emplace_back(nullptr);
+    data.immediate = true;
+    VLOG(1) << "getData received after deleteResults for destination "
+            << destination << " and sequence " << sequence;
+  }
+
   releaseAfterAcknowledge(freed, promises);
   if (data.immediate) {
     notify(std::move(data.data), sequence, std::move(data.remainingBytes));
@@ -745,35 +881,47 @@ void OutputBuffer::terminate() {
   VELOX_CHECK(!task_->isRunning());
 
   std::vector<ContinuePromise> outstandingPromises;
-  {
-    std::lock_guard<std::mutex> l(mutex_);
-    outstandingPromises.swap(promises_);
-  }
+  promises_.withWLock(
+      [&](auto& promises) { outstandingPromises.swap(promises); });
+
   for (auto& promise : outstandingPromises) {
     promise.setValue();
   }
 }
 
 std::string OutputBuffer::toString() {
-  std::lock_guard<std::mutex> l(mutex_);
+//  std::lock_guard<std::mutex> l(finishMutex_);
   return toStringLocked();
 }
 
 std::string OutputBuffer::toStringLocked() const {
   std::stringstream out;
-  out << "[OutputBuffer[" << kind_ << "] bufferedBytes_=" << bufferedBytes_
-      << "b, num producers blocked=" << promises_.size()
-      << ", completed=" << numFinished_ << "/" << numDrivers_ << ", "
-      << (atEnd_ ? "at end, " : "") << "destinations: " << std::endl;
-  for (auto i = 0; i < buffers_.size(); ++i) {
-    auto buffer = buffers_[i].get();
-    out << i << ": " << (buffer ? buffer->toString() : "none") << std::endl;
-  }
-  if (isArbitrary()) {
-    out << arbitraryBuffer_->toString();
-  }
+  promises_.withRLock([&](auto& promises) {
+    buffers_.withRLock([&](auto& buffers) {
+      out << "[OutputBuffer[" << kind_ << "] bufferedBytes_=" << bufferedBytes_
+          << "b, num producers blocked=" << promises.size()
+          << ", completed=" << numFinished_ << "/" << numDrivers_ << ", "
+          << (atEnd_ ? "at end, " : "") << "destinations: " << std::endl;
+      for (auto i = 0; i < buffers.size(); ++i) {
+        auto buffer = buffers[i].get();
+        out << i << ": " << (buffer ? buffer->toString() : "none") << std::endl;
+      }
+      if (isArbitrary()) {
+        out << arbitraryBuffer_->toString();
+      }
+    });
+  });
   out << "]" << std::endl;
   return out.str();
+}
+
+DestinationBuffer* OutputBuffer::safeGetBuffer(int destination) {
+  DestinationBuffer* buffer = nullptr;
+  buffers_.withRLock([&](auto& buffers) {
+    VELOX_CHECK_LT(destination, buffers.size());
+    buffer = buffers[destination].get();
+  });
+  return buffer;
 }
 
 double OutputBuffer::getUtilization() const {
@@ -784,16 +932,18 @@ bool OutputBuffer::isOverutilized() const {
   return (bufferedBytes_ > (0.5 * maxSize_)) || atEnd_;
 }
 
-int64_t OutputBuffer::getAverageBufferTimeMsLocked() const {
-  if (numOutputBytes_ > 0) {
-    return totalBufferedBytesMs_ / numOutputBytes_;
-  }
+int64_t OutputBuffer::getAverageBufferTimeMsLocked() {
+  {
+    std::shared_lock<std::shared_mutex> l(bufferMsMutex_);
+    if (numOutputBytes_ > 0) {
+      return totalBufferedBytesMs_ / numOutputBytes_;
+    }
 
-  return 0;
+    return 0;
+  }
 }
 
 namespace {
-
 // Find out how many buffers hold 80% of the data. Useful to identify skew.
 int32_t countTopBuffers(
     const std::vector<DestinationBuffer::Stats>& bufferStats,
@@ -826,18 +976,21 @@ int32_t countTopBuffers(
 } // namespace
 
 OutputBuffer::Stats OutputBuffer::stats() {
-  std::lock_guard<std::mutex> l(mutex_);
+//  std::lock_guard<std::mutex> l(mutex_);
   std::vector<DestinationBuffer::Stats> bufferStats;
-  VELOX_CHECK_EQ(buffers_.size(), finishedBufferStats_.size());
-  bufferStats.resize(buffers_.size());
-  for (auto i = 0; i < buffers_.size(); ++i) {
-    auto buffer = buffers_[i].get();
-    if (buffer != nullptr) {
-      bufferStats[i] = buffer->stats();
-    } else {
-      bufferStats[i] = finishedBufferStats_[i];
+
+  buffers_.withRLock([&](auto& buffers) {
+    VELOX_CHECK_EQ(buffers.size(), finishedBufferStats_.size());
+    bufferStats.resize(buffers.size());
+    for (auto i = 0; i < buffers.size(); ++i) {
+      auto buffer = buffers[i].get();
+      if (buffer != nullptr) {
+        bufferStats[i] = buffer->stats();
+      } else {
+        bufferStats[i] = finishedBufferStats_[i];
+      }
     }
-  }
+  });
 
   updateTotalBufferedBytesMsLocked();
 
@@ -846,13 +999,13 @@ OutputBuffer::Stats OutputBuffer::stats() {
       noMoreBuffers_,
       atEnd_,
       isFinishedLocked(),
-      bufferedBytes_,
-      bufferedPages_,
-      numOutputBytes_,
-      numOutputRows_,
-      numOutputPages_,
+      bufferedBytes_.load(),
+      bufferedPages_.load(),
+      numOutputBytes_.load(),
+      numOutputRows_.load(),
+      numOutputPages_.load(),
       getAverageBufferTimeMsLocked(),
-      countTopBuffers(bufferStats, numOutputBytes_),
+      countTopBuffers(bufferStats, numOutputBytes_.load()),
       bufferStats);
 }
 
