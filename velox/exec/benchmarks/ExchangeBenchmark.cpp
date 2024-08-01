@@ -41,6 +41,8 @@ DEFINE_int64(
     "task-wide buffer in local exchange");
 DEFINE_int64(exchange_buffer_mb, 32, "task-wide buffer in remote exchange");
 DEFINE_int32(dict_pct, 0, "Percentage of columns wrapped in dictionary");
+DEFINE_bool(gtest_color, false, "");
+DEFINE_string(gtest_filter, "*", "");
 
 /// Benchmarks repartition/exchange with different batch sizes,
 /// numbers of destinations and data type mixes.  Generates a plan
