@@ -41,6 +41,8 @@ DEFINE_int64(
     "task-wide buffer in local exchange");
 DEFINE_int64(exchange_buffer_mb, 32, "task-wide buffer in remote exchange");
 DEFINE_int32(dict_pct, 0, "Percentage of columns wrapped in dictionary");
+DEFINE_bool(gtest_color, false, "");
+DEFINE_string(gtest_filter, "*", "");
 
 /// Benchmarks repartition/exchange with different batch sizes,
 /// numbers of destinations and data type mixes.  Generates a plan
@@ -60,8 +62,8 @@ struct Counters {
   int64_t bytes{0};
   int64_t rows{0};
   int64_t usec{0};
-  int64_t repartitionNanos{0};
-  int64_t exchangeNanos{0};
+  int64_t repartitionCpuNanos{0};
+  int64_t exchangeCpuNanos{0};
   int64_t exchangeRows{0};
   int64_t exchangeBatches{0};
 
@@ -72,8 +74,8 @@ struct Counters {
     return fmt::format(
         "{}/s repartition={} exchange={} exchange batch={}",
         succinctBytes(bytes / (usec / 1.0e6)),
-        succinctNanos(repartitionNanos),
-        succinctNanos(exchangeNanos),
+        succinctNanos(repartitionCpuNanos),
+        succinctNanos(exchangeCpuNanos),
         exchangeRows / exchangeBatches);
   }
 };
@@ -164,8 +166,8 @@ class ExchangeBenchmark : public VectorTestBase {
         .assertResults(expected);
     auto elapsed = getCurrentTimeMicro() - startMicros;
     int64_t bytes = 0;
-    int64_t repartitionNanos = 0;
-    int64_t exchangeNanos = 0;
+    int64_t repartitionCpuNanos = 0;
+    int64_t exchangeCpuNanos = 0;
     int64_t exchangeBatches = 0;
     int64_t exchangeRows = 0;
     for (auto& task : tasks) {
@@ -173,13 +175,13 @@ class ExchangeBenchmark : public VectorTestBase {
       for (auto& pipeline : stats.pipelineStats) {
         for (auto& op : pipeline.operatorStats) {
           if (op.operatorType == "PartitionedOutput") {
-            repartitionNanos +=
+            repartitionCpuNanos +=
                 op.addInputTiming.cpuNanos + op.getOutputTiming.cpuNanos;
           } else if (op.operatorType == "Exchange") {
             bytes += op.rawInputBytes;
             exchangeRows += op.outputPositions;
             exchangeBatches += op.outputVectors;
-            exchangeNanos +=
+            exchangeCpuNanos +=
                 op.addInputTiming.cpuNanos + op.getOutputTiming.cpuNanos;
           }
         }
@@ -189,8 +191,8 @@ class ExchangeBenchmark : public VectorTestBase {
     counters.bytes += bytes;
     counters.rows += width * vectors.size() * vectors[0]->size();
     counters.usec += elapsed;
-    counters.repartitionNanos += repartitionNanos;
-    counters.exchangeNanos += exchangeNanos;
+    counters.repartitionCpuNanos += repartitionCpuNanos;
+    counters.exchangeCpuNanos += exchangeCpuNanos;
     counters.exchangeRows += exchangeRows;
     counters.exchangeBatches += exchangeBatches;
   }

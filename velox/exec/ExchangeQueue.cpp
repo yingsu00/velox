@@ -97,10 +97,10 @@ std::vector<std::unique_ptr<SerializedPage>> ExchangeQueue::dequeueLocked(
     uint32_t maxBytes,
     bool* atEnd,
     ContinueFuture* future) {
-  VELOX_CHECK_NOT_NULL(future);
+  VELOX_CHECK_NOT_NULL(future, "ExchangeQueue::dequeueLocked future is null");
   if (!error_.empty()) {
     *atEnd = true;
-    VELOX_FAIL(error_);
+    VELOX_FAIL(error_, "ExchangeQueue::dequeueLocked error_:", error_);
   }
 
   *atEnd = false;
@@ -128,7 +128,7 @@ std::vector<std::unique_ptr<SerializedPage>> ExchangeQueue::dequeueLocked(
     totalBytes_ -= pages.back()->size();
   }
 
-  VELOX_UNREACHABLE();
+  VELOX_UNREACHABLE("ExchangeQueue::dequeueLocked VELOX_UNREACHABLE");
 }
 
 void ExchangeQueue::setError(const std::string& error) {
