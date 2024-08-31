@@ -77,18 +77,6 @@ std::optional<column_index_t> getIdentityProjection(
   return std::nullopt;
 }
 
-void validateOperatorResult(RowVectorPtr& result, Operator& op) {
-  try {
-    result->validate({});
-  } catch (const std::exception& e) {
-    VELOX_FAIL(
-        "Output validation failed for [operator: {}, plan node ID: {}]: {}",
-        op.operatorType(),
-        op.planNodeId(),
-        e.what());
-  }
-}
-
 thread_local DriverThreadContext* driverThreadCtx{nullptr};
 
 void recordSilentThrows(Operator& op) {
@@ -98,17 +86,17 @@ void recordSilentThrows(Operator& op) {
         "numSilentThrow", RuntimeCounter(numThrow));
   }
 }
-
-// Check whether the future is set by isBlocked method.
-inline void checkIsBlockFutureValid(
-    const Operator* op,
-    const ContinueFuture& future) {
-  VELOX_CHECK(
-      future.valid(),
-      "The operator {} is blocked but blocking future is not "
-      "set by isBlocked method.",
-      op->operatorType());
-}
+//
+//// Check whether the future is set by isBlocked method.
+// inline void checkIsBlockFutureValid(
+//     const Operator* op,
+//     const ContinueFuture& future) {
+//   VELOX_CHECK(
+//       future.valid(),
+//       "The operator {} is blocked but blocking future is not "
+//       "set by isBlocked method.",
+//       op->operatorType());
+// }
 
 // Used to generate context for exceptions that are thrown while executing an
 // operator. Eg output: 'Operator: FilterProject(1) PlanNodeId: 1 TaskId:
@@ -514,15 +502,8 @@ StopReason Driver::runInternal(
       // ctx_ still has a reference to the Task. 'this' is not on
       // thread from the Task's viewpoint, hence no need to call
       // close().
-      ctx_->task->setError(std::make_exception_ptr(VeloxRuntimeError(
-          __FILE__,
-          __LINE__,
-          __FUNCTION__,
-          "",
-          "Cancelled",
-          error_source::kErrorSourceRuntime,
-          error_code::kInvalidState,
-          false)));
+      ctx_->task->setError(
+          makeException("Cancelled", __FILE__, __LINE__, __FUNCTION__));
     }
     return stop;
   }
@@ -540,15 +521,8 @@ StopReason Driver::runInternal(
   CancelGuard guard(task().get(), &state_, [&](StopReason reason) {
     // This is run on error or cancel exit.
     if (reason == StopReason::kTerminate) {
-      task()->setError(std::make_exception_ptr(VeloxRuntimeError(
-          __FILE__,
-          __LINE__,
-          __FUNCTION__,
-          "",
-          "Cancelled",
-          error_source::kErrorSourceRuntime,
-          error_code::kInvalidState,
-          false)));
+      ctx_->task->setError(
+          makeException("Cancelled", __FILE__, __LINE__, __FUNCTION__));
     }
     close();
   });
@@ -591,13 +565,9 @@ StopReason Driver::runInternal(
           // for the current running arbitration, it is more efficient
           // system-wide to let driver go off thread for the other queries which
           // have free memory capacity to run during the time.
-          blockedOperatorId_ = curOperatorId_ + 1;
-          VELOX_CHECK(future.valid());
           blockingReason_ = BlockingReason::kWaitForArbitration;
-          blockingState = std::make_shared<BlockingState>(
-              self, std::move(future), op, blockingReason_);
           guard.notThrown();
-          return StopReason::kBlock;
+          return blockDriver(self, op, std::move(future), blockingState);
         }
 
         CALL_OPERATOR(
@@ -606,12 +576,8 @@ StopReason Driver::runInternal(
             curOperatorId_,
             kOpMethodIsBlocked);
         if (blockingReason_ != BlockingReason::kNotBlocked) {
-          blockedOperatorId_ = curOperatorId_;
-          checkIsBlockFutureValid(op, future);
-          blockingState = std::make_shared<BlockingState>(
-              self, std::move(future), op, blockingReason_);
           guard.notThrown();
-          return StopReason::kBlock;
+          return blockDriver(self, op, std::move(future), blockingState);
         }
 
         if (i < numOperators - 1) {
@@ -623,12 +589,8 @@ StopReason Driver::runInternal(
               curOperatorId_ + 1,
               kOpMethodIsBlocked);
           if (blockingReason_ != BlockingReason::kNotBlocked) {
-            blockedOperatorId_ = curOperatorId_ + 1;
-            checkIsBlockFutureValid(nextOp, future);
-            blockingState = std::make_shared<BlockingState>(
-                self, std::move(future), nextOp, blockingReason_);
             guard.notThrown();
-            return StopReason::kBlock;
+            return blockDriver(self, op, std::move(future), blockingState);
           }
 
           bool needsInput;
@@ -651,14 +613,7 @@ StopReason Driver::runInternal(
                     curOperatorId_,
                     kOpMethodGetOutput);
                 if (intermediateResult) {
-                  VELOX_CHECK(
-                      intermediateResult->size() > 0,
-                      "Operator::getOutput() must return nullptr or "
-                      "a non-empty vector: {}",
-                      op->operatorType());
-                  if (ctx_->queryConfig().validateOutputFromOperators()) {
-                    validateOperatorResult(intermediateResult, *op);
-                  }
+                  validateOperatorResult(intermediateResult, *op);
                   resultBytes = intermediateResult->estimateFlatSize();
                   {
                     auto lockedStats = op->stats().wlock();
@@ -709,12 +664,8 @@ StopReason Driver::runInternal(
                   curOperatorId_,
                   kOpMethodIsBlocked);
               if (blockingReason_ != BlockingReason::kNotBlocked) {
-                blockedOperatorId_ = curOperatorId_;
-                checkIsBlockFutureValid(op, future);
-                blockingState = std::make_shared<BlockingState>(
-                    self, std::move(future), op, blockingReason_);
                 guard.notThrown();
-                return StopReason::kBlock;
+                return blockDriver(self, op, std::move(future), blockingState);
               }
               bool finished{false};
               CALL_OPERATOR(
@@ -750,14 +701,8 @@ StopReason Driver::runInternal(
                 curOperatorId_,
                 kOpMethodGetOutput);
             if (result) {
-              VELOX_CHECK(
-                  result->size() > 0,
-                  "Operator::getOutput() must return nullptr or "
-                  "a non-empty vector: {}",
-                  op->operatorType());
-              if (ctx_->queryConfig().validateOutputFromOperators()) {
-                validateOperatorResult(result, *op);
-              }
+              validateOperatorResult(result, *op);
+
               {
                 auto lockedStats = op->stats().wlock();
                 lockedStats->addOutputVector(
@@ -1100,6 +1045,44 @@ auto Driver::withDeltaCpuWallTimer(
       : nullptr;
 
   return timedFunction();
+}
+
+void Driver::validateOperatorResult(
+    const RowVectorPtr& result,
+    const Operator& op) {
+  VELOX_CHECK(
+      result->size() > 0,
+      "Operator::getOutput() must return nullptr or a non-empty vector: {}",
+      op.operatorType());
+
+  if (ctx_->queryConfig().validateOutputFromOperators()) {
+    try {
+      result->validate({});
+    } catch (const std::exception& e) {
+      VELOX_FAIL(
+          "Output validation failed for [operator: {}, plan node ID: {}]: {}",
+          op.operatorType(),
+          op.planNodeId(),
+          e.what());
+    }
+  }
+}
+
+StopReason Driver::blockDriver(
+    const std::shared_ptr<Driver>& self,
+    Operator* op,
+    ContinueFuture&& future,
+    std::shared_ptr<BlockingState>& blockingState) {
+  VELOX_CHECK(
+      future.valid(),
+      "The operator {} is blocked but blocking future is not "
+      "set by isBlocked method.",
+      op->operatorType());
+
+  blockedOperatorId_ = curOperatorId_ + 1;
+  blockingState = std::make_shared<BlockingState>(
+      self, std::move(future), op, blockingReason_);
+  return StopReason::kBlock;
 }
 
 SuspendedSection::SuspendedSection(Driver* driver) : driver_(driver) {

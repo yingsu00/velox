@@ -511,6 +511,32 @@ class Driver : public std::enable_shared_from_this<Driver> {
   // but these do not bias the op's timing.
   CpuWallTiming processLazyTiming(Operator& op, const CpuWallTiming& timing);
 
+  std::exception_ptr makeException(
+      const std::string& message,
+      const char* file,
+      int line,
+      const char* function) {
+    return std::make_exception_ptr(VeloxRuntimeError(
+        file,
+        line,
+        function,
+        "",
+        message,
+        error_source::kErrorSourceRuntime,
+        error_code::kInvalidState,
+        false));
+  }
+
+  inline void validateOperatorResult(
+      const RowVectorPtr& result,
+      const Operator& op);
+
+  inline StopReason blockDriver(
+      const std::shared_ptr<Driver>& self,
+      Operator* op,
+      ContinueFuture&& future,
+      std::shared_ptr<BlockingState>& blockingState);
+
   std::unique_ptr<DriverCtx> ctx_;
 
   // If not zero, specifies the driver cpu time slice.
