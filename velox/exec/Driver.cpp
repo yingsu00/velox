@@ -570,11 +570,14 @@ StopReason Driver::runInternal(
           return blockDriver(self, op, std::move(future), blockingState);
         }
 
-        CALL_OPERATOR(
-            blockingReason_ = op->isBlocked(&future),
-            op,
-            curOperatorId_,
-            kOpMethodIsBlocked);
+        withDeltaCpuWallTimer(op, &OperatorStats::isBlockedTiming, [&]() {
+          CALL_OPERATOR(
+              blockingReason_ = op->isBlocked(&future),
+              op,
+              curOperatorId_,
+              kOpMethodIsBlocked);
+        });
+
         if (blockingReason_ != BlockingReason::kNotBlocked) {
           guard.notThrown();
           return blockDriver(self, op, std::move(future), blockingState);
@@ -583,11 +586,13 @@ StopReason Driver::runInternal(
         if (i < numOperators - 1) {
           Operator* nextOp = operators_[i + 1].get();
 
-          CALL_OPERATOR(
-              blockingReason_ = nextOp->isBlocked(&future),
-              nextOp,
-              curOperatorId_ + 1,
-              kOpMethodIsBlocked);
+          withDeltaCpuWallTimer(op, &OperatorStats::isBlockedTiming, [&]() {
+            CALL_OPERATOR(
+                blockingReason_ = nextOp->isBlocked(&future),
+                nextOp,
+                curOperatorId_ + 1,
+                kOpMethodIsBlocked);
+          });
           if (blockingReason_ != BlockingReason::kNotBlocked) {
             guard.notThrown();
             return blockDriver(self, op, std::move(future), blockingState);
@@ -658,21 +663,25 @@ StopReason Driver::runInternal(
               // is not blocked and empty, this is finished. If this is
               // not the source, just try to get output from the one
               // before.
-              CALL_OPERATOR(
-                  blockingReason_ = op->isBlocked(&future),
-                  op,
-                  curOperatorId_,
-                  kOpMethodIsBlocked);
+              withDeltaCpuWallTimer(op, &OperatorStats::isBlockedTiming, [&]() {
+                CALL_OPERATOR(
+                    blockingReason_ = op->isBlocked(&future),
+                    op,
+                    curOperatorId_,
+                    kOpMethodIsBlocked);
+              });
               if (blockingReason_ != BlockingReason::kNotBlocked) {
                 guard.notThrown();
                 return blockDriver(self, op, std::move(future), blockingState);
               }
               bool finished{false};
-              CALL_OPERATOR(
-                  finished = op->isFinished(),
-                  op,
-                  curOperatorId_,
-                  kOpMethodIsFinished);
+              withDeltaCpuWallTimer(op, &OperatorStats::finishTiming, [&]() {
+                CALL_OPERATOR(
+                    finished = op->isFinished(),
+                    op,
+                    curOperatorId_,
+                    kOpMethodIsFinished);
+              });
               if (finished) {
                 withDeltaCpuWallTimer(
                     op, &OperatorStats::finishTiming, [this, &nextOp]() {
@@ -719,11 +728,13 @@ StopReason Driver::runInternal(
           }
 
           bool finished{false};
-          CALL_OPERATOR(
-              finished = op->isFinished(),
-              op,
-              curOperatorId_,
-              kOpMethodIsFinished);
+          withDeltaCpuWallTimer(op, &OperatorStats::finishTiming, [&]() {
+            CALL_OPERATOR(
+                finished = op->isFinished(),
+                op,
+                curOperatorId_,
+                kOpMethodIsFinished);
+          });
           if (finished) {
             guard.notThrown();
             close();

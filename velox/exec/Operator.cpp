@@ -475,6 +475,8 @@ void OperatorStats::add(const OperatorStats& other) {
 
   finishTiming.add(other.finishTiming);
 
+  isBlockedTiming.add(other.isBlockedTiming);
+
   backgroundTiming.add(other.backgroundTiming);
 
   memoryStats.add(other.memoryStats);
