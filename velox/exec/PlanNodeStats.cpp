@@ -19,6 +19,64 @@
 
 namespace facebook::velox::exec {
 
+PlanNodeStats& PlanNodeStats::operator+=(const PlanNodeStats& another)  {
+  inputRows += another.inputPositions;
+  inputBytes += another.inputBytes;
+  inputVectors += another.inputVectors;
+
+  rawInputRows += another.rawInputPositions;
+  rawInputBytes += another.rawInputBytes;
+
+  dynamicFilterStats.add(another.dynamicFilterStats);
+
+  outputRows += another.outputPositions;
+  outputBytes += another.outputBytes;
+  outputVectors += another.outputVectors;
+
+  addInputTiming.add(another.addInputTiming);
+  getOutputTiming.add(another.getOutputTiming);
+  finishTiming.add(another.finishTiming);
+  cpuWallTiming.add(another.addInputTiming);
+  cpuWallTiming.add(another.getOutputTiming);
+  cpuWallTiming.add(another.finishTiming);
+  cpuWallTiming.add(another.isBlockedTiming);
+
+  backgroundTiming.add(another.backgroundTiming);
+
+  blockedWallNanos += another.blockedWallNanos;
+
+  peakMemoryBytes += another.memoryStats.peakTotalMemoryReservation;
+  numMemoryAllocations += another.memoryStats.numMemoryAllocations;
+
+  physicalWrittenBytes += another.physicalWrittenBytes;
+
+  for (const auto& [name, runtimeStats] : another.runtimeStats) {
+    if (UNLIKELY(customStats.count(name) == 0)) {
+      customStats.insert(std::make_pair(name, runtimeStats));
+    } else {
+      customStats.at(name).merge(runtimeStats);
+    }
+  }
+
+  // Populating number of drivers for plan nodes with multiple operators is not
+  // useful. Each operator could have been executed in different pipelines with
+  // different number of drivers.
+  if (!isMultiOperatorTypeNode()) {
+    numDrivers += stats.numDrivers;
+  } else {
+    numDrivers = 0;
+  }
+
+  numSplits += stats.numSplits;
+
+  spilledInputBytes += stats.spilledInputBytes;
+  spilledBytes += stats.spilledBytes;
+  spilledRows += stats.spilledRows;
+  spilledPartitions += stats.spilledPartitions;
+  spilledFiles += stats.spilledFiles;
+}
+}
+
 void PlanNodeStats::add(const OperatorStats& stats) {
   auto it = operatorStats.find(stats.operatorType);
   if (it != operatorStats.end()) {
