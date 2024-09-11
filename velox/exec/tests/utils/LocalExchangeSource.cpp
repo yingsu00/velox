@@ -67,12 +67,7 @@ class LocalExchangeSource : public exec::ExchangeSource {
     auto resultCallback = [self, requestedSequence, buffers, this](
                               std::vector<std::unique_ptr<folly::IOBuf>> data,
                               int64_t sequence,
-                              std::vector<int64_t> remainingBytes) {
-      //        VLOG(0) << "LocalExchangeSource::request resultCallback got
-      //        result."  << " taskId_: " << taskId_
-      //                        << " sequence:" << sequence << " data.size() : "
-      //                        << data.size()
-      //         << " remainingBytes.size()" << remainingBytes.size();
+                              int64_t remainingBytes) {
       {
         std::lock_guard<std::mutex> l(mutex_);
         // This function is called either for a result or timeout. Only the
@@ -246,7 +241,7 @@ class LocalExchangeSource : public exec::ExchangeSource {
   using ResultCallback = std::function<void(
       std::vector<std::unique_ptr<folly::IOBuf>> data,
       int64_t sequence,
-      std::vector<int64_t> remainingBytes)>;
+      int64_t remainingBytes)>;
 
   static void registerTimeout(
       const std::shared_ptr<ExchangeSource>& self,

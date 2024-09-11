@@ -155,7 +155,7 @@ ExchangeClient::next(uint32_t maxBytes, bool* atEnd, ContinueFuture* future) {
 void ExchangeClient::request(std::vector<RequestSpec>&& requestSpecs) {
   auto self = shared_from_this();
   for (auto& spec : requestSpecs) {
-//    VLOG(1) << " ExchangeClient::request " << spec.toString();
+    //    VLOG(1) << " ExchangeClient::request " << spec.toString();
 
     auto future = folly::SemiFuture<ExchangeSource::Response>::makeEmpty();
     if (spec.maxBytes == 0) {
@@ -192,13 +192,12 @@ void ExchangeClient::request(std::vector<RequestSpec>&& requestSpecs) {
               return;
             }
             if (!response.atEnd) {
-              if (!response.remainingBytes.empty()) {
-                for (auto bytes : response.remainingBytes) {
-                  VELOX_CHECK_GT(bytes, 0);
-                }
+              if (response.remainingBytes > 0) {
+                //                for (auto bytes : response.remainingBytes) {
+                //                  VELOX_CHECK_GT(bytes, 0);
+                //                }
                 self->producingSources_.push(
-                    {std::move(spec.source),
-                     std::move(response.remainingBytes)});
+                    {std::move(spec.source), response.remainingBytes});
               } else {
                 self->emptySources_.push(std::move(spec.source));
               }
@@ -225,6 +224,56 @@ void ExchangeClient::request(std::vector<RequestSpec>&& requestSpecs) {
   }
 }
 
+//std::vector<ExchangeClient::RequestSpec>
+//ExchangeClient::pickSourcesToRequestLocked() {
+//  if (closed_) {
+//    return {};
+//  }
+//  std::vector<RequestSpec> requestSpecs;
+//  while (!emptySources_.empty()) {
+//    auto& source = emptySources_.front();
+//    VELOX_CHECK(source->shouldRequestLocked());
+//    requestSpecs.push_back({std::move(source), 0});
+//    emptySources_.pop();
+//  }
+//  int64_t availableSpace =
+//      maxQueuedBytes_ - queue_->totalBytes() - totalPendingBytes_;
+//  while (availableSpace > 0 && !producingSources_.empty()) {
+//    auto& source = producingSources_.front().source;
+//    int64_t requestBytes = 0;
+//    for (auto bytes : producingSources_.front().remainingBytes) {
+//      availableSpace -= bytes;
+//      if (availableSpace < 0) {
+//        break;
+//      }
+//      requestBytes += bytes;
+//    }
+//    if (requestBytes == 0) {
+//      VELOX_CHECK_LT(availableSpace, 0);
+//      break;
+//    }
+//    VELOX_CHECK(source->shouldRequestLocked());
+//    requestSpecs.push_back({std::move(source), requestBytes});
+//    producingSources_.pop();
+//    totalPendingBytes_ += requestBytes;
+//  }
+//  if (queue_->totalBytes() == 0 && totalPendingBytes_ == 0 &&
+//      !producingSources_.empty()) {
+//    // We have full capacity but still cannot initiate one single data
+//    transfer.
+//        // Let the transfer happen in this case to avoid getting stuck.
+//        auto& source = producingSources_.front().source;
+//    auto requestBytes = producingSources_.front().remainingBytes.at(0);
+//    LOG(INFO) << "Requesting large single page " << requestBytes
+//              << " bytes, exceeding capacity " << maxQueuedBytes_;
+//    VELOX_CHECK(source->shouldRequestLocked());
+//    requestSpecs.push_back({std::move(source), requestBytes});
+//    producingSources_.pop();
+//    totalPendingBytes_ += requestBytes;
+//  }
+//  return requestSpecs;
+//}
+
 std::vector<ExchangeClient::RequestSpec>
 ExchangeClient::pickSourcesToRequestLocked() {
   if (closed_) {
@@ -237,40 +286,21 @@ ExchangeClient::pickSourcesToRequestLocked() {
     requestSpecs.push_back({std::move(source), 0});
     emptySources_.pop();
   }
+
   int64_t availableSpace =
       maxQueuedBytes_ - queue_->totalBytes() - totalPendingBytes_;
   while (availableSpace > 0 && !producingSources_.empty()) {
+    auto& remainingBytes = producingSources_.front().remainingBytes;
+    int64_t requestBytes = std::min(availableSpace, remainingBytes);
+    totalPendingBytes_ += requestBytes;
+    availableSpace -= requestBytes;
+
     auto& source = producingSources_.front().source;
-    int64_t requestBytes = 0;
-    for (auto bytes : producingSources_.front().remainingBytes) {
-      availableSpace -= bytes;
-      if (availableSpace < 0) {
-        break;
-      }
-      requestBytes += bytes;
-    }
-    if (requestBytes == 0) {
-      VELOX_CHECK_LT(availableSpace, 0);
-      break;
-    }
     VELOX_CHECK(source->shouldRequestLocked());
     requestSpecs.push_back({std::move(source), requestBytes});
     producingSources_.pop();
-    totalPendingBytes_ += requestBytes;
   }
-  if (queue_->totalBytes() == 0 && totalPendingBytes_ == 0 &&
-      !producingSources_.empty()) {
-    // We have full capacity but still cannot initiate one single data transfer.
-    // Let the transfer happen in this case to avoid getting stuck.
-    auto& source = producingSources_.front().source;
-    auto requestBytes = producingSources_.front().remainingBytes.at(0);
-    LOG(INFO) << "Requesting large single page " << requestBytes
-              << " bytes, exceeding capacity " << maxQueuedBytes_;
-    VELOX_CHECK(source->shouldRequestLocked());
-    requestSpecs.push_back({std::move(source), requestBytes});
-    producingSources_.pop();
-    totalPendingBytes_ += requestBytes;
-  }
+
   return requestSpecs;
 }
 
