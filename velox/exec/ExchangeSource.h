@@ -66,7 +66,8 @@ class ExchangeSource : public std::enable_shared_from_this<ExchangeSource> {
     /// Number of bytes still buffered at the source.  Each element represent
     /// one page, and the consumer can choose to fetch a prefix of them
     /// according to the memory restriction.
-    const std::vector<int64_t> remainingBytes;
+//    const std::vector<int64_t> remainingBytes;
+    const int64_t remainingBytes;
   };
 
   /// Requests the producer to generate up to 'maxBytes' more data and reply
