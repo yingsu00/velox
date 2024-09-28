@@ -43,8 +43,10 @@ bool waitForTaskDriversToFinish(exec::Task* task, uint64_t maxWaitMicros) {
 exec::BlockingReason TaskQueue::enqueue(
     RowVectorPtr vector,
     velox::ContinueFuture* future) {
+//    VLOG(1) << "TaskQueue::enqueue vector:" << vector << " producersFinished_" << producersFinished_ << " numProducers_:" << numProducers_.value_or(-1);
   if (!vector) {
     std::lock_guard<std::mutex> l(mutex_);
+//      VLOG(1) << "TaskQueue::enqueue vector:" << vector << " acquired mutex1 " << " consumerBlocked_:" << consumerBlocked_ << " producersFinished_:" << producersFinished_;
     ++producersFinished_;
     if (consumerBlocked_) {
       consumerBlocked_ = false;
@@ -57,7 +59,8 @@ exec::BlockingReason TaskQueue::enqueue(
   TaskQueueEntry entry{std::move(vector), bytes};
 
   std::lock_guard<std::mutex> l(mutex_);
-  // Check inside 'mutex_'
+//    VLOG(1) << "TaskQueue::enqueue vector:" << vector << " acquired mutex2";
+    // Check inside 'mutex_'
   if (closed_) {
     throw std::runtime_error("Consumer cursor is closed");
   }
@@ -82,15 +85,19 @@ RowVectorPtr TaskQueue::dequeue() {
     std::vector<ContinuePromise> mayContinue;
     {
       std::lock_guard<std::mutex> l(mutex_);
+//      VLOG(0) << "TaskQueue::dequeue() acquired mutex. closed_:" << closed_ << "queue_:" << queue_.size() << " totalBytes_:" << totalBytes_;
       if (closed_) {
         return nullptr;
       }
 
-      if (!queue_.empty()) {
+
+        if (!queue_.empty()) {
         auto result = std::move(queue_.front());
         queue_.pop_front();
         totalBytes_ -= result.bytes;
         vector = std::move(result.vector);
+
+//        VLOG(0) <<  "TaskQueue::dequeue() got vector from queue: " << vector << " totalBytes_:" << totalBytes_;
         if (totalBytes_ < maxBytes_ / 2) {
           mayContinue = std::move(producerUnblockPromises_);
         }
@@ -98,12 +105,17 @@ RowVectorPtr TaskQueue::dequeue() {
           numProducers_.has_value() && producersFinished_ == numProducers_) {
         return nullptr;
       }
+
       if (!vector) {
         consumerBlocked_ = true;
         consumerPromise_ = ContinuePromise();
         consumerFuture_ = consumerPromise_.getFuture();
+      } else {
+//          VLOG(0) <<  "TaskQueue::dequeue() vector->size():" << vector->size();
       }
     }
+
+//      VLOG(0) <<  "TaskQueue::dequeue() outside of 'mutex_. mayContinue.size()" << mayContinue.size();
     // outside of 'mutex_'
     for (auto& promise : mayContinue) {
       promise.setValue();
@@ -112,6 +124,7 @@ RowVectorPtr TaskQueue::dequeue() {
       return vector;
     }
     consumerFuture_.wait();
+//      VLOG(0) <<  "TaskQueue::dequeue() consumerFuture_.wait() ends";
   }
 }
 
@@ -231,6 +244,7 @@ class MultiThreadedTaskCursor : public TaskCursorBase {
         // consumer
         [queue, copyResult = params.copyResult](
             const RowVectorPtr& vector, velox::ContinueFuture* future) {
+            VLOG(1) << "In Task callback vector:" << vector << " copyResult:" << copyResult;
           if (!vector || !copyResult) {
             return queue->enqueue(vector, future);
           }

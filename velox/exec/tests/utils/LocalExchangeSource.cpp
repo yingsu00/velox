@@ -68,6 +68,7 @@ class LocalExchangeSource : public exec::ExchangeSource {
                               std::vector<std::unique_ptr<folly::IOBuf>> data,
                               int64_t sequence,
                               int64_t remainingBytes) {
+//        VLOG(1) << "LocalExchangeSource callback for " << taskId_ << " destination_: " << destination_ << "sequence=" << sequence << " remainingBytes: " << remainingBytes << " data: " << data.size();
       {
         std::lock_guard<std::mutex> l(mutex_);
         // This function is called either for a result or timeout. Only the
@@ -97,11 +98,13 @@ class LocalExchangeSource : public exec::ExchangeSource {
       int64_t totalBytes = 0;
       for (auto& inputPage : data) {
         if (!inputPage) {
+//            VLOG(1) << "LocalExchangeSource callback for " << taskId_ << " destination_: " << destination_ << " received end marker atEnd = true";
           atEnd = true;
           // Keep looping, there could be extra end markers.
           continue;
         }
         totalBytes += inputPage->length();
+//          VLOG(1) << "LocalExchangeSource callback for " << taskId_ << " destination_: " << destination_ << " page size: " << inputPage->length() << " totalBytes: " << totalBytes;
         inputPage->unshare();
         //          VLOG(0) << "LocalExchangeSource::request resultCallback
         //          taskId_: " << taskId_
@@ -155,7 +158,7 @@ class LocalExchangeSource : public exec::ExchangeSource {
         //          VLOG(0) << "LocalExchangeSource::request atEnd_, deleting
         //          results for taskId_:" << taskId_ << " destination_: "<<
         //          destination_;
-        buffers->deleteResults(taskId_, destination_);
+//        buffers->deleteResults(taskId_, destination_);
       }
 
       if (!requestPromise.isFulfilled()) {

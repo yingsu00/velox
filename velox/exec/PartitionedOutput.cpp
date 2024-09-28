@@ -239,10 +239,10 @@ void PartitionedOutput::estimateRowSizes() {
 void PartitionedOutput::addInput(RowVectorPtr input) {
   traceInput(input);
 
-  numReceivedPages++;
-  if (numReceivedPages == 1) {
-    VLOG(1) << "PartitionedOutput addInput received first input";
-  }
+//  numReceivedPages++;
+//  if (numReceivedPages == 1) {
+//    VLOG(1) << "PartitionedOutput addInput received first input";
+//  }
 
   initializeInput(std::move(input));
   initializeDestinations();

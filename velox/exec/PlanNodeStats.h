@@ -48,7 +48,7 @@ struct PlanNodeStats {
 
   /// Sum of input rows for all corresponding operators. Useful primarily for
   /// leaf plan nodes or plan nodes that correspond to a single operator type.
-  vector_size_t inputRows{0};
+  uint64_t inputRows{0};
 
   /// Sum of input batches for all corresponding operators.
   vector_size_t inputVectors{0};
@@ -59,7 +59,7 @@ struct PlanNodeStats {
   /// Sum of raw input rows for all corresponding operators. Applies primarily
   /// to TableScan operator which reports rows before pushed down filter as raw
   /// input.
-  vector_size_t rawInputRows{0};
+  uint64_t rawInputRows{0};
 
   /// Sum of raw input bytes for all corresponding operators.
   uint64_t rawInputBytes{0};

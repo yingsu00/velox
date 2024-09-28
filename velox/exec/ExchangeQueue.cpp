@@ -97,11 +97,12 @@ std::vector<std::unique_ptr<SerializedPage>> ExchangeQueue::dequeueLocked(
     uint32_t maxBytes,
     bool* atEnd,
     ContinueFuture* future) {
-  if (!future) {
-    VLOG(1) << "Ying: ExchangeQueue::dequeueLocked future is null";
-  }
+//  if (!future) {
+//    VLOG(1) << "Ying: ExchangeQueue::dequeueLocked future is null";
+//  }
 
   VELOX_CHECK_NOT_NULL(future, "ExchangeQueue::dequeueLocked future is null");
+//  VLOG(1) << "ExchangeQueue::dequeueLocked error_? " << error_.size();
   if (!error_.empty()) {
     *atEnd = true;
     VELOX_FAIL(error_, "ExchangeQueue::dequeueLocked error_:", error_);
@@ -112,6 +113,7 @@ std::vector<std::unique_ptr<SerializedPage>> ExchangeQueue::dequeueLocked(
   std::vector<std::unique_ptr<SerializedPage>> pages;
   uint32_t pageBytes = 0;
   for (;;) {
+//      VLOG(1) << "ExchangeQueue::dequeueLocked queue_: " << queue_.size() << " atEnd_:" << atEnd_ << " pageBytes:" << pageBytes<< " totalBytes_:" << totalBytes_;
     if (queue_.empty()) {
       if (atEnd_) {
         *atEnd = true;
@@ -130,9 +132,12 @@ std::vector<std::unique_ptr<SerializedPage>> ExchangeQueue::dequeueLocked(
     queue_.pop_front();
     pageBytes += pages.back()->size();
     totalBytes_ -= pages.back()->size();
+
+//    VLOG(1) << "ExchangeQueue::dequeueLocked got a page. queue_: " << queue_.size() << " atEnd_:" << atEnd_ << " pageBytes:" << pageBytes << " totalBytes_:" << totalBytes_;
+
   }
 
-  VLOG(1) << "Ying: ExchangeQueue::dequeueLocked VELOX_UNREACHABLE";
+//  VLOG(1) << "Ying: ExchangeQueue::dequeueLocked VELOX_UNREACHABLE";
 
   VELOX_UNREACHABLE("ExchangeQueue::dequeueLocked VELOX_UNREACHABLE");
 }

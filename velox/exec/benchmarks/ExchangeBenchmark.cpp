@@ -29,7 +29,7 @@
 #include "velox/serializers/PrestoSerializer.h"
 #include "velox/vector/tests/utils/VectorTestBase.h"
 
-DEFINE_int32(width, 4, "Number of parties in shuffle");
+DEFINE_int32(width, 256, "Number of parties in shuffle");
 DEFINE_int32(task_width, 4, "Number of threads in each task in shuffle");
 
 DEFINE_int32(num_local_tasks, 1, "Number of concurrent local shuffles");

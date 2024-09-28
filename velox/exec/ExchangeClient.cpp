@@ -125,18 +125,22 @@ ExchangeClient::next(uint32_t maxBytes, bool* atEnd, ContinueFuture* future) {
   {
     std::lock_guard<std::mutex> l(queue_->mutex());
 
-    if (!future) {
-      VLOG(1) << "Ying: ExchangeClient::next future is null";
-    }
+//    if (!future) {
+//      VLOG(1) << "Ying: ExchangeClient::next future is null";
+//    }
 
+//      VLOG(1) << "ExchangeClient::next taskId_=" << taskId_ << " destination_=" << destination_ << " closed_=" << closed_;
     if (closed_) {
+//        VLOG(1) << "ExchangeClient::next taskId_=" << taskId_ << " destination_=" << destination_ << " setting atEnd=true";
       *atEnd = true;
       return pages;
     }
 
     *atEnd = false;
     pages = queue_->dequeueLocked(maxBytes, atEnd, future);
-    if (*atEnd) {
+//      VLOG(1) << "ExchangeClient::next taskId_=" << taskId_ << " destination_=" << destination_ << " got pages=" << pages.size();
+
+      if (*atEnd) {
       return pages;
     }
 
@@ -148,7 +152,14 @@ ExchangeClient::next(uint32_t maxBytes, bool* atEnd, ContinueFuture* future) {
   }
 
   // Outside of lock
-  request(std::move(requestSpecs));
+  std::string requestStr = "[";
+    for (auto request : requestSpecs) {
+        requestStr += request.toString() + " ";
+    }
+    requestStr += "]";
+//    VLOG(1) << "ExchangeClient::next taskId_=" << taskId_ << " destination_=" << destination_ << " Sending requests" << requestStr;
+
+    request(std::move(requestSpecs));
   return pages;
 }
 
@@ -280,15 +291,18 @@ ExchangeClient::pickSourcesToRequestLocked() {
     return {};
   }
   std::vector<RequestSpec> requestSpecs;
-  while (!emptySources_.empty()) {
-    auto& source = emptySources_.front();
-    VELOX_CHECK(source->shouldRequestLocked());
-    requestSpecs.push_back({std::move(source), 0});
-    emptySources_.pop();
-  }
 
   int64_t availableSpace =
       maxQueuedBytes_ - queue_->totalBytes() - totalPendingBytes_;
+  while (!emptySources_.empty()) {
+    auto& source = emptySources_.front();
+    VELOX_CHECK(source->shouldRequestLocked());
+    requestSpecs.push_back({std::move(source), availableSpace});
+    emptySources_.pop();
+  }
+
+//  int64_t availableSpace =
+//      maxQueuedBytes_ - queue_->totalBytes() - totalPendingBytes_;
   while (availableSpace > 0 && !producingSources_.empty()) {
     auto& remainingBytes = producingSources_.front().remainingBytes;
     int64_t requestBytes = std::min(availableSpace, remainingBytes);

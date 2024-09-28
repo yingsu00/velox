@@ -43,6 +43,7 @@ class CallbackSink : public Operator {
   }
 
   void noMoreInput() override {
+//      VLOG(1) << "CallbackSink::noMoreInput";
     Operator::noMoreInput();
     close();
   }
@@ -62,6 +63,7 @@ class CallbackSink : public Operator {
 
  private:
   void close() override {
+//      VLOG(1) << "CallbackSink::noMoreInput callback_:" << (callback_?"callback":"no callback");
     if (callback_) {
       callback_(nullptr, nullptr);
       callback_ = nullptr;

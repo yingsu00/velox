@@ -670,6 +670,7 @@ StopReason Driver::runInternal(
                     curOperatorId_,
                     kOpMethodIsFinished);
               });
+//              VLOG(1) << "Driver op:" << op->toString() << " finished:" << finished << " calling nextOp->noMoreInput() " << nextOp->toString();
               if (finished) {
                 withDeltaCpuWallTimer(
                     op, &OperatorStats::finishTiming, [this, &nextOp]() {
@@ -697,8 +698,8 @@ StopReason Driver::runInternal(
                 op,
                 curOperatorId_,
                 kOpMethodGetOutput);
-            VLOG(3) << this << " Driver::runInternal called getOutput on op: "
-                    << op->toString() << " result: " << result;
+//            VLOG(3) << this << " Driver::runInternal called getOutput on op: "
+//                    << op->toString() << " result: " << result;
 
             if (result) {
               validateOperatorOutputResult(result, *op);
