@@ -54,6 +54,7 @@ velox_add_library(
   NestedLoopJoinProbe.cpp
   Operator.cpp
   OperatorUtils.cpp
+  OptimizedPartitionedOutput.cpp
   OrderBy.cpp
   OutputBuffer.cpp
   OutputBufferManager.cpp

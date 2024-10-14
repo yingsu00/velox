@@ -28,6 +28,7 @@ target_link_libraries(
 
 add_executable(velox_exchange_benchmark ExchangeBenchmark.cpp)
 
+message(STATUS "CMAKE_CXX_STANDARD ${CMAKE_CXX_STANDARD}")
 target_link_libraries(
   velox_exchange_benchmark
   velox_exec

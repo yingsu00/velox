@@ -41,6 +41,8 @@ DEFINE_int64(
     "task-wide buffer in local exchange");
 DEFINE_int64(exchange_buffer_mb, 32, "task-wide buffer in remote exchange");
 DEFINE_int32(dict_pct, 0, "Percentage of columns wrapped in dictionary");
+DEFINE_bool(gtest_color, false, "");
+DEFINE_string(gtest_filter, "*", "");
 
 /// Benchmarks repartition/exchange with different batch sizes,
 /// numbers of destinations and data type mixes.  Generates a plan
@@ -172,7 +174,7 @@ class ExchangeBenchmark : public VectorTestBase {
       auto stats = task->taskStats();
       for (auto& pipeline : stats.pipelineStats) {
         for (auto& op : pipeline.operatorStats) {
-          if (op.operatorType == "PartitionedOutput") {
+          if (op.operatorType == "PartitionedOutput" || op.operatorType == "OptimizedPartitionedOutput") {
             repartitionNanos +=
                 op.addInputTiming.cpuNanos + op.getOutputTiming.cpuNanos;
           } else if (op.operatorType == "Exchange") {
@@ -459,6 +461,7 @@ void runBenchmarks() {
 } // namespace
 
 int main(int argc, char** argv) {
+    VLOG(0) << "begin";
   folly::Init init{&argc, &argv};
   memory::MemoryManager::initialize({});
   functions::prestosql::registerAllScalarFunctions();
@@ -468,6 +471,8 @@ int main(int argc, char** argv) {
   exec::ExchangeSource::registerFactory(exec::test::createLocalExchangeSource);
 
   bm = std::make_unique<ExchangeBenchmark>();
+
+  VLOG(0) << "running";
   runBenchmarks();
   bm.reset();
 
