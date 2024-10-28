@@ -134,7 +134,8 @@ class ExchangeBenchmark : public VectorTestBase {
       std::vector<RowVectorPtr>& vectors,
       int32_t width,
       int32_t taskWidth,
-      Counters& counters) {
+      PlanNodeStats& repartitionStats,
+      PlanNodeStats& exchangeStats) {
     core::PlanNodePtr plan;
     core::PlanNodeId exchangeId;
     core::PlanNodeId leafRartitionedOutputId;
@@ -209,16 +210,19 @@ class ExchangeBenchmark : public VectorTestBase {
 
     BENCHMARK_SUSPEND {
       auto elapsed = getCurrentTimeMicro() - startMicros;
-      counters.usec += elapsed;
+      //      counters.usec += elapsed;
       std::vector<int64_t> taskWallMs;
 
+      //      PlanNodeStats repartitionStats;
+      //      PlanNodeStats exchangeStats;
       for (auto& task : leafTasks) {
         auto taskStats = task->taskStats();
         taskWallMs.push_back(
             taskStats.executionEndTimeMs - taskStats.executionStartTimeMs);
         auto planStats = toPlanStats(taskStats);
-        auto& repartitionStats = planStats.at(leafRartitionedOutputId);
-        auto repartitionRuntimeStats = repartitionStats.customStats;
+        auto& taskRepartitionStats = planStats.at(leafRartitionedOutputId);
+        repartitionStats += taskRepartitionStats;
+        auto repartitionRuntimeStats = taskRepartitionStats.customStats;
       }
 
       for (auto& task : finalAggTasks) {
@@ -226,12 +230,15 @@ class ExchangeBenchmark : public VectorTestBase {
         taskWallMs.push_back(
             taskStats.executionEndTimeMs - taskStats.executionStartTimeMs);
         auto planStats = toPlanStats(taskStats);
-        auto& repartitionStats = planStats.at(finalAggReartitionedOutputId);
-        auto& exchangeStats = planStats.at(exchangeId);
-        auto repartitionRuntimeStats = repartitionStats.customStats;
-        auto exchangeRuntimeStats = exchangeStats.customStats;
-      }
 
+        auto& taskRepartitionStats = planStats.at(finalAggReartitionedOutputId);
+        repartitionStats += taskRepartitionStats;
+        auto repartitionRuntimeStats = taskRepartitionStats.customStats;
+
+        auto& taskExchangeStats = planStats.at(exchangeId);
+        exchangeStats += taskExchangeStats;
+        auto exchangeRuntimeStats = taskExchangeStats.customStats;
+      }
       //      for (auto& task : tasks) {
       //        auto stats = task->taskStats();
       //        counters.outputBufferStats[task->taskId()] =
@@ -498,17 +505,25 @@ void runBenchmarks() {
             MAP(BIGINT(),
                 ROW({{"s2_int", INTEGER()}, {"s2_string", VARCHAR()}})))}});
 
-  flat10k = bm->makeRows(flatType, 10, 10000, FLAGS_dict_pct);
+  flat10k = bm->makeRows(flatType, 1, 10, FLAGS_dict_pct);
   //  deep10k = bm->makeRows(deepType, 10, 10000, FLAGS_dict_pct);
   //  flat50 = bm->makeRows(flatType, 2000, 50, FLAGS_dict_pct);
   //  deep50 = bm->makeRows(deepType, 2000, 50, FLAGS_dict_pct);
   //  struct1k = bm->makeRows(structType, 100, 1000, FLAGS_dict_pct);
   //
 
+  PlanNodeStats repartitionStats;
+  PlanNodeStats exchangeStats;
   folly::addBenchmark(__FILE__, "exchangeFlat10k", [&]() {
-    bm->run(flat10k, FLAGS_width, FLAGS_task_width, flat10kCounters);
+    bm->run(
+        flat10k,
+        FLAGS_width,
+        FLAGS_task_width,
+        repartitionStats,
+        exchangeStats);
     return 1;
   });
+
   //
   //  folly::addBenchmark(__FILE__, "exchangeFlat50", [&]() {
   //    bm->run(flat50, FLAGS_width, FLAGS_task_width, flat50Counters);
@@ -537,11 +552,16 @@ void runBenchmarks() {
   //  });
 
   folly::runBenchmarks();
+
   std::cout << "flat10k: " << flat10kCounters.toString() << std::endl;
   //            << "flat50: " << flat50Counters.toString() << std::endl
   //            << "deep10k: " << deep10kCounters.toString() << std::endl
   //            << "deep50: " << deep50Counters.toString() << std::endl
   //            << "struct1k: " << struct1kCounters.toString() << std::endl;
+
+  std::cout << "PartitionOutput: " << repartitionStats.toString()
+            << std::endl;
+  std::cout << "Exchange: " << exchangeStats.toString() << std::endl;
 }
 
 } // namespace
