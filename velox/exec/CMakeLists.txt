@@ -11,6 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+check_cxx_compiler_flag("-mavx2" COMPILER_SUPPORTS_AVX2)
+# if(COMPILER_SUPPORTS_AVX2) message(STATUS "Compiler supports AVX2")
+# add_compile_options(-mavx2) else() message(FATAL_ERROR "Compiler does not
+# support AVX2") endif()
+
 velox_add_library(
   velox_exec
   AddressableNonNullValueList.cpp
@@ -54,6 +60,7 @@ velox_add_library(
   NestedLoopJoinProbe.cpp
   Operator.cpp
   OperatorUtils.cpp
+  OptimizedPartitionedOutput.cpp
   OrderBy.cpp
   OutputBuffer.cpp
   OutputBufferManager.cpp
@@ -107,7 +114,9 @@ velox_link_libraries(
   velox_common_base
   velox_test_util
   velox_arrow_bridge
-  velox_common_compression)
+  velox_common_compression
+  velox_common_compression
+  xsimd)
 
 if(${VELOX_BUILD_TESTING})
   add_subdirectory(fuzzer)

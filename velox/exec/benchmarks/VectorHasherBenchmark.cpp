@@ -86,33 +86,187 @@ void benchmarkComputeValueIds(bool withNulls) {
     folly::doNotOptimizeAway(ok);
   }
 }
+
+template <typename T>
+void benchmarkHash(bool withNulls, bool mix) {
+  folly::BenchmarkSuspender suspender;
+  vector_size_t size = 1'000;
+  BenchmarkBase base;
+  VectorHasher hasher(CppToType<T>::create(), 0);
+  auto values = base.vectorMaker().flatVector<T>(
+      size,
+      [](vector_size_t row) { return row % 17; },
+      withNulls ? test::VectorMaker::nullEvery(7) : nullptr);
+
+  raw_vector<uint64_t> hashes(size);
+  SelectivityVector rows(size);
+  hasher.decode(*values);
+
+  suspender.dismiss();
+
+  for (int i = 0; i < 10'000; i++) {
+    hasher.hash(rows, mix, hashes);
+    folly::doNotOptimizeAway(hashes);
+  }
+}
+
+template <typename T>
+void benchmarkHashNew(bool withNulls, bool mix) {
+  folly::BenchmarkSuspender suspender;
+  vector_size_t size = 1'000;
+  BenchmarkBase base;
+  VectorHasher hasher(CppToType<T>::create(), 0);
+  auto values = base.vectorMaker().flatVector<T>(
+      size,
+      [](vector_size_t row) { return row % 17; },
+      withNulls ? test::VectorMaker::nullEvery(7) : nullptr);
+
+  raw_vector<uint64_t> hashes(size);
+  hasher.decode(*values);
+
+  suspender.dismiss();
+
+  for (int i = 0; i < 10'000; i++) {
+    hasher.hash(mix, hashes);
+    folly::doNotOptimizeAway(hashes);
+  }
+}
+
+template <typename T>
+void benchmarkHashNewNeon(bool withNulls, bool mix) {
+  folly::BenchmarkSuspender suspender;
+  vector_size_t size = 1'000;
+  BenchmarkBase base;
+  VectorHasher hasher(CppToType<T>::create(), 0);
+  auto values = base.vectorMaker().flatVector<T>(
+      size,
+      [](vector_size_t row) { return row % 17; },
+      withNulls ? test::VectorMaker::nullEvery(7) : nullptr);
+
+  raw_vector<uint64_t> hashes(size);
+  hasher.decode(*values);
+
+  suspender.dismiss();
+
+  for (int i = 0; i < 10'000; i++) {
+    hasher.hashneon(mix, hashes);
+    folly::doNotOptimizeAway(hashes);
+  }
+}
+
+template <typename T>
+void benchmarkxx64Hash(bool withNulls, bool mix) {
+  folly::BenchmarkSuspender suspender;
+  vector_size_t size = 1'000;
+  BenchmarkBase base;
+  VectorHasher hasher(CppToType<T>::create(), 0);
+  auto values = base.vectorMaker().flatVector<T>(
+      size,
+      [](vector_size_t row) { return row % 17; },
+      withNulls ? test::VectorMaker::nullEvery(7) : nullptr);
+
+  raw_vector<uint64_t> hashes(size);
+  hasher.decode(*values);
+
+  suspender.dismiss();
+
+  for (int i = 0; i < 10'000; i++) {
+    hasher.xx64hash(mix, hashes);
+    folly::doNotOptimizeAway(hashes);
+  }
+}
 } // namespace
 
-// Uses SIMD acceleration
-BENCHMARK(computeValueIdsBigintNoNulls) {
-  benchmarkComputeValueIds<int64_t>(false);
+BENCHMARK(benchmarkHashOldNoNullsNoMix) {
+  benchmarkHash<int64_t>(false, false);
 }
 
-// Doesn't use SIMD acceleration
-BENCHMARK_RELATIVE(computeValueIdsBigintWithNulls) {
-  benchmarkComputeValueIds<int64_t>(true);
+BENCHMARK(benchmarkHashOldWithNullsNoMix) {
+  benchmarkHash<int64_t>(true, false);
 }
 
-BENCHMARK(computeValueIdsIntegerNoNulls) {
-  benchmarkComputeValueIds<int32_t>(false);
+BENCHMARK(benchmarkHashOldWithNullsMix) {
+  benchmarkHash<int64_t>(true, true);
 }
 
-BENCHMARK_RELATIVE(computeValueIdsIntegerWithNulls) {
-  benchmarkComputeValueIds<int32_t>(true);
+BENCHMARK(benchmarkHashOldNoNullsMix) {
+  benchmarkHash<int64_t>(false, true);
 }
 
-BENCHMARK(computeValueIdsSmallintNoNulls) {
-  benchmarkComputeValueIds<int16_t>(false);
+BENCHMARK(benchmarkHashNewNoNullsNoMix) {
+  benchmarkHashNew<int64_t>(false, false);
 }
 
-BENCHMARK_RELATIVE(computeValueIdsSmallintWithNulls) {
-  benchmarkComputeValueIds<int16_t>(true);
+BENCHMARK(benchmarkHashNewWithNullsNoMix) {
+  benchmarkHashNew<int64_t>(true, false);
 }
+
+BENCHMARK(benchmarkHashNewWithNullsMix) {
+  benchmarkHashNew<int64_t>(true, true);
+}
+
+BENCHMARK(benchmarkHashNewNoNullsMix) {
+  benchmarkHashNew<int64_t>(false, true);
+}
+
+BENCHMARK(benchmarkHashNewNoNullsNoMixNeon) {
+  benchmarkHashNewNeon<int64_t>(false, false);
+}
+
+BENCHMARK(benchmarkHashNewWithNullsNoMixNeon) {
+  benchmarkHashNewNeon<int64_t>(true, false);
+}
+
+BENCHMARK(benchmarkHashNewWithNullsMixNeon) {
+  benchmarkHashNewNeon<int64_t>(true, true);
+}
+
+BENCHMARK(benchmarkHashNewNoNullsMixNeon) {
+  benchmarkHashNewNeon<int64_t>(false, true);
+}
+
+BENCHMARK(benchmarkxx64HashNewNoNullsNoMix) {
+  benchmarkHashNew<int64_t>(false, false);
+}
+
+BENCHMARK(benchmarkxx64HashNewWithNullsNoMix) {
+  benchmarkHashNew<int64_t>(true, false);
+}
+
+BENCHMARK(benchmarkxx64HashNewWithNullsMix) {
+  benchmarkHashNew<int64_t>(true, true);
+}
+
+BENCHMARK(benchmarkxx64HashNewNoNullsMix) {
+  benchmarkHashNew<int64_t>(false, true);
+}
+
+//
+//// Uses SIMD acceleration
+// BENCHMARK(computeValueIdsBigintNoNulls) {
+//   benchmarkComputeValueIds<int64_t>(false);
+// }
+//
+//// Doesn't use SIMD acceleration
+// BENCHMARK_RELATIVE(computeValueIdsBigintWithNulls) {
+//   benchmarkComputeValueIds<int64_t>(true);
+// }
+//
+// BENCHMARK(computeValueIdsIntegerNoNulls) {
+//   benchmarkComputeValueIds<int32_t>(false);
+// }
+//
+// BENCHMARK_RELATIVE(computeValueIdsIntegerWithNulls) {
+//   benchmarkComputeValueIds<int32_t>(true);
+// }
+//
+// BENCHMARK(computeValueIdsSmallintNoNulls) {
+//   benchmarkComputeValueIds<int16_t>(false);
+// }
+//
+// BENCHMARK_RELATIVE(computeValueIdsSmallintWithNulls) {
+//   benchmarkComputeValueIds<int16_t>(true);
+// }
 
 void benchmarkComputeValueIdsForStrings(bool flattenDictionaries) {
   folly::BenchmarkSuspender suspender;
@@ -208,66 +362,68 @@ BENCHMARK(computeValueIdsLowCardinalityLargeBatchSize) {
     suspender.rehire();
   }
 }
-
-BENCHMARK(computeValueIdsLowCardinalityNotAllUsed) {
-  folly::BenchmarkSuspender suspender;
-
-  vector_size_t cardinality = 300;
-  vector_size_t batchSize = 30'000'000;
-  BenchmarkBase base;
-
-  auto data = base.vectorMaker().flatVector<int64_t>(
-      cardinality, [](vector_size_t row) { return row; });
-  BufferPtr indices = allocateIndices(batchSize, base.pool());
-  auto rawIndices = indices->asMutable<vector_size_t>();
-  // Assign indices such that array is reversed.
-  for (size_t i = 0; i < batchSize; ++i) {
-    rawIndices[i] = i % (cardinality - 1);
-  }
-  auto values = BaseVector::wrapInDictionary(nullptr, indices, batchSize, data);
-
-  for (int i = 0; i < 10; i++) {
-    raw_vector<uint64_t> hashes(batchSize);
-    SelectivityVector rows(batchSize);
-    VectorHasher hasher(BIGINT(), 0);
-    hasher.decode(*values, rows);
-    suspender.dismiss();
-
-    bool ok = hasher.computeValueIds(rows, hashes);
-    folly::doNotOptimizeAway(ok);
-    suspender.rehire();
-  }
-}
-
-BENCHMARK(computeValueIdsDictionaryForFiltering) {
-  folly::BenchmarkSuspender suspender;
-
-  vector_size_t cardinality = 30'000'000;
-  vector_size_t batchSize = 300;
-  BenchmarkBase base;
-
-  auto data = base.vectorMaker().flatVector<int64_t>(
-      cardinality, [](vector_size_t row) { return row; });
-  BufferPtr indices = allocateIndices(batchSize, base.pool());
-  auto rawIndices = indices->asMutable<vector_size_t>();
-  // Assign indices such that array is reversed.
-  for (size_t i = 0; i < batchSize; ++i) {
-    rawIndices[i] = i * 1000;
-  }
-  auto values = BaseVector::wrapInDictionary(nullptr, indices, batchSize, data);
-
-  for (int i = 0; i < 10; i++) {
-    raw_vector<uint64_t> hashes(batchSize);
-    SelectivityVector rows(batchSize);
-    VectorHasher hasher(BIGINT(), 0);
-    hasher.decode(*values, rows);
-    suspender.dismiss();
-
-    bool ok = hasher.computeValueIds(rows, hashes);
-    folly::doNotOptimizeAway(ok);
-    suspender.rehire();
-  }
-}
+//
+// BENCHMARK(computeValueIdsLowCardinalityNotAllUsed) {
+//  folly::BenchmarkSuspender suspender;
+//
+//  vector_size_t cardinality = 300;
+//  vector_size_t batchSize = 30'000'000;
+//  BenchmarkBase base;
+//
+//  auto data = base.vectorMaker().flatVector<int64_t>(
+//      cardinality, [](vector_size_t row) { return row; });
+//  BufferPtr indices = allocateIndices(batchSize, base.pool());
+//  auto rawIndices = indices->asMutable<vector_size_t>();
+//  // Assign indices such that array is reversed.
+//  for (size_t i = 0; i < batchSize; ++i) {
+//    rawIndices[i] = i % (cardinality - 1);
+//  }
+//  auto values = BaseVector::wrapInDictionary(nullptr, indices, batchSize,
+//  data);
+//
+//  for (int i = 0; i < 10; i++) {
+//    raw_vector<uint64_t> hashes(batchSize);
+//    SelectivityVector rows(batchSize);
+//    VectorHasher hasher(BIGINT(), 0);
+//    hasher.decode(*values, rows);
+//    suspender.dismiss();
+//
+//    bool ok = hasher.computeValueIds(rows, hashes);
+//    folly::doNotOptimizeAway(ok);
+//    suspender.rehire();
+//  }
+//}
+//
+// BENCHMARK(computeValueIdsDictionaryForFiltering) {
+//  folly::BenchmarkSuspender suspender;
+//
+//  vector_size_t cardinality = 30'000'000;
+//  vector_size_t batchSize = 300;
+//  BenchmarkBase base;
+//
+//  auto data = base.vectorMaker().flatVector<int64_t>(
+//      cardinality, [](vector_size_t row) { return row; });
+//  BufferPtr indices = allocateIndices(batchSize, base.pool());
+//  auto rawIndices = indices->asMutable<vector_size_t>();
+//  // Assign indices such that array is reversed.
+//  for (size_t i = 0; i < batchSize; ++i) {
+//    rawIndices[i] = i * 1000;
+//  }
+//  auto values = BaseVector::wrapInDictionary(nullptr, indices, batchSize,
+//  data);
+//
+//  for (int i = 0; i < 10; i++) {
+//    raw_vector<uint64_t> hashes(batchSize);
+//    SelectivityVector rows(batchSize);
+//    VectorHasher hasher(BIGINT(), 0);
+//    hasher.decode(*values, rows);
+//    suspender.dismiss();
+//
+//    bool ok = hasher.computeValueIds(rows, hashes);
+//    folly::doNotOptimizeAway(ok);
+//    suspender.rehire();
+//  }
+//}
 
 int main(int argc, char** argv) {
   folly::Init init{&argc, &argv};

@@ -48,6 +48,11 @@ class SerializedPage {
     return iobuf_->clone();
   }
 
+  std::string toString() {
+    return fmt::format(
+        "SerializedPage numRows_: {} iobufBytes_: {} ", numRows_, iobufBytes_);
+  }
+
  private:
   static int64_t chainBytes(folly::IOBuf& iobuf) {
     int64_t size = 0;
@@ -151,6 +156,19 @@ class ExchangeQueue {
   void noMoreSources();
 
   void close();
+
+  std::string toString() {
+    return fmt::format(
+        " Queued pages: {}, numCompleted_:{}, noMoreSources_:{}, atEnd_:{}, totalBytes_:{}, receivedPages_:{}, receivedBytes_:{}, peakBytes_:{}",
+        queue_.size(),
+        numCompleted_,
+        noMoreSources_,
+        atEnd_,
+        totalBytes_,
+        receivedPages_,
+        receivedBytes_,
+        peakBytes_);
+  }
 
  private:
   std::vector<ContinuePromise> closeLocked() {

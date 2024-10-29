@@ -124,6 +124,9 @@ void BufferInputStream::seekp(std::streampos position) {
 void BufferInputStream::nextRange() {
   VELOX_CHECK(current_ >= &ranges_[0]);
   const size_t rangeIndex = current_ - &ranges_[0];
+  if (rangeIndex + 1 >= ranges_.size()) {
+    VLOG(0) << "Reading past end of BufferInputStream";
+  }
   VELOX_CHECK_LT(
       rangeIndex + 1, ranges_.size(), "Reading past end of BufferInputStream");
   ++current_;

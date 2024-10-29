@@ -16,6 +16,7 @@
 #include "velox/exec/tests/utils/LocalExchangeSource.h"
 #include <folly/executors/IOThreadPoolExecutor.h>
 #include <atomic>
+#include <iostream>
 #include "velox/common/testutil/TestValue.h"
 #include "velox/exec/OutputBufferManager.h"
 
@@ -45,7 +46,11 @@ class LocalExchangeSource : public exec::ExchangeSource {
   folly::SemiFuture<Response> request(
       uint32_t maxBytes,
       std::chrono::microseconds maxWait) override {
-    ++numRequests_;
+    //    VLOG(0) << "LocalExchangeSource::request begin maxBytes: " << maxBytes
+    //    << " taskId_: " << taskId_
+    //    << " sequence_: " << sequence_ <<" destination_: " << destination_ <<
+    //    " numPages_: " << numPages_;
+    //      ++numRequests_;
 
     auto promise = VeloxPromise<Response>("LocalExchangeSource::request");
     auto future = promise.getSemiFuture();
@@ -63,6 +68,11 @@ class LocalExchangeSource : public exec::ExchangeSource {
                               std::vector<std::unique_ptr<folly::IOBuf>> data,
                               int64_t sequence,
                               std::vector<int64_t> remainingBytes) {
+      //        VLOG(0) << "LocalExchangeSource::request resultCallback got
+      //        result."  << " taskId_: " << taskId_
+      //                        << " sequence:" << sequence << " data.size() : "
+      //                        << data.size()
+      //         << " remainingBytes.size()" << remainingBytes.size();
       {
         std::lock_guard<std::mutex> l(mutex_);
         // This function is called either for a result or timeout. Only the
@@ -75,9 +85,10 @@ class LocalExchangeSource : public exec::ExchangeSource {
       }
 
       if (requestedSequence > sequence && !data.empty()) {
-        VLOG(2) << "Receives earlier sequence than requested: task " << taskId_
-                << ", destination " << destination_ << ", requested "
-                << sequence << ", received " << requestedSequence;
+        //          VLOG(0) << "LocalExchangeSource::request resultCallback
+        //          Receives earlier sequence than requested: task " << taskId_
+        //                << ", destination " << destination_ << ", requested "
+        //                << sequence << ", received " << requestedSequence;
         int64_t nExtra = requestedSequence - sequence;
         VELOX_CHECK(nExtra < data.size());
         data.erase(data.begin(), data.begin() + nExtra);
@@ -97,6 +108,9 @@ class LocalExchangeSource : public exec::ExchangeSource {
         }
         totalBytes += inputPage->length();
         inputPage->unshare();
+        //          VLOG(0) << "LocalExchangeSource::request resultCallback
+        //          taskId_: " << taskId_
+        //                                                                     << " sequence:" << sequence << " Receiving SerializedPage " << inputPage->toString();
         pages.push_back(std::make_unique<SerializedPage>(std::move(inputPage)));
         inputPage = nullptr;
       }
@@ -124,6 +138,9 @@ class LocalExchangeSource : public exec::ExchangeSource {
           requestPending_ = false;
           requestPromise = std::move(promise_);
           for (auto& page : pages) {
+            //              VLOG(0) << "LocalExchangeSource::request
+            //              resultCallback pushing page " << page->toString() <<
+            //              " into queue: " << queue_->toString();
             queue_->enqueueLocked(std::move(page), queuePromises);
           }
           if (atEnd) {
@@ -140,6 +157,9 @@ class LocalExchangeSource : public exec::ExchangeSource {
       }
       // Outside of queue mutex.
       if (atEnd_) {
+        //          VLOG(0) << "LocalExchangeSource::request atEnd_, deleting
+        //          results for taskId_:" << taskId_ << " destination_: "<<
+        //          destination_;
         buffers->deleteResults(taskId_, destination_);
       }
 

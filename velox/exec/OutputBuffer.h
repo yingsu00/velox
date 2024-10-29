@@ -268,12 +268,12 @@ class OutputBuffer {
 
     std::string toString() {
       std::string destinationBufferStats;
-//      if (!buffersStats.empty()) {
-//        for (auto& destinationBufferStat : buffersStats) {
-//          destinationBufferStats += destinationBufferStat.toString();
-//          destinationBufferStats += ", ";
-//        }
-//      }
+      //      if (!buffersStats.empty()) {
+      //        for (auto& destinationBufferStat : buffersStats) {
+      //          destinationBufferStats += destinationBufferStat.toString();
+      //          destinationBufferStats += ", ";
+      //        }
+      //      }
 
       return fmt::format(
           "[ bufferedBytes: {}, bufferedPages: {}, "

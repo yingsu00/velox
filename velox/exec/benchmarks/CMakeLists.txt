@@ -11,6 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address
+# -fno-omit-frame-pointer -g") set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}
+# -fsanitize=address -fno-omit-frame-pointer -g")
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
+
 add_executable(velox_exec_vector_hasher_benchmark VectorHasherBenchmark.cpp)
 
 target_link_libraries(
@@ -28,6 +35,7 @@ target_link_libraries(
 
 add_executable(velox_exchange_benchmark ExchangeBenchmark.cpp)
 
+message(STATUS "CMAKE_CXX_STANDARD ${CMAKE_CXX_STANDARD}")
 target_link_libraries(
   velox_exchange_benchmark
   velox_exec
