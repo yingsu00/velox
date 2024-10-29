@@ -19,7 +19,7 @@
 
 namespace facebook::velox::exec {
 
-PlanNodeStats& PlanNodeStats::operator+=(const PlanNodeStats& another)  {
+PlanNodeStats& PlanNodeStats::operator+=(const PlanNodeStats& another) {
   inputRows += another.inputRows;
   inputBytes += another.inputBytes;
   inputVectors += another.inputVectors;

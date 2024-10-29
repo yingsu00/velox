@@ -36,6 +36,11 @@ std::string SelectivityVector::toString(
   VELOX_CHECK_GE(maxSelectedRowsToPrint, 0);
 
   std::stringstream out;
+  out << "&bits_: " << &bits_ << " &bits_[0]: " << &bits_[0]
+      << " bits_.data(): " << bits_.data()
+      << " bits capacity: " << bits_.capacity()
+      << " bits size: " << bits_.size() << " size_: " << size_
+      << " &size_: " << &size_;
   out << selectedCnt << " out of " << size() << " rows selected between "
       << begin() << " and " << end();
 

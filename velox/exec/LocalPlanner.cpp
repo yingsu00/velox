@@ -32,6 +32,7 @@
 #include "velox/exec/MergeJoin.h"
 #include "velox/exec/NestedLoopJoinBuild.h"
 #include "velox/exec/NestedLoopJoinProbe.h"
+#include "velox/exec/OptimizedPartitionedOutput.h"
 #include "velox/exec/OrderBy.h"
 #include "velox/exec/PartitionedOutput.h"
 #include "velox/exec/QueryTraceScan.h"
@@ -488,8 +489,10 @@ std::shared_ptr<Driver> DriverFactory::createDriver(
         auto partitionedOutputNode =
             std::dynamic_pointer_cast<const core::PartitionedOutputNode>(
                 planNode)) {
-      operators.push_back(std::make_unique<PartitionedOutput>(
+      operators.push_back(std::make_unique<OptimizedPartitionedOutput>(
           id, ctx.get(), partitionedOutputNode, eagerFlush(*planNode)));
+      //      operators.push_back(std::make_unique<PartitionedOutput>(
+      //          id, ctx.get(), partitionedOutputNode, eagerFlush(*planNode)));
     } else if (
         auto joinNode =
             std::dynamic_pointer_cast<const core::HashJoinNode>(planNode)) {

@@ -737,6 +737,9 @@ void OutputBuffer::getData(
   }
   releaseAfterAcknowledge(freed, promises);
   if (data.immediate) {
+    //      VLOG(0) << " OutputBuffer::getData got data " << data.data.size() <<
+    //      " sequence: " << sequence << " data.remainingBytes: " <<
+    //      data.remainingBytes.size();
     notify(std::move(data.data), sequence, std::move(data.remainingBytes));
   }
 }
