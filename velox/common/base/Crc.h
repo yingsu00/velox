@@ -39,4 +39,23 @@ class Crc32 {
   uint32_t checksum_{~0U};
 };
 
+class Crc32c {
+ public:
+  void process_bytes(const void* data, int32_t size) {
+    checksum_ =
+        folly::crc32c(reinterpret_cast<const uint8_t*>(data), size, checksum_);
+  }
+
+  uint32_t checksum() const {
+    return ~checksum_;
+  }
+
+  void reset() {
+    checksum_ = ~0U;
+  }
+
+ private:
+  uint32_t checksum_{~0U};
+};
+
 } // namespace facebook::velox::bits

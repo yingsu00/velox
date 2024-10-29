@@ -27,11 +27,8 @@ void OutputBufferManager::initialize(const Options& options) {
 
 // static
 std::weak_ptr<OutputBufferManager> OutputBufferManager::getInstance() {
-  std::lock_guard<std::mutex> l(initMutex_);
-  if (!instance_) {
-    instance_ = std::make_shared<OutputBufferManager>(Options());
-  }
-  return instance_;
+  static std::shared_ptr<OutputBufferManager> instance = std::make_shared<OutputBufferManager>(Options());
+  return instance;
 }
 
 std::shared_ptr<OutputBuffer> OutputBufferManager::getBuffer(

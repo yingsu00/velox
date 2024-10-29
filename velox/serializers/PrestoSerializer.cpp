@@ -85,7 +85,7 @@ int64_t computeChecksum(
     VELOX_CHECK_LT(compressedSize, uncompressedSize);
   }
   const int32_t dataSize = compressed ? compressedSize : uncompressedSize;
-  bits::Crc32 crc32;
+  bits::Crc32c crc32;
   if (FOLLY_UNLIKELY(source->remainingSize() < dataSize)) {
     VELOX_FAIL(
         "Tried to read {} bytes, larger than what's remained in source {} "

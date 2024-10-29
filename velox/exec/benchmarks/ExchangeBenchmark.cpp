@@ -114,6 +114,11 @@ class ExchangeBenchmark : public VectorTestBase {
     configSettings_[core::QueryConfig::kMaxPartitionedOutputBufferSize] =
         fmt::format("{}", FLAGS_exchange_buffer_mb << 20);
     auto iteration = ++iteration_;
+
+    OutputBufferManager::getInstance().lock()->setListenerFactory([]() {
+      return std::make_unique<serializer::presto::PrestoOutputStreamListener>();
+    });
+
     std::vector<std::shared_ptr<Task>> tasks;
     std::vector<std::string> leafTaskIds;
     auto leafPlan = exec::test::PlanBuilder()
