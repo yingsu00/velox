@@ -508,8 +508,12 @@ int main(int argc, char** argv) {
   functions::prestosql::registerAllScalarFunctions();
   aggregate::prestosql::registerAllAggregateFunctions();
   parse::registerTypeResolver();
-  serializer::presto::PrestoVectorSerde::registerVectorSerde();
+//  serializer::presto::PrestoVectorSerde::registerVectorSerde();
   exec::ExchangeSource::registerFactory(exec::test::createLocalExchangeSource);
+
+  if (!isRegisteredNamedVectorSerde(VectorSerde::Kind::kPresto)) {
+    serializer::presto::PrestoVectorSerde::registerNamedVectorSerde();
+  }
 
   bm = std::make_unique<ExchangeBenchmark>();
   runBenchmarks();

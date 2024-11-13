@@ -16,7 +16,7 @@
 
 #include "velox/exec/OptimizedPartitionedOutput.h"
 
-#include <xsimd/xsimd.hpp>
+// #include <xsimd/xsimd.hpp>
 #include <iostream>
 
 #include "velox/common/base/SimdUtil.h"
@@ -84,7 +84,6 @@ inline void prefixSum(uint32_t*& offsets, uint32_t numPartitions) {
   for (uint32_t i = 1; i < numPartitions; i++) {
     offsets[i] += offsets[i - 1];
   }
-  //            return offsets;
 }
 
 inline void addVector(
@@ -246,6 +245,7 @@ PartitioningVectorSerializer::flush() {
 
   char codecMask = 0;
 
+  // Flush headers for all destinations
   std::vector<IOBufOutputStream> outputStreams;
   std::vector<int32_t> beginOffsets(numDestinations_, 0);
   for (uint32_t destination = 0; destination < numDestinations_;
@@ -270,6 +270,7 @@ PartitioningVectorSerializer::flush() {
   // Flush all streams so that the read is sequential
   // TODO: support different output channel order
   tempVectors_.resize(partitionedPages_.size());
+
   flushRowVectors(partitionedPages_, outputStreams, true);
 
   std::map<uint32_t, std::unique_ptr<SerializedPage>> serializedPages;
@@ -361,6 +362,7 @@ VectorPtr PartitioningVectorSerializer::partitionFlatVectorInPlace(
 
   auto offsets = offsets_[partitionedPages_.size()].data();
 
+  // This is slower than the second version
   //        auto n = vector->size();
   //        int i = 0;
   //        int partition = 0;
@@ -386,14 +388,14 @@ VectorPtr PartitioningVectorSerializer::partitionFlatVectorInPlace(
   //        }
 
   for (auto partition = 0; partition < numDestinations_; partition++) {
-    auto offset = beginOffsets_[partition]; // 0
-    auto endOffset = offsets[partition]; // 4
+    auto offset = beginOffsets_[partition];
+    auto endOffset = offsets[partition];
     while (offset < endOffset) {
-      uint32_t p = partitions_[offset]; // 1
+      uint32_t p = partitions_[offset];
       while (p != partition) {
-        auto destinationOffset = beginOffsets_[p]++; // 4
-        std::swap(values[destinationOffset], values[offset]); // swap 3 and 5
-        p = partitions_[destinationOffset]; // 0
+        auto destinationOffset = beginOffsets_[p]++;
+        std::swap(values[destinationOffset], values[offset]);
+        p = partitions_[destinationOffset];
       }
       offset = ++beginOffsets_[partition];
     }
@@ -408,27 +410,29 @@ void PartitioningVectorSerializer::flushVectors(
   VELOX_CHECK_GT(vectors.size(), 0);
 
   auto encoding = vectors[0]->encoding();
-  auto typeKind = vectors[0]->typeKind();
-
   switch (encoding) {
     case VectorEncoding::Simple::FLAT:
-      return VELOX_DYNAMIC_SCALAR_TYPE_DISPATCH_ALL(
-          PartitioningVectorSerializer::flushFlatVectors,
-          typeKind,
-          vectors,
-          outputStreams);
-    case VectorEncoding::Simple::ROW:
-      return flushRowVectors(vectors, outputStreams, false);
-    case VectorEncoding::Simple::BIASED:
-    case VectorEncoding::Simple::ARRAY:
-    case VectorEncoding::Simple::MAP:
-    case VectorEncoding::Simple::LAZY:
-    case VectorEncoding::Simple::DICTIONARY:
     case VectorEncoding::Simple::SEQUENCE:
+    case VectorEncoding::Simple::BIASED:
+      return flushSimpleVectors(vectors, outputStreams);
+
+    case VectorEncoding::Simple::DICTIONARY:
+    case VectorEncoding::Simple::LAZY:
       VELOX_UNSUPPORTED(
           "Unsupported vector encoding for OptimizedPartitionedOutput: ",
           encoding);
       break;
+
+    case VectorEncoding::Simple::ROW:
+      return flushRowVectors(vectors, outputStreams, false);
+
+    case VectorEncoding::Simple::ARRAY:
+    case VectorEncoding::Simple::MAP:
+      VELOX_UNSUPPORTED(
+          "Unsupported vector encoding for OptimizedPartitionedOutput: ",
+          encoding);
+      break;
+
     default:
       VELOX_UNREACHABLE(
           "Invalid vector encoding for OptimizedPartitionedOutput: ", encoding);
@@ -455,10 +459,11 @@ void PartitioningVectorSerializer::flushRowVectors(
   }
 }
 
-template <TypeKind kind>
-void PartitioningVectorSerializer::flushFlatVectors(
+void PartitioningVectorSerializer::flushSimpleVectors(
     const std::vector<VectorPtr>& vectors,
     std::vector<IOBufOutputStream>& outputStreams) {
+  VELOX_CHECK_GT(vectors.size(), 0);
+
   flushHeader(typeToEncodingName(vectors[0]->type()), outputStreams);
 
   for (int destination = 0; destination < numDestinations_; destination++) {
@@ -471,36 +476,62 @@ void PartitioningVectorSerializer::flushFlatVectors(
 
   // TODO: flush nulls
 
-  // Flush values
-  using T = typename TypeTraits<kind>::NativeType;
-  auto typeWidth = sizeof(T);
   for (int i = 0; i < vectors.size(); i++) {
     VectorPtr vector = vectors[i];
-
-    auto* flatVector = vector->as<FlatVector<T>>();
-    auto* values = flatVector->rawValues();
     auto offsets = offsets_[i];
-    auto lastOffset = 0;
-    for (int destination = 0; destination < numDestinations_; destination++) {
-      auto offset = offsets[destination];
-      auto numValues = offset - lastOffset;
-      outputStreams[destination].write(
-          reinterpret_cast<const char*>(&values[lastOffset]),
-          numValues * typeWidth);
-      lastOffset = offset;
-    }
+
+    flushSimpleVector(vector, offsets, outputStreams);
   }
 }
-//
-//    void PartitioningVectorSerializer::initializeHeader(std::string_view name,
-//    uint32_t columnIndex) {
-//        streamArena_.newTinyRange(50, nullptr, &headers_[columnIndex]);
-//        headers_[columnIndex].size = name.size() + sizeof(int32_t);
-//        *reinterpret_cast<int32_t *>(headers_[columnIndex].buffer) =
-//        name.size();
-//        ::memcpy(headers_[columnIndex].buffer + sizeof(int32_t), &name[0],
-//        name.size());
-//    }
+
+void PartitioningVectorSerializer::flushSimpleVector(
+    const VectorPtr& vector,
+    const raw_vector<uint32_t>& offsets,
+    std::vector<IOBufOutputStream>& outputStreams) {
+  auto encoding = vector->encoding();
+  auto typeKind = vector->typeKind();
+
+  switch (encoding) {
+    case VectorEncoding::Simple::FLAT:
+      return VELOX_DYNAMIC_SCALAR_TYPE_DISPATCH_ALL(
+          PartitioningVectorSerializer::flushFlatVector,
+          typeKind,
+          vector,
+          offsets,
+          outputStreams);
+    case VectorEncoding::Simple::BIASED:
+    case VectorEncoding::Simple::SEQUENCE:
+      VELOX_UNSUPPORTED(
+          "Unsupported vector encoding for OptimizedPartitionedOutput: ",
+          encoding);
+    default:
+      VELOX_UNREACHABLE(
+          "Invalid vector encoding for OptimizedPartitionedOutput:flushSimpleVector ",
+          encoding);
+  }
+}
+
+template <TypeKind kind>
+void PartitioningVectorSerializer::flushFlatVector(
+    const VectorPtr vector,
+    const raw_vector<uint32_t>& offsets,
+    std::vector<IOBufOutputStream>& outputStreams) {
+  using T = typename TypeTraits<kind>::NativeType;
+  auto typeWidth = sizeof(T);
+
+  auto* flatVector = vector->as<FlatVector<T>>();
+  auto* values = flatVector->rawValues();
+  //        auto offsets = offsets_[i];
+  auto lastOffset = 0;
+  for (int destination = 0; destination < numDestinations_; destination++) {
+    auto offset = offsets[destination];
+    auto numValues = offset - lastOffset;
+    outputStreams[destination].write(
+        reinterpret_cast<const char*>(&values[lastOffset]),
+        numValues * typeWidth);
+    lastOffset = offset;
+  }
+}
 
 void PartitioningVectorSerializer::flushHeader(
     std::string_view name,
@@ -606,24 +637,6 @@ PartitioningVectorSerializer::runtimeStats() {
   return map;
 }
 
-//    std::unordered_map<std::string, RuntimeCounter>
-//    PartitioningVectorSerializer::runtimeStats() {
-//        std::unordered_map<std::string, RuntimeCounter> map;
-//        map.insert(
-//                {{"compressedBytes",
-//                         RuntimeCounter(stats_.compressedBytes,
-//                         RuntimeCounter::Unit::kBytes)},
-//                 {"compressionInputBytes",
-//                         RuntimeCounter(
-//                                 stats_.compressionInputBytes,
-//                                 RuntimeCounter::Unit::kBytes)},
-//                 {"compressionSkippedBytes",
-//                         RuntimeCounter(
-//                                 stats_.compressionSkippedBytes,
-//                                 RuntimeCounter::Unit::kBytes)}});
-//        return map;
-//    }
-
 OptimizedPartitionedOutput::OptimizedPartitionedOutput(
     int32_t operatorId,
     DriverCtx* ctx,
@@ -669,7 +682,6 @@ OptimizedPartitionedOutput::OptimizedPartitionedOutput(
   }
   if (numDestinations_ == 1) {
     VELOX_USER_CHECK(keyChannels_.empty());
-    //            VELOX_USER_CHECK_NULL(partitionFunction_);
   }
 
   serializer::presto::PrestoVectorSerde::PrestoOptions options;
@@ -688,15 +700,6 @@ OptimizedPartitionedOutput::OptimizedPartitionedOutput(
       options,
       std::move(partitionFunction),
       pool_);
-  //        pool_ = pool();
-
-  //        for (uint32_t destination = 0; destination < numDestinations_;
-  //        destination++) {
-  //            outputStreams_.emplace_back(
-  //                    *pool_,
-  //                    bufferManager_.lock()->newListener().get(),
-  //                    kMinMessageSize);   // TODO: know the size
-  //        }
 }
 
 BlockingReason OptimizedPartitionedOutput::isBlocked(ContinueFuture* future) {
@@ -750,7 +753,6 @@ RowVectorPtr OptimizedPartitionedOutput::getOutput() {
   }
   // The input is fully processed, drop the reference to allow reuse.
   input_ = nullptr;
-  //        output_ = nullptr;
   return nullptr;
 }
 

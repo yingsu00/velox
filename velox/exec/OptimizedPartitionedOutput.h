@@ -64,15 +64,30 @@ class PartitioningVectorSerializer {
       const std::vector<VectorPtr>& vectors,
       std::vector<IOBufOutputStream>& outputStreams);
 
+  void flushSimpleVectors(
+      const std::vector<VectorPtr>& vectors,
+      std::vector<IOBufOutputStream>& outputStreams);
+
+  void flushSimpleVector(
+      const VectorPtr& vector,
+      const raw_vector<uint32_t>& offsets,
+      std::vector<IOBufOutputStream>& outputStreams);
+
   void flushRowVectors(
       const std::vector<VectorPtr>& rowVectors,
       std::vector<IOBufOutputStream>& outputStreams,
-      bool isTopLevel);
+      bool isTopLevel = false);
 
   template <TypeKind kind>
-  void flushFlatVectors(
-      const std::vector<VectorPtr>& vectors,
+  void flushFlatVector(
+      const VectorPtr vector,
+      const raw_vector<uint32_t>& offsets,
       std::vector<IOBufOutputStream>& outputStreams);
+
+//  template <TypeKind kind>
+//  void flushFlatVectors(
+//      const std::vector<VectorPtr>& vectors,
+//      std::vector<IOBufOutputStream>& outputStreams);
 
   void flushHeader(
       std::string_view name,
