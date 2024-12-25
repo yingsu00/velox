@@ -16,6 +16,9 @@ velox_add_library(velox_presto_serializer CompactRowSerializer.cpp
 
 velox_link_libraries(velox_presto_serializer velox_vector velox_row_fast)
 
+velox_add_library(velox_partitioning_serializer PartitioningSerializer.cpp)
+velox_link_libraries(velox_partitioning_serializer velox_vector)
+
 if(${VELOX_BUILD_TESTING})
   add_subdirectory(tests)
 endif()

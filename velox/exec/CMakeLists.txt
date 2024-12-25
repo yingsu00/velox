@@ -116,6 +116,7 @@ velox_link_libraries(
   velox_arrow_bridge
   velox_common_compression
   velox_common_compression
+  velox_partitioning_serializer
   xsimd)
 
 if(${VELOX_BUILD_TESTING})

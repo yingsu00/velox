@@ -67,6 +67,10 @@ class ExchangeBenchmark : public VectorTestBase {
       std::vector<VectorPtr> children;
       for (int j = 0; j < type->children().size(); j++) {
         auto child = makeFlatVector<int64_t>(rowsPerVector);
+
+        indices = makeIndices(child->size(), [&](auto i) { return i; });
+        BaseVector::wrapInDictionary(nullptr, indices, child->size(), child);
+
         children.push_back(child);
       }
 
@@ -508,7 +512,7 @@ int main(int argc, char** argv) {
   functions::prestosql::registerAllScalarFunctions();
   aggregate::prestosql::registerAllAggregateFunctions();
   parse::registerTypeResolver();
-//  serializer::presto::PrestoVectorSerde::registerVectorSerde();
+  //  serializer::presto::PrestoVectorSerde::registerVectorSerde();
   exec::ExchangeSource::registerFactory(exec::test::createLocalExchangeSource);
 
   if (!isRegisteredNamedVectorSerde(VectorSerde::Kind::kPresto)) {
