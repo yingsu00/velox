@@ -30,8 +30,10 @@
 #include "velox/serializers/PrestoSerializer.h"
 #include "velox/vector/tests/utils/VectorTestBase.h"
 
+static const int32_t entries_per_row = 4;
+
 DEFINE_int32(width, 4, "Number of parties in shuffle");
-DEFINE_int32(task_width, 4, "Number of threads in each task in shuffle");
+DEFINE_int32(task_width, 1, "Number of threads in each task in shuffle");
 
 DEFINE_int32(num_local_tasks, 1, "Number of concurrent local shuffles");
 DEFINE_int32(num_local_repeat, 1, "Number of repeats of local exchange query");
@@ -65,17 +67,54 @@ class ExchangeBenchmark : public VectorTestBase {
     std::vector<RowVectorPtr> vectors;
     BufferPtr indices;
     for (int32_t i = 0; i < numVectors; ++i) {
+      //      // This can't control the nullness of the nested columns
+      //      auto vector =
+      //          std::dynamic_pointer_cast<RowVector>(BatchMaker::createBatch(
+      //              type, rowsPerVector, *pool_, [](vector_size_t i) {
+      //                return false;
+      //              }));
+
       std::vector<VectorPtr> children;
-      for (int j = 0; j < type->children().size(); j++) {
-        auto child = makeFlatVector<int64_t>(rowsPerVector, [&](auto row) {
-          return folly::Random::rand64();
-        });
+      //      for (int j = 0; j < type->children().size(); j++) {
+      //      auto c0 = makeFlatVector<int64_t>(
+      //          rowsPerVector, [&](auto row) { return folly::Random::rand64();
+      //          });
+      //
+      //      children.push_back(c0);
 
-//        indices = makeIndices(child->size(), [&](auto i) { return i; });
-//        BaseVector::wrapInDictionary(nullptr, indices, child->size(), child);
-
-        children.push_back(child);
+      // make c0
+      std::vector<vector_size_t> values;
+      for (auto i = 0; i < rowsPerVector; i++) {
+        values.push_back(i);
       }
+      auto c0 = makeFlatVector<int32_t>(values);
+
+      // Make random array sizes in [10, 100]
+      std::vector<vector_size_t> offsets;
+      offsets.push_back(0);
+      for (auto i = 1; i < rowsPerVector; i++) {
+        auto size = folly::Random::rand32(10, 20);
+        offsets.push_back(size + offsets[i - 1]);
+      }
+      auto numArrayValues = offsets[rowsPerVector];
+      auto arrayValues = makeFlatVector<int32_t>(
+          numArrayValues, [&](auto row) { return row; });
+      auto arrayVector = makeArrayVector(offsets, arrayValues);
+
+//      // Make array sizes = row number
+//      auto arrayValues = makeFlatVector<int32_t>(
+//          (1 + rowsPerVector) * rowsPerVector / 2,
+//          [&](auto row) { return row; });
+//      std::vector<vector_size_t> offsets;
+//      offsets.push_back(0);
+//      for (auto i = 1; i < rowsPerVector; i++) {
+//        offsets.push_back(i + offsets[i - 1]);
+//      }
+//      auto arrayVector = makeArrayVector(offsets, arrayValues);
+
+
+      children.push_back(c0);
+      children.push_back(arrayVector);
 
       auto vector = makeRowVector(children);
       //                auto vector = std::dynamic_pointer_cast<RowVector>(
@@ -416,7 +455,7 @@ void runBenchmarks() {
   //                flatSize += 20;
   //            }
   //        }
-  auto flatType = ROW(std::move(flatNames), std::move(flatTypes));
+  //  auto flatType = ROW(std::move(flatNames), std::move(flatTypes));
 
   //        auto structType = ROW(
   //                {{"c0", BIGINT()},
@@ -447,24 +486,28 @@ void runBenchmarks() {
   //                                 ROW({{"s2_int", INTEGER()},
   //                                 {"s2_string", VARCHAR()}})))}});
 
-  flat10k = bm->makeRows(flatType, 100, 10000, FLAGS_dict_pct);
+  std::vector<std::string> arrayNames = {"c0", "array"};
+  std::vector<TypePtr> arrayTypes = {BIGINT(), ARRAY(BIGINT())};
+  auto arrayType = ROW(std::move(arrayNames), std::move(arrayTypes));
+
+  //  flat10k = bm->makeRows(flatType, 1, 10, FLAGS_dict_pct);
   //  deep10k = bm->makeRows(deepType, 10, 10000, FLAGS_dict_pct);
   //  flat50 = bm->makeRows(flatType, 2000, 50, FLAGS_dict_pct);
   //  deep50 = bm->makeRows(deepType, 2000, 50, FLAGS_dict_pct);
   //  struct1k = bm->makeRows(structType, 100, 1000, FLAGS_dict_pct);
-  //
+  auto array10k = bm->makeRows(arrayType, 10, 1000, FLAGS_dict_pct);
 
   PlanNodeStats repartitionStats;
   PlanNodeStats exchangeStats;
-  folly::addBenchmark(__FILE__, "exchangeFlat10k", [&]() {
-    bm->run(
-        flat10k,
-        FLAGS_width,
-        FLAGS_task_width,
-        repartitionStats,
-        exchangeStats);
-    return 1;
-  });
+  //  folly::addBenchmark(__FILE__, "exchangeFlat10k", [&]() {
+  //    bm->run(
+  //        flat10k,
+  //        FLAGS_width,
+  //        FLAGS_task_width,
+  //        repartitionStats,
+  //        exchangeStats);
+  //    return 1;
+  //  });
 
   //
   //  folly::addBenchmark(__FILE__, "exchangeFlat50", [&]() {
@@ -493,6 +536,16 @@ void runBenchmarks() {
   //        localFlat10kCounters);
   //    return 1;
   //  });
+
+  folly::addBenchmark(__FILE__, "exchangeArray10k", [&]() {
+    bm->run(
+        array10k,
+        FLAGS_width,
+        FLAGS_task_width,
+        repartitionStats,
+        exchangeStats);
+    return 1;
+  });
 
   folly::runBenchmarks();
 

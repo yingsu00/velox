@@ -120,6 +120,10 @@ class ByteInputStream {
 
   virtual void readBytes(uint8_t* bytes, int32_t size) = 0;
 
+  uint8_t* buffer() {
+    return current_->buffer;
+  }
+
   template <typename T>
   T read() {
     if (current_->position + sizeof(T) <= current_->size) {

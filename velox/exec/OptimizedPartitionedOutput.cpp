@@ -160,7 +160,7 @@ void OptimizedPartitionedOutput::flush() {
   auto lockedStats = stats_.wlock();
   lockedStats->addOutputVector(flushedBytes, flushedRows);
 
-  auto serializedPages = serializer_->flush();
+  auto serializedPages = serializer_->flushUncompressed();
 
   for (uint32_t destination = 0; destination < numDestinations_;
        destination++) {

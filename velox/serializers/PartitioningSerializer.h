@@ -42,7 +42,7 @@ class IterativePartitioningSerializer {
   void append(RowVectorPtr& vector);
 
   /// Flush to all destinations
-  std::map<uint32_t, std::unique_ptr<exec::SerializedPage>> flush();
+  std::map<uint32_t, std::unique_ptr<exec::SerializedPage>> flushUncompressed();
 
   int64_t bytesBuffered();
 
@@ -53,13 +53,14 @@ class IterativePartitioningSerializer {
   std::unordered_map<std::string, RuntimeCounter> runtimeStats();
 
  private:
-
   void flushVectors(
       const std::vector<PartitionedVectorPtr>& partitionedVectors,
+      uint32_t nestedLevel,
       std::vector<IOBufOutputStream>& outputStreams);
 
   void flushSimpleVectors(
       const std::vector<PartitionedVectorPtr>& partitionedVectors,
+      uint32_t nestedLevel,
       std::vector<IOBufOutputStream>& outputStreams);
 
   void flushSimpleVector(
@@ -68,12 +69,32 @@ class IterativePartitioningSerializer {
 
   void flushRowVectors(
       const std::vector<PartitionedVectorPtr>& partitionedRowVectors,
-      std::vector<IOBufOutputStream>& outputStreams,
-      bool isTopLevel = false);
+      uint32_t nestedLevel,
+      std::vector<IOBufOutputStream>& outputStreams);
+
+  void flushArrayVectors(
+      const std::vector<PartitionedVectorPtr>& partitionedArrayVectors,
+      uint32_t nestedLevel,
+      std::vector<IOBufOutputStream>& outputStreams);
+
+  void flushRowChildren(
+      const std::vector<PartitionedVectorPtr>& partitionedRowVectors,
+      uint32_t nestedLevel,
+      std::vector<IOBufOutputStream>& outputStreams);
+
+  void flushOffsets(
+      const std::vector<PartitionedVectorPtr>& partitionedVectors,
+      std::vector<IOBufOutputStream>& outputStreams);
 
   template <TypeKind kind>
   void flushFlatVectorValues(
       const PartitionedVectorPtr& partitionedVector,
+      std::vector<IOBufOutputStream>& outputStreams);
+
+  template <typename T>
+  void flushFlatValues(
+      const T* partitionedValues,
+      const vector_size_t* partitionOffsets,
       std::vector<IOBufOutputStream>& outputStreams);
 
   //  void flushDictionaryVector(
@@ -90,6 +111,11 @@ class IterativePartitioningSerializer {
       const std::string_view& name,
       std::vector<IOBufOutputStream>& outputStreams);
 
+  void flushRowCounts(
+      const std::vector<PartitionedVectorPtr>& partitionedVectors,
+      uint32_t nestedLevel,
+      std::vector<IOBufOutputStream>& outputStreams);
+
   void flushNullFlag(
       const std::vector<PartitionedVectorPtr>& vectors,
       std::vector<IOBufOutputStream>& outputStreams);
@@ -101,6 +127,10 @@ class IterativePartitioningSerializer {
       uint32_t destination,
       int32_t beginOffset,
       char codecMask);
+
+  std::vector<vector_size_t> countRowsInPartitions(
+      const std::vector<PartitionedVectorPtr>& partitionedVectors,
+      bool isTopLevel);
 
   struct CompressionStats {
     // Number of times compression was not attempted.
@@ -124,10 +154,17 @@ class IterativePartitioningSerializer {
   const std::unique_ptr<core::PartitionFunction> partitionFunction_;
   StreamArena streamArena_;
   memory::MemoryPool* const pool_;
-  BufferPtr tempBuffer_;
+
+  // The partition (destination) numbers for the top level rows
+  std::vector<uint32_t> topRowPartitions_;
+  //  BufferPtr topRowOffsets_;
+  BufferPtr topRowOffsetsForCurrentLevel_;
+  BufferPtr topRowOffsetsForNextLevel_;
+  BufferPtr beginOffsetsBuffer_;
+  //  BufferPtr partitionOffsetsBuffer_;
+  BufferPtr swappingBuffer_;
   std::vector<PartitionedVectorPtr> tempVectors_;
 
-  std::vector<uint32_t> partitions_;
   //  std::vector<VectorPtr> partitionedPages_;
   std::vector<PartitionedVectorPtr> partitionedPages_;
   // If we want to cut the incoming pages in half when flushing, change this to
@@ -135,7 +172,8 @@ class IterativePartitioningSerializer {
   // the row sizes
   //        std::vector<int32_t> row;
 
-  std::vector<uint32_t> rowCounts_;
+  std::vector<vector_size_t> topRowCounts_;
+  std::vector<vector_size_t> rowCountsForLevel_;
   int64_t bytesBuffered_;
   int64_t rowsBuffered_;
 

@@ -29,6 +29,11 @@
 #include "velox/vector/FlatVector.h"
 #include "velox/vector/VectorTypeUtils.h"
 
+#include <cctype>
+#include <cstdint>
+#include <iomanip>
+#include <iostream>
+
 namespace facebook::velox::serializer::presto {
 
 using SerdeOpts = PrestoVectorSerde::PrestoOptions;
@@ -61,6 +66,8 @@ static inline const std::string_view kMap{"MAP"};
 static inline const std::string_view kRow{"ROW"};
 static inline const std::string_view kRLE{"RLE"};
 static inline const std::string_view kDictionary{"DICTIONARY"};
+
+std::mutex initMutex_;
 
 int64_t computeChecksum(
     PrestoOutputStreamListener* listener,
@@ -744,6 +751,75 @@ void readDictionaryVector(
   }
 }
 
+#include <cctype>
+#include <cstdint>
+#include <iomanip>
+#include <iostream>
+
+void printMemory(const void* data, std::size_t size) {
+  // Cast the pointer to a byte-sized pointer for easy indexing.
+  const unsigned char* bytes = static_cast<const unsigned char*>(data);
+
+  // We’ll print 16 bytes per line, grouped in 4-byte chunks.
+  constexpr std::size_t bytesPerLine = 16;
+  constexpr std::size_t groupSize = 4;
+
+  for (std::size_t i = 0; i < size; i += bytesPerLine) {
+    // Calculate the current address (pointer) and print it in hex.
+    // For 64-bit addresses, use std::setw(16); for 32-bit, std::setw(8).
+    uintptr_t address = reinterpret_cast<uintptr_t>(bytes + i);
+    std::cout << "0x"
+              << std::setw(sizeof(uintptr_t) * 2) // 8 for 32-bit, 16 for 64-bit
+              << std::setfill('0') << std::hex << address << ": ";
+
+    // Print 16 bytes (or whatever remains). Group them in 4s, with spacing in
+    // between.
+    for (std::size_t j = 0; j < bytesPerLine; ++j) {
+      // Check if we're still within the data size.
+      if (i + j < size) {
+        // Print each byte as 2-digit hex; pad with 0 if needed.
+        std::cout << std::setw(2) << std::setfill('0')
+                  << static_cast<unsigned>(bytes[i + j]);
+      } else {
+        // Past the end of the data—print spaces to keep alignment.
+        std::cout << "  ";
+      }
+
+      // Spacing logic:
+      // - Single space between bytes within a group
+      // - Three spaces between 4-byte groups
+      if ((j + 1) % groupSize == 0 && (j + 1) < bytesPerLine)
+        std::cout << "   "; // gap after each 4-byte group
+      else if ((j + 1) < bytesPerLine)
+        std::cout << " ";
+    }
+
+    // Print the ASCII “column” separator.
+    std::cout << "   │ ";
+
+    // For the ASCII part, again iterate over the same 16 bytes.
+    for (std::size_t j = 0; j < bytesPerLine; ++j) {
+      if (i + j < size) {
+        unsigned char c = bytes[i + j];
+        // If it's printable, print the character; otherwise, print '.'.
+        if (std::isprint(c))
+          std::cout << c;
+        else
+          std::cout << '.';
+      } else {
+        // No more data, so we could pad with spaces if desired.
+        std::cout << " ";
+      }
+    }
+
+    // Close the ASCII column.
+    std::cout << " │\n";
+  }
+
+  // Restore decimal output in case you print other numbers later.
+  std::cout << std::endl << std::dec;
+}
+
 void readArrayVector(
     ByteInputStream* source,
     const TypePtr& type,
@@ -757,6 +833,20 @@ void readArrayVector(
 
   const auto resultElementsOffset = arrayVector->elements()->size();
 
+//  auto* buffer = source->buffer();
+//  uintptr_t address = reinterpret_cast<uintptr_t>(buffer);
+//  {
+//    std::lock_guard<std::mutex> l(initMutex_);
+//
+//    LOG(ERROR) << "readArrayVector begin. buffer="
+//               << "0x"
+//               << std::setw(
+//                      sizeof(uintptr_t) * 2) // 8 for 32-bit, 16 for 64-bit
+//               << std::setfill('0') << std::hex << address << std::dec
+//               << " pos=" << source->tellp() << " size=" << source->size();
+//    printMemory(buffer, source->size());
+//  }
+
   std::vector<TypePtr> childTypes = {type->childAt(0)};
   std::vector<VectorPtr> children{arrayVector->elements()};
   readColumns(
@@ -769,10 +859,32 @@ void readArrayVector(
       opts,
       children);
 
+//  {
+//    std::lock_guard<std::mutex> l(initMutex_);
+//
+//    LOG(ERROR) << "readArrayVector after elements. buffer="
+//               << "0x"
+//               << std::setw(
+//                      sizeof(uintptr_t) * 2) // 8 for 32-bit, 16 for 64-bit
+//               << std::setfill('0') << std::hex << address << std::dec
+//               << " pos=" << source->tellp() << " size=" << source->size();
+//    printMemory(buffer, source->size());
+//  }
+
   const vector_size_t size = source->read<int32_t>();
   const auto numNewValues = sizeWithIncomingNulls(size, numIncomingNulls);
   arrayVector->resize(resultOffset + numNewValues);
   arrayVector->setElements(children[0]);
+
+//  {
+//    std::lock_guard<std::mutex> l(initMutex_);
+//
+//    LOG(ERROR) << "readArrayVector after reading size=" << size << ". buffer="
+//               << "0x" << std::setw(sizeof(uintptr_t) * 2) << std::setfill('0')
+//               << std::hex << address << std::dec << " pos=" << source->tellp()
+//               << " size=" << source->size();
+//    printMemory(buffer, source->size());
+//  }
 
   BufferPtr offsets = arrayVector->mutableOffsets(resultOffset + numNewValues);
   auto rawOffsets = offsets->asMutable<vector_size_t>();
@@ -785,6 +897,19 @@ void readArrayVector(
       rawSizes[resultOffset + i] = 0;
       continue;
     }
+
+//    {
+//      std::lock_guard<std::mutex> l(initMutex_);
+//
+//      LOG(ERROR) << "readArrayVector before reading offset. buffer="
+//                 << "0x"
+//                 << std::setw(
+//                        sizeof(uintptr_t) * 2) // 8 for 32-bit, 16 for 64-bit
+//                 << std::setfill('0') << std::hex << address << std::dec
+//                 << " pos=" << source->tellp() << " size=" << source->size();
+//      printMemory(buffer, source->size());
+//    }
+
     int32_t offset = source->read<int32_t>();
     rawOffsets[resultOffset + i] = resultElementsOffset + base;
     rawSizes[resultOffset + i] = offset - base;
@@ -1037,6 +1162,20 @@ void readColumns(
           {TypeKind::UNKNOWN, &read<UnknownValue>}};
 
   VELOX_CHECK_EQ(types.size(), results.size());
+
+//  auto* buffer = source->buffer();
+//  uintptr_t address = reinterpret_cast<uintptr_t>(buffer);
+//  {
+//    std::lock_guard<std::mutex> l(initMutex_);
+//
+//    LOG(ERROR) << "readColumns begin. buffer="
+//               << "0x"
+//               << std::setw(
+//                      sizeof(uintptr_t) * 2) // 8 for 32-bit, 16 for 64-bit
+//               << std::setfill('0') << std::hex << address << std::dec
+//               << " pos=" << source->tellp() << " size=" << source->size();
+//    printMemory(buffer, source->size());
+//  }
 
   for (int32_t i = 0; i < types.size(); ++i) {
     const auto& columnType = types[i];
@@ -4146,6 +4285,20 @@ void readTopColumns(
     int32_t resultOffset,
     const SerdeOpts& opts,
     bool singleColumn = false) {
+//  auto* buffer = source.buffer();
+//  uintptr_t address = reinterpret_cast<uintptr_t>(buffer);
+//  {
+//    std::lock_guard<std::mutex> l(initMutex_);
+//
+//    LOG(ERROR) << "readTopColumns begin. buffer="
+//               << "0x"
+//               << std::setw(
+//                      sizeof(uintptr_t) * 2) // 8 for 32-bit, 16 for 64-bit
+//               << std::setfill('0') << std::hex << address << std::dec
+//               << " pos=" << source.tellp() << " size=" << source.size();
+//    printMemory(buffer, source.size());
+//  }
+
   int32_t numColumns = 1;
   if (!singleColumn) {
     numColumns = source.read<int32_t>();
