@@ -19,10 +19,11 @@
 #include "velox/serializers/PrestoSerializer.h"
 #include "velox/vector/ComplexVector.h"
 #include "velox/vector/FlatVector.h"
+#include "velox/vector/PartitionedVector.h"
 
 namespace facebook::velox::serializer::presto {
 
-using BaseVectorPtr = std::shared_ptr<BaseVector>;
+using PartitionedVectorPtr = std::shared_ptr<PartitionedVector>;
 using SerdeOpts = PrestoVectorSerde::PrestoOptions;
 
 class IterativePartitioningSerializer {
@@ -52,42 +53,27 @@ class IterativePartitioningSerializer {
   std::unordered_map<std::string, RuntimeCounter> runtimeStats();
 
  private:
-  BaseVectorPtr partitionInPlace(VectorPtr input);
-
-  RowVectorPtr partitionRowVectorInPlace(const RowVectorPtr& vector);
-
-  //  VectorPtr partitionArrayVectorInPlace(const ArrayVectorPtr& vector);
-
-  template <TypeKind kind>
-  VectorPtr partitionFlatVectorInPlace(const VectorPtr& vector);
-
-  VectorPtr partitionDictionaryVectorInPlace(const VectorPtr& vector);
-
-  template <typename T>
-  void partitionFixedWidthValuesInPlace(T*& values);
 
   void flushVectors(
-      const std::vector<VectorPtr>& vectors,
+      const std::vector<PartitionedVectorPtr>& partitionedVectors,
       std::vector<IOBufOutputStream>& outputStreams);
 
   void flushSimpleVectors(
-      const std::vector<VectorPtr>& vectors,
+      const std::vector<PartitionedVectorPtr>& partitionedVectors,
       std::vector<IOBufOutputStream>& outputStreams);
 
   void flushSimpleVector(
-      const VectorPtr& vector,
-      const raw_vector<uint32_t>& offsets,
+      const PartitionedVectorPtr& partitionedVector,
       std::vector<IOBufOutputStream>& outputStreams);
 
   void flushRowVectors(
-      const std::vector<VectorPtr>& rowVectors,
+      const std::vector<PartitionedVectorPtr>& partitionedRowVectors,
       std::vector<IOBufOutputStream>& outputStreams,
       bool isTopLevel = false);
 
   template <TypeKind kind>
   void flushFlatVectorValues(
-      const VectorPtr vector,
-      const raw_vector<uint32_t>& offsets,
+      const PartitionedVectorPtr& partitionedVector,
       std::vector<IOBufOutputStream>& outputStreams);
 
   //  void flushDictionaryVector(
@@ -96,16 +82,16 @@ class IterativePartitioningSerializer {
   //      std::vector<IOBufOutputStream>& outputStreams);
 
   void serializeWrapped(
-      const VectorPtr vector,
+      const VectorPtr& vector,
       const RowSet& rows,
       IOBufOutputStream& outputStream);
 
   void flushHeader(
-      std::string_view name,
+      const std::string_view& name,
       std::vector<IOBufOutputStream>& outputStreams);
 
   void flushNullFlag(
-      const std::vector<VectorPtr>& vectors,
+      const std::vector<PartitionedVectorPtr>& vectors,
       std::vector<IOBufOutputStream>& outputStreams);
 
   void flushStart(IOBufOutputStream& out, uint32_t destination, char codecMask);
@@ -131,27 +117,25 @@ class IterativePartitioningSerializer {
     int64_t compressionSkippedBytes{0};
   };
 
-  const int32_t numDestinations_;
+  const int32_t numPartitions_;
   const std::weak_ptr<exec::OutputBufferManager> bufferManager_;
   const std::function<void()> bufferReleaseFn_;
   const std::unique_ptr<folly::io::Codec> codec_;
   const std::unique_ptr<core::PartitionFunction> partitionFunction_;
   StreamArena streamArena_;
   memory::MemoryPool* const pool_;
+  BufferPtr tempBuffer_;
+  std::vector<PartitionedVectorPtr> tempVectors_;
 
   std::vector<uint32_t> partitions_;
-  std::vector<VectorPtr> partitionedPages_;
+  //  std::vector<VectorPtr> partitionedPages_;
+  std::vector<PartitionedVectorPtr> partitionedPages_;
   // If we want to cut the incoming pages in half when flushing, change this to
   // std::vector<std::vector<vector_size_t>>. But this would require calculating
   // the row sizes
   //        std::vector<int32_t> row;
-  std::vector<uint32_t> beginOffsets_;
 
-  //        std::vector<std::vector<uint32_t>> offsets_;
-  std::vector<raw_vector<uint32_t>> offsets_;
   std::vector<uint32_t> rowCounts_;
-  // Size is the number of incoming page
-  std::vector<VectorPtr> tempVectors_;
   int64_t bytesBuffered_;
   int64_t rowsBuffered_;
 

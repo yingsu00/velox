@@ -13,110 +13,132 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#include <vector>
+
+#include "velox/vector/BaseVector.h"
+#include "velox/vector/ComplexVector.h"
 
 namespace facebook::velox {
 
 class PartitionedVector {
  public:
-  /// Default constructor. The caller must call partition() or makeIndices() next.
-      PartitionedVector() = default;
+  /// Default constructor. The caller must call partition() or makeIndices()
+  /// next.
+  PartitionedVector() = delete;
 
   /// Disable copy constructor and assignment.
-  PartitionedVector(const PartitionedVector& other) = delete;
+  PartitionedVector(const PartitionedVector& other) = default;
 
   PartitionedVector& operator=(const PartitionedVector& other) = delete;
 
   /// Allow std::move.
   PartitionedVector(PartitionedVector&& other) = default;
 
-  /// partitions 'vector' from 'partitions'.
+  static std::shared_ptr<PartitionedVector> create(
+      VectorPtr vector,
+      const std::vector<uint32_t>& partitions,
+      const int32_t numPartitions,
+      BufferPtr partitionOffsets,
+      velox::memory::MemoryPool* pool);
+
   PartitionedVector(
       VectorPtr vector,
       const std::vector<uint32_t>& partitions,
-      const int32_t numDestinations,
-      bool loadLazy = true)
+      const int32_t numPartitions,
+      BufferPtr partitionOffsets,
+      velox::memory::MemoryPool* pool)
       : vector_(vector),
         partitions_(partitions),
-        numDestinations_(numDestinations),
-        loadLazy_(loadLazy) {
-    beginOffsets_.resize(numDestinations_);
-    offsets_.resize(numDestinations_);
-    partition(vector_);
+        numPartitions_(numPartitions),
+        partitionOffsets_(partitionOffsets),
+        pool_(pool) {
+    if (!partitionOffsets_) {
+      partitionOffsets_ =
+          AlignedBuffer::allocate<uint32_t>(numPartitions, pool);
+    }
+    rawPartitionOffsets_ = partitionOffsets_->asMutable<uint32_t>();
   }
 
-  VectorPtr vectorForPartition(uint32_t partition);
+  VectorPtr vector();
 
-  std::vector<vector_size_t>& offsets() {
-    return offsets_;
+  template <typename T>
+  T* as() {
+    static_assert(std::is_base_of_v<PartitionedVector, T>);
+    return dynamic_cast<T*>(this);
+  }
+
+  virtual void partition(BufferPtr& tempBuffer) = 0;
+
+  uint32_t* rawPartitionOffsets() {
+    return rawPartitionOffsets_;
   }
 
   /// Returns string representation of the value in the specified row.
-  std::string toString(vector_size_t idx) const;
+  virtual std::string toString() const;
 
- private:
-  /// Resets the internal state and partitions 'vector' for 'rows'. See
-  /// constructor.
-  void partition(BaseVectorPtr& input);
-
-  void partitionRowVectorInPlace(RowVectorPtr& input);
-
-  void partitionFlatVectorInPlace(BaseVectorPtr& input);
-
+ protected:
+  VectorPtr vector_;
   const std::vector<uint32_t>& partitions_;
-  const int32_t numDestinations_;
-
-  BaseVectorPtr vector_;
-
-  std::vector<vector_size_t> beginOffsets_;
-  std::vector<vector_size_t> offsets_;
-
-  bool loadLazy_ = false;
-};
-
-class Destination {
- public:
-  /// @param recordEnqueued Should be called to record each call to
-  /// OutputBufferManager::enqueue. Takes number of bytes and rows.
-  Destination(
-      const std::string& taskId,
-      int destination,
-      memory::MemoryPool* pool,
-      bool eagerFlush,
-      std::function<void(uint64_t bytes, uint64_t rows)> recordEnqueued,
-      OutputBufferManager& bufferManager)
-      : pool_(pool),
-        taskId_(taskId),
-        destination_(destination),
-        eagerFlush_(eagerFlush),
-        recordEnqueued_(std::move(recordEnqueued)),
-        outputStream_{*pool_, bufferManager.newListener().get(), 0} {}
-
-  BlockingReason flush(
-      OutputBufferManager& bufferManager,
-      const std::function<void()>& bufferReleaseFn,
-      ContinueFuture* future);
+  const int32_t numPartitions_;
+  BufferPtr partitionOffsets_;
+  velox::memory::MemoryPool* pool_;
 
  private:
-  memory::MemoryPool* const pool_;
-  const std::string taskId_;
-  const int destination_;
-  const bool eagerFlush_;
-  const std::function<void(uint64_t bytes, uint64_t rows)> recordEnqueued_;
-
-  IOBufOutputStream outputStream_;
-
-  // Bytes serialized in 'current_'
-  uint64_t bytesBuffered_{0};
-
-  bool finished_{false};
-
-  // Flush accumulated data to buffer manager after reaching this
-  // percentage of target bytes or rows. This will make data for
-  // different destinations ready at different times to flatten a
-  // burst of traffic.
-  int32_t targetSizePct_;
-
-  // Generator for varying target batch size. Randomly seeded at
-  construction.folly::Random::DefaultGenerator rng_;
+  uint32_t* rawPartitionOffsets_;
 };
+
+using PartitionedVectorPtr = std::shared_ptr<PartitionedVector>;
+
+template <typename T>
+class PartitionedFlatVector : public PartitionedVector {
+ public:
+  PartitionedFlatVector(
+      std::shared_ptr<FlatVector<T>> flatVector,
+      const std::vector<uint32_t>& partitions,
+      const int32_t numPartitions,
+      BufferPtr partitionOffsets,
+      velox::memory::MemoryPool* pool)
+      : PartitionedVector(
+            flatVector,
+            partitions,
+            numPartitions,
+            partitionOffsets,
+            pool) {}
+
+  void partition(BufferPtr& tempBuffer) override;
+};
+
+class PartitionedRowVector : public PartitionedVector {
+ public:
+  PartitionedRowVector(
+      VectorPtr vector,
+      const std::vector<uint32_t>& partitions,
+      const int32_t numPartitions,
+      BufferPtr partitionOffsets,
+      velox::memory::MemoryPool* pool,
+      std::vector<PartitionedVectorPtr>& children)
+      : PartitionedVector(
+            vector,
+            partitions,
+            numPartitions,
+            partitionOffsets,
+            pool),
+        children_(children) {}
+
+  /// Get the child vector at a given offset.
+  std::shared_ptr<PartitionedVector> childAt(column_index_t index) {
+    VELOX_CHECK_LT(
+        index,
+        static_cast<column_index_t>(children_.size()),
+        "Trying to access non-existing child in RowVector: {}",
+        toString());
+    return children_[index];
+  }
+
+  void partition(BufferPtr& tempBuffer) override;
+
+ private:
+  std::vector<PartitionedVectorPtr> children_;
+};
+
 } // namespace facebook::velox

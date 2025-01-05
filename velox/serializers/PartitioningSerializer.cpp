@@ -17,12 +17,8 @@
 #include <map>
 
 #include "velox/common/memory/ByteStream.h"
-#include "velox/common/memory/MemoryPool.h"
 #include "velox/exec/OutputBufferManager.h"
 #include "velox/serializers/PartitioningSerializer.h"
-#include "velox/type/Type.h"
-#include "velox/vector/ComplexVector.h"
-#include "velox/vector/VectorTypeUtils.h"
 
 namespace facebook::velox::serializer::presto {
 
@@ -159,6 +155,19 @@ int64_t computeChecksum(
   result.process_bytes(&uncompressedSize, 4);
   return result.checksum();
 }
+
+// copied from ColumnReader.h
+template <typename T>
+inline void ensureCapacity(
+    BufferPtr& data,
+    size_t capacity,
+    velox::memory::MemoryPool* pool) {
+  if (!data || !data->unique() ||
+      data->capacity() < BaseVector::byteSize<T>(capacity)) {
+    data = AlignedBuffer::allocate<T>(capacity, pool);
+  }
+}
+
 } // namespace
 
 IterativePartitioningSerializer::IterativePartitioningSerializer(
@@ -166,29 +175,18 @@ IterativePartitioningSerializer::IterativePartitioningSerializer(
     const std::weak_ptr<exec::OutputBufferManager>& bufferManager,
     const std::function<void()>& bufferReleaseFn,
     const SerdeOpts& opts,
-    //                                                               const
-    //                                                               core::PartitionFunctionSpec
-    //                                                               &partitionFunctionSpec,
     std::unique_ptr<core::PartitionFunction> partitionFunction,
-    //                                                               StreamArena
-    //                                                               *streamArena,
     memory::MemoryPool* pool)
-    : numDestinations_(numDestinations),
+    : numPartitions_(numDestinations),
       bufferManager_(bufferManager),
       bufferReleaseFn_(bufferReleaseFn),
       codec_(common::compressionKindToCodec(opts.compressionKind)),
       partitionFunction_(std::move(partitionFunction)),
-      //              partitionFunction_(numDestinations_ == 1 ? nullptr :
-      //              partitionFunctionSpec.create(numDestinations_)),
-      //              partitionFunction_(std::move(partitionFunction)),
       streamArena_(pool),
       pool_(pool),
+      rowCounts_(numPartitions_, 0),
       bytesBuffered_(0),
       rowsBuffered_(0) {
-  beginOffsets_.resize(numDestinations_ + 1);
-  rowCounts_.resize(numDestinations_);
-  rowCounts_.assign(rowCounts_.size(), 0);
-  //        offsets_.resize(numDestinations_);
 }
 
 void IterativePartitioningSerializer::append(RowVectorPtr& input) {
@@ -200,41 +198,37 @@ void IterativePartitioningSerializer::append(RowVectorPtr& input) {
 
   // offsets_ will be reused and size() doesn't decrease.
   // Insert one offsets vector first
-  auto numPagesBuffered = partitionedPages_.size();
-  if (offsets_.size() <= numPagesBuffered) {
-    auto offset = raw_vector<uint32_t>(numDestinations_);
-    offsets_.push_back(std::move(offset));
-  }
+  //  auto numPagesBuffered = partitionedPages_.size();
+  auto partitionOffsetsBuffer =
+      AlignedBuffer::allocate<uint32_t>(numPartitions_, pool_);
+  uint32_t* partitionOffsets = partitionOffsetsBuffer->asMutable<uint32_t>();
+  std::fill(&partitionOffsets[0], &partitionOffsets[numPartitions_], 0);
 
-  if (numDestinations_ > 1) {
+  if (numPartitions_ > 1) {
     VELOX_CHECK(partitionFunction_);
     partitionFunction_->partition(*input, partitions_);
 
-    // calculate row counts for the current incoming page
-    auto rowCounts = offsets_[partitionedPages_.size()].data();
-    std::fill(&rowCounts[0], &rowCounts[numDestinations_], 0);
-    countPartitionSizes(partitions_, rowCounts);
-    addVector(rowCounts, rowCounts_, numDestinations_);
-    prefixSum(rowCounts, numDestinations_);
+    countPartitionSizes(partitions_, partitionOffsets);
+    addVector(partitionOffsets, rowCounts_, numPartitions_);
+    prefixSum(partitionOffsets, numPartitions_);
 
-    auto& offsets = rowCounts;
-    beginOffsets_[0] = 0;
-    std::memcpy(&beginOffsets_[1], &offsets[0], 4 * (numDestinations_));
-    input = partitionRowVectorInPlace(input);
+    auto partitionedPage = PartitionedVector::create(
+        input, partitions_, numPartitions_, partitionOffsetsBuffer, pool_);
+
+    ensureCapacity<uint32_t>(tempBuffer_, numPartitions_ + 1, pool_);
+    partitionedPage->partition(tempBuffer_);
+    partitionedPages_.emplace_back(partitionedPage);
   } else {
-    rowCounts_[0] += numRows;
-    offsets_[partitionedPages_.size()][0] = numRows;
+    VELOX_CHECK_EQ(numPartitions_, 1);
+    partitionOffsets[0] = input->size();
+    rowCounts_[0] = input->size();
+    auto partitionedPage = PartitionedVector::create(
+        input, partitions_, numPartitions_, partitionOffsetsBuffer, pool_);
+    partitionedPages_.emplace_back(partitionedPage);
   }
 
-  partitionedPages_.emplace_back(input);
   bytesBuffered_ += input->inMemoryBytes();
   rowsBuffered_ += numRows;
-
-  //        // VLOG(0) << "Serializer finished appending input
-  //        partitionedPages_ " << partitionedPages_.size()
-  //                << " bytesBuffered_:" << bytesBuffered_ << "
-  //                rowsBuffered_:"
-  //                << rowsBuffered_;
 }
 
 std::map<uint32_t, std::unique_ptr<exec::SerializedPage>>
@@ -249,12 +243,11 @@ IterativePartitioningSerializer::flush() {
 
   // Flush headers for all destinations
   std::vector<IOBufOutputStream> outputStreams;
-  std::vector<int32_t> beginOffsets(numDestinations_, 0);
-  for (uint32_t destination = 0; destination < numDestinations_;
-       destination++) {
+  std::vector<int32_t> beginOffsets(numPartitions_, 0);
+  for (uint32_t destination = 0; destination < numPartitions_; destination++) {
     auto listener = bufferManager_.lock()->newListener();
     outputStreams.emplace_back(
-        *pool_, listener.get(), bytesBuffered_ / numDestinations_);
+        *pool_, listener.get(), bytesBuffered_ / numPartitions_);
     auto& out = outputStreams[destination];
 
     auto prestoListener =
@@ -276,8 +269,7 @@ IterativePartitioningSerializer::flush() {
   flushRowVectors(partitionedPages_, outputStreams, true);
 
   std::map<uint32_t, std::unique_ptr<exec::SerializedPage>> serializedPages;
-  for (uint32_t destination = 0; destination < numDestinations_;
-       destination++) {
+  for (uint32_t destination = 0; destination < numPartitions_; destination++) {
     auto& out = outputStreams[destination];
     flushFinish(out, destination, beginOffsets[destination], codecMask);
 
@@ -318,123 +310,12 @@ int64_t IterativePartitioningSerializer::rowsBuffered() {
   return rowsBuffered_;
 }
 
-VectorPtr IterativePartitioningSerializer::partitionInPlace(VectorPtr input) {
-  auto encoding = input->encoding();
-  switch (encoding) {
-    case VectorEncoding::Simple::FLAT:
-      return VELOX_DYNAMIC_SCALAR_TYPE_DISPATCH_ALL(
-          IterativePartitioningSerializer::partitionFlatVectorInPlace,
-          input->typeKind(),
-          input);
-    case VectorEncoding::Simple::DICTIONARY:
-      return partitionDictionaryVectorInPlace(input);
-
-    case VectorEncoding::Simple::ROW:
-      return partitionRowVectorInPlace(
-          std::dynamic_pointer_cast<RowVector>(input));
-    case VectorEncoding::Simple::ARRAY:
-//      return partitionArrayVectorInPlace(
-//          std::dynamic_pointer_cast<ArrayVector>(input));
-
-    case VectorEncoding::Simple::BIASED:
-    case VectorEncoding::Simple::SEQUENCE:
-    case VectorEncoding::Simple::MAP:
-    case VectorEncoding::Simple::LAZY:
-      VELOX_UNSUPPORTED(
-          "Unsupported vector encoding for OptimizedPartitionedOutput: ",
-          encoding);
-      break;
-    default:
-      VELOX_UNREACHABLE(
-          "Invalid vector encoding for OptimizedPartitionedOutput: ", encoding);
-  }
-  return input;
-}
-
-RowVectorPtr IterativePartitioningSerializer::partitionRowVectorInPlace(
-    const RowVectorPtr& vector) {
-  for (int i = 0; i < vector->childrenSize(); i++) {
-    VectorPtr childVec = vector->childAt(i);
-    partitionInPlace(childVec);
-  }
-  return vector;
-}
-
-//VectorPtr IterativePartitioningSerializer::partitionArrayVectorInPlace(
-//    const ArrayVectorPtr& vector) {
-//
-//}
-
-template <TypeKind kind>
-VectorPtr IterativePartitioningSerializer::partitionFlatVectorInPlace(
-    const VectorPtr& vector) {
-  using T = typename TypeTraits<kind>::NativeType;
-  auto* flatVector = vector->as<FlatVector<T>>();
-  auto* values = flatVector->mutableRawValues();
-
-  partitionFixedWidthValuesInPlace<T>(values);
-
-  return vector;
-}
-
-VectorPtr IterativePartitioningSerializer::partitionDictionaryVectorInPlace(
-    const VectorPtr& vector) {
-  auto* indices = vector->wrapInfo()->asMutable<vector_size_t>();
-  partitionFixedWidthValuesInPlace<vector_size_t>(indices);
-
-  return vector;
-}
-
-template <typename T>
-void IterativePartitioningSerializer::partitionFixedWidthValuesInPlace(
-    T*& values) {
-  auto offsets = offsets_[partitionedPages_.size()].data();
-
-  // This is slower than the second version
-  //        auto n = vector->size();
-  //        int i = 0;
-  //        int partition = 0;
-  //        while (i < n) {
-  //            while (i < offsets[partition]) {
-  //                int p = partitions_[i];
-  //                int target_index = beginOffsets_[p];
-  //
-  //                if (i == target_index) {
-  //                    // Element is in the correct position for its
-  //                    partition beginOffsets_[p]++; i++;
-  //                } else {
-  //                    // Swap the current element with the element at its
-  //                    target position std::swap(values[i],
-  //                    values[target_index]); std::swap(partitions_[i],
-  //                    partitions_[target_index]); beginOffsets_[p]++;
-  //                    // Do not increment 'i' to handle the new element at
-  //                    index 'i'
-  //                }
-  //            }
-  //            i = beginOffsets_[++partition];
-  //        }
-
-  for (auto partition = 0; partition < numDestinations_; partition++) {
-    auto offset = beginOffsets_[partition];
-    auto endOffset = offsets[partition];
-    while (offset < endOffset) {
-      uint32_t p = partitions_[offset];
-      while (p != partition) {
-        auto destinationOffset = beginOffsets_[p]++;
-        std::swap(values[destinationOffset], values[offset]);
-        p = partitions_[destinationOffset];
-      }
-      offset = ++beginOffsets_[partition];
-    }
-  }
-}
-
 void IterativePartitioningSerializer::flushVectors(
-    const std::vector<VectorPtr>& vectors,
+    const std::vector<PartitionedVectorPtr>& vectors,
     std::vector<IOBufOutputStream>& outputStreams) {
   VELOX_CHECK_GT(vectors.size(), 0);
 
-  auto encoding = vectors[0]->encoding();
+  auto encoding = vectors[0]->vector()->encoding();
   switch (encoding) {
     case VectorEncoding::Simple::FLAT:
     case VectorEncoding::Simple::SEQUENCE:
@@ -465,19 +346,24 @@ void IterativePartitioningSerializer::flushVectors(
 }
 
 void IterativePartitioningSerializer::flushRowVectors(
-    const std::vector<VectorPtr>& rowVectors,
+    const std::vector<PartitionedVectorPtr>& partitionedRowVectors,
     std::vector<IOBufOutputStream>& outputStreams,
     bool isTopLevel) {
-  VELOX_CHECK_GT(rowVectors.size(), 0);
+  VELOX_CHECK_GT(partitionedRowVectors.size(), 0);
 
   if (!isTopLevel) {
     flushHeader(kRow, outputStreams);
   }
 
-  auto numColumns = rowVectors[0]->as<RowVector>()->childrenSize();
+  auto numColumns = partitionedRowVectors[0]
+                        ->as<PartitionedRowVector>()
+                        ->vector()
+                        ->as<RowVector>()
+                        ->childrenSize();
   for (uint32_t column = 0; column < numColumns; column++) {
-    for (int i = 0; i < rowVectors.size(); i++) {
-      tempVectors_[i] = rowVectors[i]->as<RowVector>()->childAt(column);
+    for (int i = 0; i < partitionedRowVectors.size(); i++) {
+      tempVectors_[i] =
+          partitionedRowVectors[i]->as<PartitionedRowVector>()->childAt(column);
     }
     // flush column to output
     flushVectors(tempVectors_, outputStreams);
@@ -485,44 +371,41 @@ void IterativePartitioningSerializer::flushRowVectors(
 }
 
 void IterativePartitioningSerializer::flushSimpleVectors(
-    const std::vector<VectorPtr>& vectors,
+    const std::vector<PartitionedVectorPtr>& partitionedVectors,
     std::vector<IOBufOutputStream>& outputStreams) {
-  VELOX_CHECK_GT(vectors.size(), 0);
+  VELOX_CHECK_GT(partitionedVectors.size(), 0);
 
-  flushHeader(typeToEncodingName(vectors[0]->type()), outputStreams);
+  flushHeader(
+      typeToEncodingName(partitionedVectors[0]->vector()->type()),
+      outputStreams);
 
-  for (int destination = 0; destination < numDestinations_; destination++) {
+  for (int destination = 0; destination < numPartitions_; destination++) {
     // Write row counts for each destination
     writeInt32(&outputStreams[destination], rowCounts_[destination]);
   }
 
   // Flush mayHaveNulls byte
-  flushNullFlag(vectors, outputStreams);
+  flushNullFlag(partitionedVectors, outputStreams);
 
   // TODO: flush nulls
 
-  for (int i = 0; i < vectors.size(); i++) {
-    VectorPtr vector = vectors[i];
-    auto offsets = offsets_[i];
-
-    flushSimpleVector(vector, offsets, outputStreams);
+  for (int i = 0; i < partitionedVectors.size(); i++) {
+    flushSimpleVector(partitionedVectors[i], outputStreams);
   }
 }
 
 void IterativePartitioningSerializer::flushSimpleVector(
-    const VectorPtr& vector,
-    const raw_vector<uint32_t>& offsets,
+    const PartitionedVectorPtr& partitionedVector,
     std::vector<IOBufOutputStream>& outputStreams) {
-  auto encoding = vector->encoding();
-  auto typeKind = vector->typeKind();
+  auto encoding = partitionedVector->vector()->encoding();
+  auto typeKind = partitionedVector->vector()->typeKind();
 
   switch (encoding) {
     case VectorEncoding::Simple::FLAT:
       return VELOX_DYNAMIC_SCALAR_TYPE_DISPATCH_ALL(
           IterativePartitioningSerializer::flushFlatVectorValues,
           typeKind,
-          vector,
-          offsets,
+          partitionedVector,
           outputStreams);
     case VectorEncoding::Simple::BIASED:
     case VectorEncoding::Simple::SEQUENCE:
@@ -538,20 +421,21 @@ void IterativePartitioningSerializer::flushSimpleVector(
 
 template <TypeKind kind>
 void IterativePartitioningSerializer::flushFlatVectorValues(
-    const VectorPtr vector,
-    const raw_vector<uint32_t>& offsets,
+    const PartitionedVectorPtr& partitionedVector,
     std::vector<IOBufOutputStream>& outputStreams) {
   using T = typename TypeTraits<kind>::NativeType;
   auto typeWidth = sizeof(T);
 
-  auto* flatVector = vector->as<FlatVector<T>>();
-  auto* values = flatVector->rawValues();
+  auto* flatVector = partitionedVector->as<PartitionedFlatVector<T>>();
+  auto* values =
+      flatVector->vector()->template as<FlatVector<T>>()->rawValues();
+  auto* offsets = flatVector->rawPartitionOffsets();
 
   auto lastOffset = 0;
-  for (int destination = 0; destination < numDestinations_; destination++) {
-    auto offset = offsets[destination];
+  for (int p = 0; p < numPartitions_; p++) {
+    auto offset = offsets[p];
     auto numValues = offset - lastOffset;
-    outputStreams[destination].write(
+    outputStreams[p].write(
         reinterpret_cast<const char*>(&values[lastOffset]),
         numValues * typeWidth);
     lastOffset = offset;
@@ -568,7 +452,7 @@ void IterativePartitioningSerializer::flushFlatVectorValues(
 //   auto dictionaryVector = vector->as<DictionaryVector<T>>();
 //
 //   auto lastOffset = 0;
-//   for (int destination = 0; destination < numDestinations_; destination++) {
+//   for (int destination = 0; destination < numPartitions_; destination++) {
 //     auto offset = offsets[destination];
 //     auto numValues = offset - lastOffset;
 //     serializeWrapped(vector, RowSet(), outputStreams[destination]);
@@ -576,34 +460,34 @@ void IterativePartitioningSerializer::flushFlatVectorValues(
 // }
 
 void IterativePartitioningSerializer::serializeWrapped(
-    const VectorPtr vector,
+    const VectorPtr& vector,
     const RowSet& rows,
     IOBufOutputStream& outputStream) {}
 
 void IterativePartitioningSerializer::flushHeader(
-    std::string_view name,
+    const std::string_view& name,
     std::vector<IOBufOutputStream>& outputStreams) {
   auto numBytes = name.size();
-  for (int destination = 0; destination < numDestinations_; destination++) {
+  for (int destination = 0; destination < numPartitions_; destination++) {
     writeInt32(&outputStreams[destination], numBytes);
     outputStreams[destination].write(&name[0], numBytes);
   }
 }
 
 void IterativePartitioningSerializer::flushNullFlag(
-    const std::vector<VectorPtr>& vectors,
+    const std::vector<PartitionedVectorPtr>& vectors,
     std::vector<IOBufOutputStream>& outputStreams) {
   // TODO: for simplicity we only check the whole vector now. The actual
   // mayHaveNulls value is one per destination
   char mayHaveNulls = 0;
   for (int i = 0; i < vectors.size(); i++) {
-    VectorPtr vector = vectors[i];
-    if (vector->mayHaveNulls()) {
+    PartitionedVectorPtr vector = vectors[i];
+    if (vector->vector()->mayHaveNulls()) {
       mayHaveNulls = 1;
       VELOX_NYI("Partitioning vector with nulls is not supported yet.");
     }
   }
-  for (int destination = 0; destination < numDestinations_; destination++) {
+  for (int destination = 0; destination < numPartitions_; destination++) {
     outputStreams[destination].write(&mayHaveNulls, 1);
   }
 }
@@ -634,7 +518,7 @@ void IterativePartitioningSerializer::flushStart(
   }
   // Write number of columns
   int32_t numColumns =
-      asRowType(partitionedPages_[0]->type())->children().size();
+      asRowType(partitionedPages_[0]->vector()->type())->children().size();
   writeInt32(&out, numColumns);
 }
 

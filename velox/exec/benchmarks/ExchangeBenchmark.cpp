@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 #include <folly/Benchmark.h>
+#include <folly/Random.h>
 #include <folly/init/Init.h>
 
 #include "velox/core/QueryConfig.h"
@@ -66,10 +67,12 @@ class ExchangeBenchmark : public VectorTestBase {
     for (int32_t i = 0; i < numVectors; ++i) {
       std::vector<VectorPtr> children;
       for (int j = 0; j < type->children().size(); j++) {
-        auto child = makeFlatVector<int64_t>(rowsPerVector);
+        auto child = makeFlatVector<int64_t>(rowsPerVector, [&](auto row) {
+          return folly::Random::rand64();
+        });
 
-        indices = makeIndices(child->size(), [&](auto i) { return i; });
-        BaseVector::wrapInDictionary(nullptr, indices, child->size(), child);
+//        indices = makeIndices(child->size(), [&](auto i) { return i; });
+//        BaseVector::wrapInDictionary(nullptr, indices, child->size(), child);
 
         children.push_back(child);
       }
@@ -444,7 +447,7 @@ void runBenchmarks() {
   //                                 ROW({{"s2_int", INTEGER()},
   //                                 {"s2_string", VARCHAR()}})))}});
 
-  flat10k = bm->makeRows(flatType, 1000, 10000, FLAGS_dict_pct);
+  flat10k = bm->makeRows(flatType, 100, 10000, FLAGS_dict_pct);
   //  deep10k = bm->makeRows(deepType, 10, 10000, FLAGS_dict_pct);
   //  flat50 = bm->makeRows(flatType, 2000, 50, FLAGS_dict_pct);
   //  deep50 = bm->makeRows(deepType, 2000, 50, FLAGS_dict_pct);

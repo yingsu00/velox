@@ -46,10 +46,10 @@ OptimizedPartitionedOutput::OptimizedPartitionedOutput(
           planNode->outputType())),
       numDestinations_(planNode->numPartitions()),
       //              partitionFunction_(
-      //                      numDestinations_ == 1
+      //                      numPartitions_ == 1
       //                      ? nullptr
       //                      :
-      //                      planNode->partitionFunctionSpec().create(numDestinations_)),
+      //                      planNode->partitionFunctionSpec().create(numPartitions_)),
       replicateNullsAndAny_(planNode->isReplicateNullsAndAny()),
       eagerFlush_(eagerFlush),
       bufferManager_(OutputBufferManager::getInstance()),
