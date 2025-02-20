@@ -107,8 +107,9 @@ void OptimizedPartitionedOutput::addInput(RowVectorPtr input) {
   // input->size() << " rows.";
   // TODO: replicateNullsAndAny_
 
-  if (serializer_->bytesBuffered() + input->inMemoryBytes() >=
-      maxSerializedPageBytes_ * numDestinations_) {
+  if (serializer_->bytesBuffered() + input->inMemoryBytes()
+      >= maxBufferedBytes_) {
+//      >=   maxSerializedPageBytes_ * numDestinations_) {
     flush();
   }
 
@@ -125,8 +126,8 @@ RowVectorPtr OptimizedPartitionedOutput::getOutput() {
   blockingReason_ = BlockingReason::kNotBlocked;
 
   if (noMoreInput_ ||
-      serializer_->bytesBuffered() >=
-          maxSerializedPageBytes_ * numDestinations_) {
+      serializer_->bytesBuffered() >= maxBufferedBytes_) {
+//      serializer_->bytesBuffered() >=   maxSerializedPageBytes_ * numDestinations_) {
     // VLOG(0) << "OptimizedPartitionedOutput::getOutput. noMoreInput_: " <<
     // noMoreInput_ << " flushing";
     flush();
@@ -169,7 +170,11 @@ void OptimizedPartitionedOutput::flush() {
     // serializedPage->toString()
     //                    << "for destination " << destination << " taskId_:" <<
     //                    taskId_;
+    numSerializedPages_++;
+    serializedPageSizes_.push_back(serializedPage->size());
     if (serializedPage && serializedPage->numRows() > 0) {
+      numNonZeroSerializedPages_++;
+
       bool blocked = bufferManager_.lock()->enqueue(
           taskId_, destination, std::move(serializedPage), &future_);
       if (blocked) {

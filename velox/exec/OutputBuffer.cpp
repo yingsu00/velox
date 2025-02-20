@@ -591,11 +591,11 @@ OutputBuffer::OutputBuffer(
 }
 
 void OutputBuffer::updateOutputBuffers(int numBuffers, bool noMoreBuffers) {
-  VLOG(1) << this
-          << " OutputBuffer::updateOutputBuffers begin for: " << task_->taskId()
-          << " numBuffers: " << numBuffers
-          << ", noMoreBuffers: " << noMoreBuffers
-          << " this: " << this->toString();
+//  VLOG(1) << this
+//          << " OutputBuffer::updateOutputBuffers begin for: " << task_->taskId()
+//          << " numBuffers: " << numBuffers
+//          << ", noMoreBuffers: " << noMoreBuffers
+//          << " this: " << this->toString();
 
   if (isPartitioned()) {
     VELOX_CHECK_EQ(buffersSize(), numBuffers);
@@ -622,14 +622,14 @@ void OutputBuffer::updateOutputBuffers(int numBuffers, bool noMoreBuffers) {
     task_->setAllOutputConsumed();
   }
 
-  VLOG(1) << this << " OutputBuffer::updateOutputBuffers end. "
-          << task_->taskId() << " this: " << this->toString();
+//  VLOG(1) << this << " OutputBuffer::updateOutputBuffers end. "
+//          << task_->taskId() << " this: " << this->toString();
 }
 
 void OutputBuffer::updateNumDrivers(uint32_t newNumDrivers) {
-  VLOG(1) << this << " OutputBuffer::updateNumDrivers begin for "
-          << task_->taskId() << " newNumDrivers: " << newNumDrivers
-          << " this: " << this->toString();
+//  VLOG(1) << this << " OutputBuffer::updateNumDrivers begin for "
+//          << task_->taskId() << " newNumDrivers: " << newNumDrivers
+//          << " this: " << this->toString();
 
   bool isNoMoreDrivers{false};
   buffers_.withWLock([&](auto& buffers) {
@@ -650,16 +650,16 @@ void OutputBuffer::updateNumDrivers(uint32_t newNumDrivers) {
     noMoreDrivers();
   }
 
-  VLOG(1) << this
-          << " OutputBuffer::updateNumDrivers end for: " << task_->taskId()
-          << " newNumDrivers: " << newNumDrivers
-          << " this: " << this->toString();
+//  VLOG(1) << this
+//          << " OutputBuffer::updateNumDrivers end for: " << task_->taskId()
+//          << " newNumDrivers: " << newNumDrivers
+//          << " this: " << this->toString();
 }
 
 void OutputBuffer::addOutputBuffersLocked(int numBuffers) {
-  VLOG(1) << this << " OutputBuffer::addOutputBuffersLocked begin for: "
-          << task_->taskId() << " numBuffers: " << numBuffers
-          << " this: " << this->toString();
+//  VLOG(1) << this << " OutputBuffer::addOutputBuffersLocked begin for: "
+//          << task_->taskId() << " numBuffers: " << numBuffers
+//          << " this: " << this->toString();
 
   VELOX_CHECK(!noMoreBuffers_);
   VELOX_CHECK(!isPartitioned());
@@ -694,9 +694,9 @@ void OutputBuffer::addOutputBuffersLocked(int numBuffers) {
     //        Lock";
   });
 
-  VLOG(1) << this << " OutputBuffer::addOutputBuffersLocked end for: "
-          << task_->taskId() << " numBuffers: " << numBuffers
-          << " this: " << this->toString();
+//  VLOG(1) << this << " OutputBuffer::addOutputBuffersLocked end for: "
+//          << task_->taskId() << " numBuffers: " << numBuffers
+//          << " this: " << this->toString();
 }
 
 void OutputBuffer::updateStatsWithEnqueuedPage(
@@ -742,15 +742,15 @@ bool OutputBuffer::enqueue(
     int destination,
     std::unique_ptr<SerializedPage> data,
     ContinueFuture* future) {
-  VLOG(1) << this << " OutputBuffer::enqueue begin for: " << task_->taskId()
-          << "/results/" << destination
-          << ", data: " << (data ? data->size() : -1L)
-          << " this: " << this->toString();
+//  VLOG(1) << this << " OutputBuffer::enqueue begin for: " << task_->taskId()
+//          << "/results/" << destination
+//          << ", data: " << (data ? data->size() : -1L)
+//          << " this: " << this->toString();
 
   // The task might have been deleted already.
   if (!task_->isRunning()) {
-    VLOG(1) << "Task " << task_->taskId() << " is in " << task_->state()
-            << "state, cannot enqueue data to OutputBuffer.";
+//    VLOG(1) << "Task " << task_->taskId() << " is in " << task_->state()
+//            << "state, cannot enqueue data to OutputBuffer.";
     return false;
   }
 
@@ -786,8 +786,8 @@ bool OutputBuffer::enqueue(
     blocked = true;
   }
 
-  VLOG(1) << this << " OutputBuffer::enqueue end for: " << task_->taskId()
-          << "/results/" << destination << " this: " << this->toString();
+//  VLOG(1) << this << " OutputBuffer::enqueue end for: " << task_->taskId()
+//          << "/results/" << destination << " this: " << this->toString();
 
   return blocked;
 }
@@ -825,8 +825,8 @@ void OutputBuffer::enqueueArbitraryOutput(
   arbitraryBuffer_->enqueue(std::move(data));
 
   buffers_.withRLock([&](auto& buffers) {
-    VLOG(4)
-        << "OutputBuffer::enqueueArbitraryOutput acquired buffers_ read Lock";
+//    VLOG(4)
+//        << "OutputBuffer::enqueueArbitraryOutput acquired buffers_ read Lock";
     VELOX_CHECK_LT(nextArbitraryLoadBufferIndex_, buffers.size());
     int32_t bufferId = nextArbitraryLoadBufferIndex_;
     for (int32_t i = 0; i < buffers.size();
@@ -842,8 +842,8 @@ void OutputBuffer::enqueueArbitraryOutput(
       }
       buffer->loadDataIfNecessary(arbitraryBuffer_.get());
     }
-    VLOG(4)
-        << "OutputBuffer::enqueueArbitraryOutput released buffers_ read Lock";
+//    VLOG(4)
+//        << "OutputBuffer::enqueueArbitraryOutput released buffers_ read Lock";
   });
 }
 
@@ -865,25 +865,25 @@ void OutputBuffer::enqueuePartitionedOutput(
 }
 
 void OutputBuffer::noMoreData() {
-  VLOG(1) << this << " OutputBuffer::noMoreData begin for: " << task_->taskId()
-          << "this: " << this->toString();
+//  VLOG(1) << this << " OutputBuffer::noMoreData begin for: " << task_->taskId()
+//          << "this: " << this->toString();
   // Increment number of finished drivers.
   checkIfDone(true);
 }
 
 void OutputBuffer::noMoreDrivers() {
-  VLOG(1) << this
-          << " OutputBuffer::noMoreDrivers begin for: " << task_->taskId()
-          << "this: " << this->toString();
+//  VLOG(1) << this
+//          << " OutputBuffer::noMoreDrivers begin for: " << task_->taskId()
+//          << "this: " << this->toString();
 
   // Do not increment number of finished drivers.
   checkIfDone(false);
 }
 
 void OutputBuffer::checkIfDone(bool oneDriverFinished) {
-  VLOG(1) << this << " OutputBuffer::checkIfDone for " << task_->taskId()
-          << " oneDriverFinished: " << oneDriverFinished
-          << " this: " << this->toString();
+//  VLOG(1) << this << " OutputBuffer::checkIfDone for " << task_->taskId()
+//          << " oneDriverFinished: " << oneDriverFinished
+//          << " this: " << this->toString();
 
   buffers_.withWLock([&](auto& buffers) {
     //    VLOG(4)
@@ -947,8 +947,8 @@ void OutputBuffer::checkIfDone(bool oneDriverFinished) {
 }
 
 bool OutputBuffer::isFinished() {
-  VLOG(1) << this << " OutputBuffer::isFinished begin for: " << task_->taskId()
-          << " this: " << this->toString();
+//  VLOG(1) << this << " OutputBuffer::isFinished begin for: " << task_->taskId()
+//          << " this: " << this->toString();
 
   // NOTE: for broadcast output buffer, we can only mark it as finished after
   // receiving the no more (destination) buffers signal.
@@ -978,9 +978,9 @@ bool OutputBuffer::isFinished() {
 }
 
 void OutputBuffer::acknowledge(int destination, int64_t sequence) {
-  VLOG(1) << this << " OutputBuffer::acknowledge begin for " << task_->taskId()
-          << "/results/" << destination << "/" << sequence
-          << " this: " << this->toString();
+//  VLOG(1) << this << " OutputBuffer::acknowledge begin for " << task_->taskId()
+//          << "/results/" << destination << "/" << sequence
+//          << " this: " << this->toString();
 
   if (atEnd_) {
     return;
@@ -1000,9 +1000,9 @@ void OutputBuffer::acknowledge(int destination, int64_t sequence) {
   updateAfterAcknowledge(freed, promises);
   releaseAfterAcknowledge(freed, promises);
 
-  VLOG(1) << this << " OutputBuffer::acknowledge end for: " << task_->taskId()
-          << "/results/" << destination << "/" << sequence
-          << " this: " << this->toString();
+//  VLOG(1) << this << " OutputBuffer::acknowledge end for: " << task_->taskId()
+//          << "/results/" << destination << "/" << sequence
+//          << " this: " << this->toString();
 }
 
 void OutputBuffer::updateAfterAcknowledge(
@@ -1042,8 +1042,8 @@ void OutputBuffer::updateAfterAcknowledge(
 }
 
 bool OutputBuffer::deleteResults(int destination) {
-  VLOG(1) << this << " OutputBuffer::deleteResults for " << task_->taskId()
-          << "/" << destination << " this: " << this->toString();
+//  VLOG(1) << this << " OutputBuffer::deleteResults for " << task_->taskId()
+//          << "/" << destination << " this: " << this->toString();
 
   std::vector<std::shared_ptr<SerializedPage>> freed;
   std::vector<ContinuePromise> promises;
@@ -1081,9 +1081,9 @@ bool OutputBuffer::deleteResults(int destination) {
     task_->setAllOutputConsumed();
   }
 
-  VLOG(1) << this << " OutputBuffer::deleteResults end for " << task_->taskId()
-          << "/" << destination << " isFinished: " << isFinished
-          << " this: " << this->toString();
+//  VLOG(1) << this << " OutputBuffer::deleteResults end for " << task_->taskId()
+//          << "/" << destination << " isFinished: " << isFinished
+//          << " this: " << this->toString();
 
   return isFinished;
 }
@@ -1094,10 +1094,10 @@ void OutputBuffer::getData(
     int64_t sequence,
     DataAvailableCallback notify,
     DataConsumerActiveCheckCallback activeCheck) {
-  VLOG(1) << this << " OutputBuffer::getData begin for " << task_->taskId()
-          << "/results/" << destination << "/" << sequence
-          << ", maxBytes: " << maxBytes << ", notify: " << &notify
-          << ", activeCheck: " << &activeCheck << " this: " << this->toString();
+//  VLOG(1) << this << " OutputBuffer::getData begin for " << task_->taskId()
+//          << "/results/" << destination << "/" << sequence
+//          << ", maxBytes: " << maxBytes << ", notify: " << &notify
+//          << ", activeCheck: " << &activeCheck << " this: " << this->toString();
 
   std::vector<std::shared_ptr<SerializedPage>> freed;
   std::vector<ContinuePromise> promises;
@@ -1116,18 +1116,18 @@ void OutputBuffer::getData(
     std::vector<std::unique_ptr<folly::IOBuf>> emptyData;
     emptyData.emplace_back(nullptr);
     notify(std::move(emptyData), sequence, std::vector<int64_t>{});
-    VLOG(1) << "getData received after deleteResults for " << task_->taskId()
-            << "/results/" << destination << "/" << sequence;
+//    VLOG(1) << "getData received after deleteResults for " << task_->taskId()
+//            << "/results/" << destination << "/" << sequence;
   }
 
   releaseAfterAcknowledge(freed, promises);
-  VLOG(1) << this << " OutputBuffer::getData end. " << task_->taskId()
-          << "/results/" << destination << " this: " << this->toString();
+//  VLOG(1) << this << " OutputBuffer::getData end. " << task_->taskId()
+//          << "/results/" << destination << " this: " << this->toString();
 }
 
 void OutputBuffer::terminate() {
-  VLOG(1) << this
-          << " OutputBuffer::terminate begin. this: " << this->toString();
+//  VLOG(1) << this
+//          << " OutputBuffer::terminate begin. this: " << this->toString();
 
   VELOX_CHECK(!task_->isRunning());
 
@@ -1180,9 +1180,9 @@ bool OutputBuffer::isOverutilized() const {
 
 int64_t OutputBuffer::getAverageBufferTimeMs() {
   return buffers_.withRLock([&](auto& buffers) {
-    VLOG(4)
-        << this
-        << " OutputBuffer::getAverageBufferTimeMs() acquired buffers_ read lock";
+//    VLOG(4)
+//        << this
+//        << " OutputBuffer::getAverageBufferTimeMs() acquired buffers_ read lock";
     if (numOutputBytes_ > 0) {
       //      VLOG(4)
       //          << this
@@ -1190,9 +1190,9 @@ int64_t OutputBuffer::getAverageBufferTimeMs() {
       //          read lock";
       return (int64_t)(totalBufferedBytesMs_ / numOutputBytes_);
     }
-    VLOG(4)
-        << this
-        << " OutputBuffer::getAverageBufferTimeMs() released buffers_ read lock";
+//    VLOG(4)
+//        << this
+//        << " OutputBuffer::getAverageBufferTimeMs() released buffers_ read lock";
     return static_cast<int64_t>(0);
   });
 }

@@ -193,11 +193,17 @@ IterativePartitioningSerializer::IterativePartitioningSerializer(
       pool_(pool),
       topRowCounts_(numPartitions_, 0),
       bytesBuffered_(0),
-      rowsBuffered_(0) {}
+      rowsBuffered_(0) {
+  flushingHeader_.resize(25);
+  std::fill(flushingHeader_.begin(), flushingHeader_.end(), 0);
+  auto codecMask = getCodecMarker();
+  flushingHeader_[5] = codecMask;
+}
 
 void IterativePartitioningSerializer::append(RowVectorPtr& input) {
   // VLOG(0) << "IterativePartitioningSerializer::append appending input " <<
   // input->toString();
+  numColumns_ = input->children().size();
 
   auto rowType = asRowType(input->type());
   auto numRows = input->size();
@@ -278,8 +284,16 @@ IterativePartitioningSerializer::flushUncompressed() {
     if (flushedBytes > 0 && topRowCounts_[destination] > 0) {
       serializedPages[destination] = std::make_unique<exec::SerializedPage>(
           out.getIOBuf(bufferReleaseFn_), nullptr, topRowCounts_[destination]);
+
+      totalFlushedBytes_ += flushedBytes;
+      totalFlushedRows_ += topRowCounts_[destination];
+      auto ranges = out.out().ranges();
+      totalNumRanges_ += ranges.size();
     }
   }
+
+  numFlushes_++;
+  numSerializedPages_+= serializedPages.size();
 
   bytesBuffered_ = 0;
   rowsBuffered_ = 0;
@@ -466,7 +480,7 @@ void IterativePartitioningSerializer::flushOffsets(
   for (auto& partitionedArrayVector : partitionedVectors) {
     const auto* partitionOffsets =
         partitionedArrayVector->rawPartitionOffsets();
-    vector_size_t * rawSizes = const_cast<vector_size_t*>(
+    vector_size_t* rawSizes = const_cast<vector_size_t*>(
         partitionedArrayVector->as<PartitionedArrayVector>()->rawSizes());
 
     auto partitionBegin = 0;
@@ -622,31 +636,58 @@ void IterativePartitioningSerializer::flushStart(
     IOBufOutputStream& out,
     uint32_t destination,
     char codecMask) {
-  auto prestoListener =
-      dynamic_cast<serializer::presto::PrestoOutputStreamListener*>(
-          out.listener());
-  if (prestoListener) {
-    prestoListener->pause();
-  }
+//  auto prestoListener =
+//      dynamic_cast<serializer::presto::PrestoOutputStreamListener*>(
+//          out.listener());
+  //  if (prestoListener) {
+  //    prestoListener->pause();
+  //  }
 
-  writeInt32(&out, topRowCounts_[destination]);
-  out.write(&codecMask, 1);
+  std::memcpy(
+      &flushingHeader_[0], &topRowCounts_[destination], sizeof(vector_size_t));
+  std::memcpy(
+      &flushingHeader_[21], &numColumns_, sizeof(vector_size_t));
+  out.write(&flushingHeader_[0], 25);
 
-  // Make space for uncompressedSizeInBytes & sizeInBytes
-  writeInt32(&out, 0);
-  writeInt32(&out, 0);
-  // Write zero checksum.
-  writeInt64(&out, 0);
-
-  // Number of columns and stream content. Unpause CRC.
-  if (prestoListener) {
-    prestoListener->resume();
-  }
+  //  // Number of columns and stream content. Unpause CRC.
+  //  if (prestoListener) {
+  //    prestoListener->resume();
+  //  }
   // Write number of columns
-  int32_t numColumns =
-      asRowType(partitionedPages_[0]->vector()->type())->children().size();
-  writeInt32(&out, numColumns);
+//  int32_t numColumns =
+//      asRowType(partitionedPages_[0]->vector()->type())->children().size();
+//  writeInt32(&out, numColumns_);
 }
+
+// void IterativePartitioningSerializer::flushStart(
+//     IOBufOutputStream& out,
+//     uint32_t destination,
+//     char codecMask) {
+//   auto prestoListener =
+//       dynamic_cast<serializer::presto::PrestoOutputStreamListener*>(
+//           out.listener());
+//   if (prestoListener) {
+//     prestoListener->pause();
+//   }
+//
+//   writeInt32(&out, topRowCounts_[destination]);
+//   out.write(&codecMask, 1);
+//
+//   // Make space for uncompressedSizeInBytes & sizeInBytes
+//   writeInt32(&out, 0);
+//   writeInt32(&out, 0);
+//   // Write zero checksum.
+//   writeInt64(&out, 0);
+//
+//   // Number of columns and stream content. Unpause CRC.
+//   if (prestoListener) {
+//     prestoListener->resume();
+//   }
+//   // Write number of columns
+//   int32_t numColumns =
+//       asRowType(partitionedPages_[0]->vector()->type())->children().size();
+//   writeInt32(&out, numColumns);
+// }
 
 void IterativePartitioningSerializer::flushFinish(
     IOBufOutputStream& out,

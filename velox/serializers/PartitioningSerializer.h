@@ -21,6 +21,8 @@
 #include "velox/vector/FlatVector.h"
 #include "velox/vector/PartitionedVector.h"
 
+#include <iostream>
+
 namespace facebook::velox::serializer::presto {
 
 using PartitionedVectorPtr = std::shared_ptr<PartitionedVector>;
@@ -38,6 +40,17 @@ class IterativePartitioningSerializer {
       std::unique_ptr<core::PartitionFunction> partitionFunction,
       //                                     StreamArena *streamArena,
       memory::MemoryPool* pool);
+//
+//  ~IterativePartitioningSerializer() {
+//    std::cout << "numFlushes_=" << numFlushes_
+//              << " numSerializedPages_=" << numSerializedPages_
+//              << " totalFlushedBytes_=" << totalFlushedBytes_
+//              << " totalFlushedRows_=" << totalFlushedRows_
+//              << " totalNumOutputRanges_=" << totalNumRanges_
+//              << " avgBytesPerRange=" << totalFlushedBytes_ / totalNumRanges_
+//              << " avgBytesPerSerializedPage="
+//              << totalFlushedBytes_ / numSerializedPages_ << std::endl;
+//  }
 
   void append(RowVectorPtr& vector);
 
@@ -148,6 +161,7 @@ class IterativePartitioningSerializer {
   };
 
   const int32_t numPartitions_;
+
   const std::weak_ptr<exec::OutputBufferManager> bufferManager_;
   const std::function<void()> bufferReleaseFn_;
   const std::unique_ptr<folly::io::Codec> codec_;
@@ -155,6 +169,7 @@ class IterativePartitioningSerializer {
   StreamArena streamArena_;
   memory::MemoryPool* const pool_;
 
+  int32_t numColumns_;
   // The partition (destination) numbers for the top level rows
   std::vector<uint32_t> topRowPartitions_;
   //  BufferPtr topRowOffsets_;
@@ -163,6 +178,7 @@ class IterativePartitioningSerializer {
   BufferPtr beginOffsetsBuffer_;
   //  BufferPtr partitionOffsetsBuffer_;
   BufferPtr swappingBuffer_;
+
   std::vector<PartitionedVectorPtr> tempVectors_;
 
   //  std::vector<VectorPtr> partitionedPages_;
@@ -172,6 +188,7 @@ class IterativePartitioningSerializer {
   // the row sizes
   //        std::vector<int32_t> row;
 
+  std::vector<char> flushingHeader_;
   std::vector<vector_size_t> topRowCounts_;
   std::vector<vector_size_t> rowCountsForLevel_;
   int64_t bytesBuffered_;
@@ -180,6 +197,12 @@ class IterativePartitioningSerializer {
   std::vector<IOBufOutputStream> outputStreams_;
   std::vector<ByteRange> headers_;
   CompressionStats compressionStats_;
+
+  int64_t numFlushes_{0};
+  int64_t numSerializedPages_{0};
+  int64_t totalFlushedBytes_{0};
+  int64_t totalFlushedRows_{0};
+  int64_t totalNumRanges_{0};
 
   //        struct CompressionStats {
   //            // Number of times compression was not attempted.

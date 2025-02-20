@@ -18,6 +18,7 @@
 #include "velox/common/memory/Memory.h"
 
 #include <sys/mman.h>
+#include <iostream>
 
 namespace facebook::velox::memory {
 MallocAllocator::MallocAllocator(size_t capacity, uint32_t reservationByteLimit)
@@ -36,6 +37,15 @@ MallocAllocator::MallocAllocator(size_t capacity, uint32_t reservationByteLimit)
       reservations_(std::thread::hardware_concurrency()) {}
 
 MallocAllocator::~MallocAllocator() {
+  std::cout << "freeNonContiguousCounts_=" << freeNonContiguousCounts_
+          << " freeRunCounts_=" << freeRunCounts_
+          << " freeTotalPages_=" << freeTotalPages_
+      << " numFreedPages_sizes=" << numFreedPages_.size() << std::endl;
+
+//  for (auto numPages : numFreedPages_) {
+//    std::cout << numPages << " ";
+//  }
+
   // TODO: Remove the check when memory leak issue is resolved.
   if (FLAGS_velox_memory_leak_check_enabled) {
     VELOX_CHECK(
@@ -191,12 +201,21 @@ int64_t MallocAllocator::freeNonContiguous(Allocation& allocation) {
   if (allocation.empty()) {
     return 0;
   }
+
+  freeNonContiguousCounts_++;
+  freeRunCounts_ += allocation.numRuns();
+
   MachinePageCount freedPages{0};
   for (int32_t i = 0; i < allocation.numRuns(); ++i) {
     Allocation::PageRun run = allocation.runAt(i);
     void* ptr = run.data();
     const int64_t numPages = run.numPages();
     freedPages += numPages;
+
+    freeTotalPages_ += numPages;
+    numFreedPages_.push_back(numPages);
+//        LOG(ERROR) << "freeNonContiguous numPages=" << numPages;
+
     stats_.recordFree(AllocationTraits::pageBytes(numPages), [&]() {
       ::free(ptr); // NOLINT
     });

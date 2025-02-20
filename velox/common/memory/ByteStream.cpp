@@ -267,8 +267,11 @@ void ByteOutputStream::appendStringView(std::string_view value) {
   for (;;) {
     const int32_t bytesFit =
         std::min(bytes - offset, current_->size - current_->position);
-    simd::memcpy(
+    std::memcpy(
         current_->buffer + current_->position, value.data() + offset, bytesFit);
+    //    simd::memcpy(
+    //        current_->buffer + current_->position, value.data() + offset,
+    //        bytesFit);
     current_->position += bytesFit;
     offset += bytesFit;
     if (offset == bytes) {
@@ -357,12 +360,25 @@ void ByteOutputStream::extend(int32_t bytes) {
     // Only initialize, do not allocate if bytes is 0.
     return;
   }
+
   arena_->newRange(
       newRangeSize(bytes),
       ranges_.size() == 1 ? nullptr : &ranges_[ranges_.size() - 2],
       current_);
   allocatedBytes_ += current_->size;
   VELOX_CHECK_GT(allocatedBytes_, 0);
+
+//  LOG(ERROR) << "current_: "
+//             << "0x"
+//             << std::setw(sizeof(uintptr_t) * 2) // 8 for 32-bit, 16 for 64-bit
+//             << std::setfill('0') << std::hex
+//             << reinterpret_cast<uintptr_t>(current_->buffer) << std::dec
+//             << " current_->size=" << current_->size
+//             << " current_->position=" << current_->position
+//             << " current_->availableBytes()=" << current_->availableBytes()
+//             << " newRange bytes=" << bytes
+//             << " allocatedBytes_=" << allocatedBytes_;
+
   if (isBits_) {
     // size and position are in units of bits for a bits stream.
     current_->size *= 8;

@@ -20,6 +20,8 @@
 #include "velox/exec/OutputBufferManager.h"
 #include "velox/serializers/PartitioningSerializer.h"
 
+#include <iostream>
+
 namespace facebook::velox::exec {
 
 using RowSet = folly::Range<const vector_size_t*>;
@@ -35,6 +37,21 @@ class OptimizedPartitionedOutput : public Operator {
       DriverCtx* ctx,
       const std::shared_ptr<const core::PartitionedOutputNode>& planNode,
       bool eagerFlush);
+
+  ~OptimizedPartitionedOutput() {
+    std::cout << "numSerializedPages_=" << numSerializedPages_;
+
+    int64_t totalSizes = 0;
+    for (auto size : serializedPageSizes_) {
+      totalSizes += size;
+      //      std::cout << size << " ";
+    }
+
+    int64_t avgPageSize =
+        numSerializedPages_ == 0 ? -1 : totalSizes / numSerializedPages_;
+    std::cout << " totalPageSizes=" << totalSizes
+              << " avgPageSize=" << avgPageSize << std::endl;
+  }
 
   void addInput(RowVectorPtr input) override;
 
@@ -94,7 +111,8 @@ class OptimizedPartitionedOutput : public Operator {
   velox::memory::MemoryPool* pool_;
   std::vector<uint32_t> partitions_;
   std::vector<uint32_t> partitionsCopy_;
-  std::unique_ptr<serializer::presto::IterativePartitioningSerializer> serializer_;
+  std::unique_ptr<serializer::presto::IterativePartitioningSerializer>
+      serializer_;
 
   //
 
@@ -106,6 +124,10 @@ class OptimizedPartitionedOutput : public Operator {
   //        std::vector<PartitionedVector> PartitionedVectors_;
 
   std::vector<IOBufOutputStream> outputStreams_;
+
+  std::vector<int64_t> serializedPageSizes_;
+  int64_t numSerializedPages_ = 0;
+  int64_t numNonZeroSerializedPages_ = 0;
 };
 
 } // namespace facebook::velox::exec
