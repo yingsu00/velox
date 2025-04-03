@@ -73,15 +73,46 @@ class LocalExchangeSource : public exec::ExchangeSource {
       //                        << " sequence:" << sequence << " data.size() : "
       //                        << data.size()
       //         << " remainingBytes.size()" << remainingBytes.size();
-      {
-        std::lock_guard<std::mutex> l(mutex_);
-        // This function is called either for a result or timeout. Only the
-        // first of these calls has an effect.
-        auto iter = timeouts_.find(self);
-        if (iter == timeouts_.end()) {
-          return;
+      //      {
+      //        std::lock_guard<std::mutex> l(mutex_);
+      //        // This function is called either for a result or timeout. Only
+      //        the
+      //        // first of these calls has an effect.
+      //        auto iter = timeouts_.find(self);
+      //        if (iter == timeouts_.end()) {
+      //          // If directly return witout seting exception, the promise_
+      //          will never get fulfilled
+      //          // But the caller of request() still holds the
+      //          SemiFuture<Response>
+      //          // So when that future is waited on, Folly throws
+      //          BrokenPromise
+      //          // And that leads to the hot frame in your profile:
+      //          if (!promise_.isFulfilled()) {
+      //            promise_.setException(folly::make_exception_wrapper<std::runtime_error>(
+      //                "Exchange request expired or was canceled"));
+      //          }
+      //          return;
+      //        }
+      //        timeouts_.erase(iter);
+      //      }
+
+      bool timedOut = timeouts_.withWLock([&](auto& timeoutsMap) {
+        auto iter = timeoutsMap.find(self);
+        if (iter == timeoutsMap.end()) {
+          // it already expired or was handled
+          return true;
         }
-        timeouts_.erase(iter);
+        timeoutsMap.erase(iter);
+        return false;
+      });
+
+      if (timedOut) {
+        if (!promise_.isFulfilled()) {
+          promise_.setException(
+              folly::make_exception_wrapper<std::runtime_error>(
+                  "Exchange request expired or was canceled"));
+        }
+        return;
       }
 
       if (requestedSequence > sequence && !data.empty()) {
@@ -214,33 +245,61 @@ class LocalExchangeSource : public exec::ExchangeSource {
   // Invoked to start exchange source to run. It clears 'stop_' which allows
   // the background timeout executor to run on the first exchange source
   // request.
-  static void start() {
-    std::lock_guard<std::mutex> l(mutex_);
-    VELOX_CHECK_NULL(timerThread_);
-    VELOX_CHECK(timeouts_.empty());
-    stop_ = false;
-  }
+//  static void start() {
+//    std::lock_guard<std::mutex> l(mutex_);
+//    VELOX_CHECK_NULL(timerThread_);
+//    VELOX_CHECK(timeouts_.empty());
+//    stop_ = false;
+//  }
 
   // Invoked to stop the exchange source. It sets 'stop_', clears the current
   // pending request 'timeouts_' and join/destroy 'timeoutCheckExecutor_' if
   // created.
-  static void stop() {
-    {
-      std::lock_guard<std::mutex> l(mutex_);
-      if (stop_) {
-        VELOX_CHECK(timeouts_.empty());
-        return;
-      }
-      stop_ = true;
-      if (timerThread_ == nullptr) {
-        VELOX_CHECK(timeouts_.empty());
-        return;
-      }
-      timeouts_.clear();
-    }
-    timerThread_->join();
-    timerThread_.reset();
+//  static void stop() {
+//    {
+//      std::lock_guard<std::mutex> l(mutex_);
+//      if (stop_) {
+//        VELOX_CHECK(timeouts_.empty());
+//        return;
+//      }
+//      stop_ = true;
+//      if (timerThread_ == nullptr) {
+//        VELOX_CHECK(timeouts_.empty());
+//        return;
+//      }
+//      timeouts_.clear();
+//    }
+//    timerThread_->join();
+//    timerThread_.reset();
+//  }
+
+  static void start() {
+    VELOX_CHECK_NULL(timerThread_.rlock()->get());
+    VELOX_CHECK(timeouts_.rlock()->empty());
+    stop_.store(false);
   }
+
+
+  static void stop() {
+    // Signal stop
+    stop_.store(true);
+
+    // Join and clear the timer thread outside the lock
+    std::unique_ptr<std::thread> threadToJoin;
+    {
+      auto thread = timerThread_.wlock();
+      threadToJoin = std::move(*thread);
+      *thread = nullptr;
+    }
+
+    if (threadToJoin) {
+      threadToJoin->join();
+    }
+
+    // Ensure timeouts are cleared
+    timeouts_.wlock()->clear();
+  }
+
 
  private:
   using ResultCallback = std::function<void(
@@ -248,43 +307,93 @@ class LocalExchangeSource : public exec::ExchangeSource {
       int64_t sequence,
       std::vector<int64_t> remainingBytes)>;
 
+  //  static void registerTimeout(
+  //      const std::shared_ptr<ExchangeSource>& self,
+  //      ResultCallback callback,
+  //      std::chrono::microseconds maxWait) {
+  //    std::lock_guard<std::mutex> l(mutex_);
+  //    VELOX_CHECK(!stop_, "Local exchange source has stopped");
+  //
+  //    if (timerThread_ == nullptr) {
+  //      timerThread_ = std::make_unique<std::thread>([&]() {
+  //        while (!stop_) {
+  //          auto now = std::chrono::system_clock::now();
+  //          ResultCallback callback = nullptr;
+  //          {
+  //            std::lock_guard<std::mutex> t(mutex_);
+  //            for (auto& pair : timeouts_) {
+  //              if (pair.second.second < now) {
+  //                callback = pair.second.first;
+  //                break;
+  //              }
+  //            }
+  //          }
+  //          if (callback) {
+  //            // Outside of mutex.
+  //            callback({}, 0, {});
+  //            continue;
+  //          }
+  //          std::this_thread::sleep_for(std::chrono::seconds(1));
+  //        }
+  //      });
+  //      if (!exitInitialized_) {
+  //        exitInitialized_ = true;
+  //        atexit([]() { stop(); });
+  //      }
+  //    }
+  //    timeouts_[self] =
+  //        std::make_pair(callback, std::chrono::system_clock::now() +
+  //        maxWait);
+  //  }
+
   static void registerTimeout(
       const std::shared_ptr<ExchangeSource>& self,
       ResultCallback callback,
       std::chrono::microseconds maxWait) {
-    std::lock_guard<std::mutex> l(mutex_);
-    VELOX_CHECK(!stop_, "Local exchange source has stopped");
+    VELOX_CHECK(!stop_.load(), "Local exchange source has stopped");
 
-    if (timerThread_ == nullptr) {
-      timerThread_ = std::make_unique<std::thread>([&]() {
-        while (!stop_) {
-          auto now = std::chrono::system_clock::now();
-          ResultCallback callback = nullptr;
-          {
-            std::lock_guard<std::mutex> t(mutex_);
-            for (auto& pair : timeouts_) {
-              if (pair.second.second < now) {
-                callback = pair.second.first;
-                break;
+    // Start the timeout thread if needed
+    {
+      auto thread = timerThread_.wlock();
+      if (!*thread) {
+        *thread = std::make_unique<std::thread>([] {
+          while (!stop_.load()) {
+            ResultCallback expiredCallback = nullptr;
+
+            // Find the first expired timeout
+            timeouts_.withRLock([&](auto& map) {
+              auto now = std::chrono::system_clock::now();
+              for (auto it = map.begin(); it != map.end(); ++it) {
+                if (it->second.second <= now) {
+                  expiredCallback = std::move(it->second.first);
+//                  map.erase(it);
+                  break;
+                }
               }
+            });
+
+            if (expiredCallback) {
+              expiredCallback({}, 0, {});
+            } else {
+              std::this_thread::sleep_for(std::chrono::milliseconds(100));
             }
           }
-          if (callback) {
-            // Outside of mutex.
-            callback({}, 0, {});
-            continue;
-          }
-          std::this_thread::sleep_for(std::chrono::seconds(1));
-        }
-      });
-      if (!exitInitialized_) {
-        exitInitialized_ = true;
-        atexit([]() { stop(); });
+        });
+
+        // Optional: clean shutdown on program exit
+        atexit([]() {
+          stop();
+        });
       }
     }
-    timeouts_[self] =
-        std::make_pair(callback, std::chrono::system_clock::now() + maxWait);
+
+    // Insert the timeout record
+    const auto expiry = std::chrono::system_clock::now() + maxWait;
+    timeouts_.withWLock([&](auto& map) {
+      map[self] = {std::move(callback), expiry};
+    });
   }
+
 
   bool checkSetRequestPromise() {
     VeloxPromise<Response> promise;
@@ -300,12 +409,21 @@ class LocalExchangeSource : public exec::ExchangeSource {
     return false;
   }
 
-  static inline std::mutex mutex_;
-  static inline folly::F14FastMap<
+  //  static inline std::mutex mutex_;
+  //  static inline folly::F14FastMap<
+  //      std::shared_ptr<ExchangeSource>,
+  //      std::pair<ResultCallback, std::chrono::system_clock::time_point>>
+  //      timeouts_;
+  //  static inline std::unique_ptr<std::thread> timerThread_;
+
+  static inline folly::Synchronized<folly::F14FastMap<
       std::shared_ptr<ExchangeSource>,
-      std::pair<ResultCallback, std::chrono::system_clock::time_point>>
+      std::pair<ResultCallback, std::chrono::system_clock::time_point>>>
       timeouts_;
-  static inline std::unique_ptr<std::thread> timerThread_;
+
+  // Background thread for checking timeouts
+  static inline folly::Synchronized<std::unique_ptr<std::thread>> timerThread_;
+
   static inline std::atomic_bool stop_{false};
   static inline bool exitInitialized_{false};
 
