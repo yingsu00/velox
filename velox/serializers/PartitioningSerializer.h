@@ -16,6 +16,7 @@
 
 #include "velox/common/base/RawVector.h"
 #include "velox/exec/ExchangeQueue.h"
+#include "velox/exec/OutputBufferManager.h"
 #include "velox/serializers/PrestoSerializer.h"
 #include "velox/vector/ComplexVector.h"
 #include "velox/vector/FlatVector.h"
@@ -23,22 +24,25 @@
 
 #include <iostream>
 
+ namespace facebook::velox::core {
+ class PartitionFunction;
+}
+
 namespace facebook::velox::serializer::presto {
 
-using PartitionedVectorPtr = std::shared_ptr<PartitionedVector>;
+//using PartitioningVectorPtr = std::shared_ptr<PartitionedVector>;
 using SerdeOpts = PrestoVectorSerde::PrestoOptions;
+
+
 
 class IterativePartitioningSerializer {
  public:
   IterativePartitioningSerializer(
+      const RowTypePtr inputType,
       int32_t numDestinations,
-      const std::weak_ptr<exec::OutputBufferManager>& bufferManager,
-      const std::function<void()>& bufferReleaseFn,
+//      const std::function<void()>& bufferReleaseFn,
       const SerdeOpts& opts,
-      //                                     const core::PartitionFunctionSpec&
-      //                                     partitionFunctionSpec,
       std::unique_ptr<core::PartitionFunction> partitionFunction,
-      //                                     StreamArena *streamArena,
       memory::MemoryPool* pool);
 //
 //  ~IterativePartitioningSerializer() {
@@ -66,42 +70,56 @@ class IterativePartitioningSerializer {
   std::unordered_map<std::string, RuntimeCounter> runtimeStats();
 
  private:
-  void flushVectors(
-      const std::vector<PartitionedVectorPtr>& partitionedVectors,
+  /// Flush one column
+//  void flushColumn(
+//      const std::vector<PartitioningVectorPtr>& partitionedVectors,
+//      TypeKind typeKind,
+//      uint32_t nestedLevel,
+//      std::vector<IOBufOutputStream>& outputStreams);
+
+
+
+//  void flushPartitionedDictionaryVectors(
+//      const std::vector<PartitioningVectorPtr>& partitionedVectors,
+//      uint32_t nestedLevel,
+//      std::vector<IOBufOutputStream>& outputStreams);
+
+  void flushColumn(
+      const std::vector<PartitioningVectorPtr>& partitionedVectors,
       uint32_t nestedLevel,
       std::vector<IOBufOutputStream>& outputStreams);
 
-  void flushSimpleVectors(
-      const std::vector<PartitionedVectorPtr>& partitionedVectors,
+  void flushSimpleColumn(
+      const std::vector<PartitioningVectorPtr>& partitionedVectors,
       uint32_t nestedLevel,
       std::vector<IOBufOutputStream>& outputStreams);
 
-  void flushSimpleVector(
-      const PartitionedVectorPtr& partitionedVector,
-      std::vector<IOBufOutputStream>& outputStreams);
-
-  void flushRowVectors(
-      const std::vector<PartitionedVectorPtr>& partitionedRowVectors,
+  void flushRowColumn(
+      const std::vector<PartitioningVectorPtr>& partitionedRowVectors,
       uint32_t nestedLevel,
       std::vector<IOBufOutputStream>& outputStreams);
 
-  void flushArrayVectors(
-      const std::vector<PartitionedVectorPtr>& partitionedArrayVectors,
+  void flushArrayColumn(
+      const std::vector<PartitioningVectorPtr>& partitionedArrayVectors,
       uint32_t nestedLevel,
       std::vector<IOBufOutputStream>& outputStreams);
 
-  void flushRowChildren(
-      const std::vector<PartitionedVectorPtr>& partitionedRowVectors,
+  void flushPartitionedSimpleVector(
+      const PartitioningVectorPtr& partitionedVector,
+      std::vector<IOBufOutputStream>& outputStreams);
+
+  void flushPartitionedRowChildren(
+      const std::vector<PartitioningVectorPtr>& partitionedRowVectors,
       uint32_t nestedLevel,
       std::vector<IOBufOutputStream>& outputStreams);
 
   void flushOffsets(
-      const std::vector<PartitionedVectorPtr>& partitionedVectors,
+      const std::vector<PartitioningVectorPtr>& partitionedVectors,
       std::vector<IOBufOutputStream>& outputStreams);
 
   template <TypeKind kind>
   void flushFlatVectorValues(
-      const PartitionedVectorPtr& partitionedVector,
+      const PartitioningVectorPtr& partitionedVector,
       std::vector<IOBufOutputStream>& outputStreams);
 
   template <typename T>
@@ -110,12 +128,19 @@ class IterativePartitioningSerializer {
       const vector_size_t* partitionOffsets,
       std::vector<IOBufOutputStream>& outputStreams);
 
+  template <typename T>
+  void reMapAndFlushFlatValues(
+      const T* values,
+      const vector_size_t* partitionOffsets,
+      const vector_size_t* partitionedIndices,
+      std::vector<IOBufOutputStream>& outputStreams);
+
   //  void flushDictionaryVector(
   //      const VectorPtr vector,
   //      const raw_vector<uint32_t>& offsets,
   //      std::vector<IOBufOutputStream>& outputStreams);
 
-  void serializeWrapped(
+  void flushDictionaryVectors(
       const VectorPtr& vector,
       const RowSet& rows,
       IOBufOutputStream& outputStream);
@@ -125,12 +150,12 @@ class IterativePartitioningSerializer {
       std::vector<IOBufOutputStream>& outputStreams);
 
   void flushRowCounts(
-      const std::vector<PartitionedVectorPtr>& partitionedVectors,
+      const std::vector<PartitioningVectorPtr>& partitionedVectors,
       uint32_t nestedLevel,
       std::vector<IOBufOutputStream>& outputStreams);
 
   void flushNullFlag(
-      const std::vector<PartitionedVectorPtr>& vectors,
+      const std::vector<PartitioningVectorPtr>& vectors,
       std::vector<IOBufOutputStream>& outputStreams);
 
   void flushStart(IOBufOutputStream& out, uint32_t destination, char codecMask);
@@ -142,7 +167,7 @@ class IterativePartitioningSerializer {
       char codecMask);
 
   std::vector<vector_size_t> countRowsInPartitions(
-      const std::vector<PartitionedVectorPtr>& partitionedVectors,
+      const std::vector<PartitioningVectorPtr>& partitionedVectors,
       bool isTopLevel);
 
   struct CompressionStats {
@@ -160,10 +185,12 @@ class IterativePartitioningSerializer {
     int64_t compressionSkippedBytes{0};
   };
 
+  const RowTypePtr inputType_;
+  const RowTypePtr outputType_;
   const int32_t numPartitions_;
 
   const std::weak_ptr<exec::OutputBufferManager> bufferManager_;
-  const std::function<void()> bufferReleaseFn_;
+//  const std::function<void()> bufferReleaseFn_;
   const std::unique_ptr<folly::io::Codec> codec_;
   const std::unique_ptr<core::PartitionFunction> partitionFunction_;
   StreamArena streamArena_;
@@ -179,10 +206,10 @@ class IterativePartitioningSerializer {
   //  BufferPtr partitionOffsetsBuffer_;
   BufferPtr swappingBuffer_;
 
-  std::vector<PartitionedVectorPtr> tempVectors_;
+  std::vector<PartitioningVectorPtr> tempVectors_;
 
   //  std::vector<VectorPtr> partitionedPages_;
-  std::vector<PartitionedVectorPtr> partitionedPages_;
+  std::vector<PartitioningVectorPtr> partitionedPages_;
   // If we want to cut the incoming pages in half when flushing, change this to
   // std::vector<std::vector<vector_size_t>>. But this would require calculating
   // the row sizes

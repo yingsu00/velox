@@ -261,6 +261,12 @@ class RowVector : public BaseVector {
     return rawVectorForBatchReader_;
   }
 
+  void appendToChildren(
+      const RowVector* source,
+      vector_size_t sourceIndex,
+      vector_size_t count,
+      vector_size_t childSize);
+
  private:
   vector_size_t childSize() const {
     bool allConstant = false;
@@ -281,11 +287,11 @@ class RowVector : public BaseVector {
     return BaseVector::length_;
   }
 
-  void appendToChildren(
-      const RowVector* source,
-      vector_size_t sourceIndex,
-      vector_size_t count,
-      vector_size_t childSize);
+//  void appendToChildren(
+//      const RowVector* source,
+//      vector_size_t sourceIndex,
+//      vector_size_t count,
+//      vector_size_t childSize);
 
   const size_t childrenSize_;
   mutable std::vector<VectorPtr> children_;

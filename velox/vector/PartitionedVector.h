@@ -20,6 +20,9 @@
 
 namespace facebook::velox {
 
+class PartitionedVector;
+using PartitioningVectorPtr = std::shared_ptr<PartitionedVector>;
+
 namespace {
 
 inline void countPartitionSizes(
@@ -47,9 +50,7 @@ inline void ensureCapacity(
   }
 }
 
-}
-
-
+} // namespace
 
 class PartitionedVector {
  public:
@@ -65,29 +66,44 @@ class PartitionedVector {
   /// Allow std::move.
   PartitionedVector(PartitionedVector&& other) = default;
 
-  static std::shared_ptr<PartitionedVector> create(
+  static PartitioningVectorPtr create(
       VectorPtr& vector,
       const std::vector<uint32_t>& topRowPartitions,
       BufferPtr& topRowOffsetsForCurrentLevel,
-      //    vector_size_t*& topRowOffsetsForCurrentLevel,
-      BufferPtr& topRowOffsetsForNextLevel,
+      BufferPtr& topRowOffsetsForNextLevelBuffer,
       vector_size_t lastTopRowOffset,
       int32_t numPartitions,
-      BufferPtr& partitionOffsetsBuffer,
       BufferPtr& beginPartitionOffsetsBuffer,
+      BufferPtr& endPartitionOffsetsBuffer,
       BufferPtr& swappingBuffer,
-      velox::memory::MemoryPool* pool,
-      int32_t nestLevel);
+      int32_t nestLevel,
+      velox::memory::MemoryPool* pool);
+
+  static PartitioningVectorPtr createWrapped(
+      VectorPtr& vector,
+      const std::vector<uint32_t>& topRowPartitions,
+      BufferPtr& upperLevelOffsets,
+//      BufferPtr& topRowOffsetsForNextLevel,
+      vector_size_t upperLevelLastOffset,
+      int32_t numPartitions,
+      BufferPtr& beginPartitionOffsetsBuffer,
+      BufferPtr& endPartitionOffsetsBuffer,
+      BufferPtr& swappingBuffer,
+      BufferPtr& indicesBuffer,
+      int32_t nestLevel,
+      velox::memory::MemoryPool* pool);
 
   PartitionedVector(
       VectorPtr vector,
       const int32_t numPartitions,
       BufferPtr partitionOffsets,
+      BufferPtr indices,
       velox::memory::MemoryPool* pool)
       : vector_(vector),
-//        partitions_(partitions),
         numPartitions_(numPartitions),
         partitionOffsets_(partitionOffsets),
+        indices_(indices),
+        partitioned_(false),
         pool_(pool) {
     if (!partitionOffsets_) {
       partitionOffsets_ =
@@ -104,15 +120,23 @@ class PartitionedVector {
     return dynamic_cast<T*>(this);
   }
 
-//  virtual void partition(
-//      const std::vector<uint32_t>& topRowPartitions,
-//      vector_size_t*& topRowOffsets,
-//      BufferPtr& beginOffsetsBuffer,
-//      BufferPtr& swappingBuffer,
-//      vector_size_t numTopRows) = 0;
+  TypeKind typeKind() const {
+    return vector_->typeKind();
+  }
+
+  //  virtual void partition(
+  //      const std::vector<uint32_t>& topRowPartitions,
+  //      vector_size_t*& topRowOffsets,
+  //      BufferPtr& beginOffsetsBuffer,
+  //      BufferPtr& swappingBuffer,
+  //      vector_size_t numTopRows) = 0;
 
   vector_size_t* rawPartitionOffsets() {
     return rawPartitionOffsets_;
+  }
+
+  BufferPtr indices() {
+    return indices_;
   }
 
   virtual const vector_size_t* rawSizes() = 0;
@@ -121,10 +145,13 @@ class PartitionedVector {
   virtual std::string toString() const;
 
  protected:
+//  void initializeBeginPartitionOffsets(BufferPtr& beginPartitionOffsetsBuffer);
+
   VectorPtr vector_;
-//  const std::vector<uint32_t>& partitions_;
   const uint32_t numPartitions_;
   BufferPtr partitionOffsets_;
+  BufferPtr indices_;
+  bool partitioned_;
   velox::memory::MemoryPool* pool_;
 
  private:
@@ -137,44 +164,69 @@ template <typename T>
 class PartitionedFlatVector : public PartitionedVector {
  public:
   PartitionedFlatVector(
-      std::shared_ptr<FlatVector<T>> flatVector,
+      VectorPtr flatVector,
       const int32_t numPartitions,
       BufferPtr partitionOffsets,
+      BufferPtr indices,
       velox::memory::MemoryPool* pool)
       : PartitionedVector(
             flatVector,
             numPartitions,
             partitionOffsets,
+            indices,
             pool) {}
 
   void partition(
       const std::vector<uint32_t>& topRowPartitions,
-      vector_size_t*& topRowOffsets,
+      BufferPtr& topRowOffsets,
       vector_size_t lastTopRowOffset,
-      int32_t numPartitions,
       BufferPtr& beginOffsetsBuffer,
       BufferPtr& swappingBuffer,
-      int32_t nestLevel) ;
+      int32_t nestLevel);
 
   const vector_size_t* rawSizes() override {
     VELOX_UNREACHABLE("PartitionedFlatVector does not implement rawSizes()");
   }
 };
+//
+// template <typename T>
+// class PartitionedDictionaryVector : public PartitionedVector {
+// public:
+//  PartitionedDictionaryVector(
+//      VectorPtr vector,
+//      int32_t numPartitions,
+//      BufferPtr partitionOffsets,
+//      velox::memory::MemoryPool* pool)
+//      : PartitionedVector(vector, numPartitions, partitionOffsets, indices,
+//      pool) {}
+//
+//  void partition(
+//      const std::vector<uint32_t>& topRowPartitions,
+//      BufferPtr& beginPartitionOffsetsBuffer);
+//
+//  PartitioningVectorPtr elements();
+//
+//  const vector_size_t* rawSizes() override {
+//    VELOX_UNREACHABLE("PartitionedFlatVector does not implement rawSizes()");
+//  }
+//};
 
-class PartitionedRowVector : public PartitionedVector {
+class PartitioningRowVector : public PartitionedVector {
  public:
-  PartitionedRowVector(
+  PartitioningRowVector(
       VectorPtr vector,
-//      const std::vector<uint32_t>& partitions,
+      //      const std::vector<uint32_t>& partitions,
       const int32_t numPartitions,
       BufferPtr partitionOffsets,
+      BufferPtr indices,
       velox::memory::MemoryPool* pool,
       std::vector<PartitionedVectorPtr>& children)
       : PartitionedVector(
             vector,
-//            partitions,
+            //            partitions,
             numPartitions,
             partitionOffsets,
+            indices,
             pool),
         children_(children) {}
 
@@ -188,33 +240,34 @@ class PartitionedRowVector : public PartitionedVector {
     return children_[index];
   }
 
-//  void partition(
-//      const std::vector<uint32_t>& topRowPartitions,
-//      vector_size_t*& topRowOffsets,
-//      BufferPtr& beginOffsetsBuffer,
-//      BufferPtr& swappingBuffer);
+  //  void partition(
+  //      const std::vector<uint32_t>& topRowPartitions,
+  //      vector_size_t*& topRowOffsets,
+  //      BufferPtr& beginOffsetsBuffer,
+  //      BufferPtr& swappingBuffer);
 
   const vector_size_t* rawSizes() override {
     VELOX_UNREACHABLE("PartitionedFlatVector does not implement rawSizes()");
   }
 
-
  private:
   std::vector<PartitionedVectorPtr> children_;
 };
 
-class PartitionedArrayVector : public PartitionedVector {
+class PartitioningArrayVector : public PartitionedVector {
  public:
-  PartitionedArrayVector(
+  PartitioningArrayVector(
       VectorPtr vector,
       int32_t numPartitions,
       BufferPtr partitionOffsets,
+      BufferPtr indices,
       velox::memory::MemoryPool* pool,
       PartitionedVectorPtr elements)
       : PartitionedVector(
             vector,
             numPartitions,
             partitionOffsets,
+            indices,
             pool),
         elements_(elements) {}
 

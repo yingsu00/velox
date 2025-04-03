@@ -34,7 +34,8 @@ add_executable(
   VectorStreamTest.cpp
   VectorTest.cpp
   VectorTestUtils.cpp
-  VectorToStringTest.cpp)
+  VectorToStringTest.cpp
+  PartitionedVectorTest.cpp)
 
 add_test(velox_vector_test velox_vector_test)
 

@@ -39,6 +39,7 @@ OptimizedPartitionedOutput::OptimizedPartitionedOutput(
           planNode->id(),
           "OptimizedPartitionedOutput"),
       taskId_(operatorCtx_->taskId()),
+      inputType_(planNode->inputType()),
       keyChannels_(toChannels(planNode->inputType(), planNode->keys())),
       outputChannels_(calculateOutputChannels(
           planNode->inputType(),
@@ -57,7 +58,7 @@ OptimizedPartitionedOutput::OptimizedPartitionedOutput(
       // prevent it from deleting while there are output buffers being accessed
       // out of the partitioned output buffer manager such as in Prestissimo,
       // the http server holds the buffers while sending the data response.
-      bufferReleaseFn_([task = operatorCtx_->task()]() {}),
+//      bufferReleaseFn_([task = operatorCtx_->task()]() {}),
       maxBufferedBytes_(ctx->task->queryCtx()
                             ->queryConfig()
                             .maxPartitionedOutputBufferSize()),
@@ -85,9 +86,9 @@ OptimizedPartitionedOutput::OptimizedPartitionedOutput(
       : planNode->partitionFunctionSpec().create(numDestinations_);
   serializer_ =
       std::make_unique<serializer::presto::IterativePartitioningSerializer>(
+          inputType_,
           numDestinations_,
-          bufferManager_,
-          bufferReleaseFn_,
+//          bufferReleaseFn_,
           options,
           std::move(partitionFunction),
           pool_);
@@ -171,8 +172,8 @@ void OptimizedPartitionedOutput::flush() {
     //                    << "for destination " << destination << " taskId_:" <<
     //                    taskId_;
     numSerializedPages_++;
-    serializedPageSizes_.push_back(serializedPage->size());
     if (serializedPage && serializedPage->numRows() > 0) {
+      serializedPageSizes_.push_back(serializedPage->size());
       numNonZeroSerializedPages_++;
 
       bool blocked = bufferManager_.lock()->enqueue(

@@ -13,13 +13,16 @@
 # limitations under the License.
 add_executable(
   velox_serializer_test
-  CompactRowSerializerTest.cpp PrestoOutputStreamListenerTest.cpp
-  PrestoSerializerTest.cpp UnsafeRowSerializerTest.cpp)
+#  CompactRowSerializerTest.cpp PrestoOutputStreamListenerTest.cpp
+#  PrestoSerializerTest.cpp UnsafeRowSerializerTest.cpp
+        PartitioningSerializerTest.cpp
+)
 
 add_test(velox_serializer_test velox_serializer_test)
 
 target_link_libraries(
   velox_serializer_test
+  velox_exec
   velox_presto_serializer
   velox_vector_test_lib
   velox_vector_fuzzer

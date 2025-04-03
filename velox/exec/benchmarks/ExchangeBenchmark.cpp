@@ -32,14 +32,14 @@
 
 static const int32_t entries_per_row = 4;
 
-DEFINE_int32(width, 256, "Number of parties in shuffle");
+DEFINE_int32(width, 8, "Number of parties in shuffle");
 DEFINE_int32(task_width, 4, "Number of threads in each task in shuffle");
 
 DEFINE_int32(num_local_tasks, 1, "Number of concurrent local shuffles");
 DEFINE_int32(num_local_repeat, 1, "Number of repeats of local exchange query");
 DEFINE_int32(flat_batch_mb, 1, "MB in a 10k row flat batch.");
 DEFINE_int64(local_exchange_buffer_mb, 1, "task-wide buffer in local exchange");
-DEFINE_int64(exchange_buffer_mb, 1, "task-wide buffer in remote exchange");
+DEFINE_int64(exchange_buffer_mb, 32, "task-wide buffer in remote exchange");
 DEFINE_int32(dict_pct, 0, "Percentage of columns wrapped in dictionary");
 
 DEFINE_bool(gtest_color, false, "");
@@ -91,7 +91,13 @@ class ExchangeBenchmark : public VectorTestBase {
         values.push_back(i);
       }
       auto c0 = makeFlatVector<int64_t>(values);
+
       children.push_back(c0);
+
+      BufferPtr indices = makeIndices(rowsPerVector, [&](auto i) { return i; });
+      auto d0 =
+          BaseVector::wrapInDictionary(nullptr, indices, rowsPerVector, c0);
+      children.push_back(d0);
 
       //      // make c0
       //      std::vector<vector_size_t> values;
@@ -102,18 +108,19 @@ class ExchangeBenchmark : public VectorTestBase {
       //      children.push_back(c0);
 
       // Make random array sizes in [10, 100]
-      std::vector<vector_size_t> offsets;
-
-      vector_size_t lastOffset = 0;
-
-      for (auto i = 0; i < rowsPerVector; i++) {
-        offsets.push_back(lastOffset);
-        auto size = folly::Random::rand32(100, 1000);
-        lastOffset += size;
-      }
-      auto arrayValues =
-          makeFlatVector<int64_t>(lastOffset, [&](auto row) { return row; });
-      auto arrayVector = makeArrayVector(offsets, arrayValues);
+      //      std::vector<vector_size_t> offsets;
+      //
+      //      vector_size_t lastOffset = 0;
+      //
+      //      for (auto i = 0; i < rowsPerVector; i++) {
+      //        offsets.push_back(lastOffset);
+      //        auto size = folly::Random::rand32(100, 1000);
+      //        lastOffset += size;
+      //      }
+      //      auto arrayValues =
+      //          makeFlatVector<int64_t>(lastOffset, [&](auto row) { return
+      //          row; });
+      //      auto arrayVector = makeArrayVector(offsets, arrayValues);
       //
       //      //     // Make array sizes = row number
       //      //     auto arrayValues = makeFlatVector<int32_t>(
@@ -264,8 +271,8 @@ class ExchangeBenchmark : public VectorTestBase {
   {
     assert(!vectors.empty());
     std::vector<std::shared_ptr<Task>> tasks;
-//    counters.inputBytes = vectors[0]->retainedSize() * vectors.size() *
-//        numLocalTasks * FLAGS_num_local_repeat;
+    //    counters.inputBytes = vectors[0]->retainedSize() * vectors.size() *
+    //        numLocalTasks * FLAGS_num_local_repeat;
     std::vector<std::string> aggregates = {"count(1)"};
     auto& rowType = vectors[0]->type()->as<TypeKind::ROW>();
     for (auto i = 1; i < rowType.size(); ++i) {
@@ -316,7 +323,7 @@ class ExchangeBenchmark : public VectorTestBase {
     for (auto& thread : threads) {
       thread.join();
     }
-//    counters.usec = getCurrentTimeMicro() - startMicros;
+    //    counters.usec = getCurrentTimeMicro() - startMicros;
     int64_t totalProducer = 0;
     int64_t totalConsumer = 0;
     std::vector<RuntimeMetric> waitConsumer;
@@ -428,6 +435,10 @@ void runBenchmarks() {
 
   std::vector<std::string> flatNames = {"c0"};
   std::vector<TypePtr> flatTypes = {BIGINT()};
+
+  // partitioning column cannot be dictionary
+  std::vector<std::string> dictionaryNames = {"c0", "d0"};
+  std::vector<TypePtr> dictionaryTypes = {BIGINT(), BIGINT()};
   //        std::vector<TypePtr> typeSelection = {
   //                BOOLEAN(),
   //                TINYINT(),
@@ -456,7 +467,8 @@ void runBenchmarks() {
   //            }
   //        }
   auto flatType = ROW(std::move(flatNames), std::move(flatTypes));
-
+  auto dictionaryType =
+      ROW(std::move(dictionaryNames), std::move(dictionaryTypes));
   //        auto structType = ROW(
   //                {{"c0", BIGINT()},
   //                 {"r1",
@@ -490,7 +502,10 @@ void runBenchmarks() {
   std::vector<TypePtr> arrayTypes = {BIGINT(), ARRAY(BIGINT())};
   auto arrayType = ROW(std::move(arrayNames), std::move(arrayTypes));
 
-  flat10k = bm->makeRows(flatType, 10, 10000, FLAGS_dict_pct);
+  //  std::vector<RowVectorPtr>  flat10k = bm->makeRows(flatType, 100, 1000,
+  //  FLAGS_dict_pct);
+  std::vector<RowVectorPtr> dictionary10k =
+      bm->makeRows(dictionaryType, 1000, 10000, FLAGS_dict_pct);
   //  deep10k = bm->makeRows(deepType, 10, 10000, FLAGS_dict_pct);
   //  flat50 = bm->makeRows(flatType, 2000, 50, FLAGS_dict_pct);
   //  deep50 = bm->makeRows(deepType, 2000, 50, FLAGS_dict_pct);
@@ -501,17 +516,27 @@ void runBenchmarks() {
   PlanNodeStats finalRepartitionStats;
   PlanNodeStats exchangeStats;
 
-    folly::addBenchmark(__FILE__, "exchangeFlat10k", [&]() {
-      bm->run(
-          flat10k,
-          FLAGS_width,
-          FLAGS_task_width,
-          leafRepartitionStats,
-          finalRepartitionStats,
-          exchangeStats);
-      return 1;
-    });
+  //  folly::addBenchmark(__FILE__, "exchangeFlat10k", [&]() {
+  //    bm->run(
+  //        flat10k,
+  //        FLAGS_width,
+  //        FLAGS_task_width,
+  //        leafRepartitionStats,
+  //        finalRepartitionStats,
+  //        exchangeStats);
+  //    return 1;
+  //  });
 
+  folly::addBenchmark(__FILE__, "exchangeFlat10k", [&]() {
+    bm->run(
+        dictionary10k,
+        FLAGS_width,
+        FLAGS_task_width,
+        leafRepartitionStats,
+        finalRepartitionStats,
+        exchangeStats);
+    return 1;
+  });
   //
   //  folly::addBenchmark(__FILE__, "exchangeFlat50", [&]() {
   //    bm->run(flat50, FLAGS_width, FLAGS_task_width, flat50Counters);
@@ -533,11 +558,11 @@ void runBenchmarks() {
   //    return 1;
   //  });
   //
-//  folly::addBenchmark(__FILE__, "localFlat10k", [&]() {
-//    bm->runLocal(
-//        flat10k, FLAGS_width, FLAGS_num_local_tasks, localFlat10kCounters);
-//    return 1;
-//  });
+  //  folly::addBenchmark(__FILE__, "localFlat10k", [&]() {
+  //    bm->runLocal(
+  //        flat10k, FLAGS_width, FLAGS_num_local_tasks, localFlat10kCounters);
+  //    return 1;
+  //  });
   //
   // folly::addBenchmark(__FILE__, "exchangeArray10k", [&]() {
   //   bm->run(
@@ -580,7 +605,7 @@ void runBenchmarks() {
 int main(int argc, char** argv) {
   folly::Init init{&argc, &argv};
   memory::MemoryManager::initialize({});
-  functions::prestosql::registerAllScalarFunctions();
+  //  functions::prestosql::registerAllScalarFunctions();
   aggregate::prestosql::registerAllAggregateFunctions();
   parse::registerTypeResolver();
   //  serializer::presto::PrestoVectorSerde::registerVectorSerde();

@@ -37,10 +37,10 @@ MallocAllocator::MallocAllocator(size_t capacity, uint32_t reservationByteLimit)
       reservations_(std::thread::hardware_concurrency()) {}
 
 MallocAllocator::~MallocAllocator() {
-  std::cout << "freeNonContiguousCounts_=" << freeNonContiguousCounts_
-          << " freeRunCounts_=" << freeRunCounts_
-          << " freeTotalPages_=" << freeTotalPages_
-      << " numFreedPages_sizes=" << numFreedPages_.size() << std::endl;
+//  std::cout << "freeNonContiguousCounts_=" << freeNonContiguousCounts_
+//          << " freeRunCounts_=" << freeRunCounts_
+//          << " freeTotalPages_=" << freeTotalPages_
+//      << " numFreedPages_sizes=" << numFreedPages_.size() << std::endl;
 
 //  for (auto numPages : numFreedPages_) {
 //    std::cout << numPages << " ";
@@ -202,8 +202,8 @@ int64_t MallocAllocator::freeNonContiguous(Allocation& allocation) {
     return 0;
   }
 
-  freeNonContiguousCounts_++;
-  freeRunCounts_ += allocation.numRuns();
+//  freeNonContiguousCounts_++;
+//  freeRunCounts_ += allocation.numRuns();
 
   MachinePageCount freedPages{0};
   for (int32_t i = 0; i < allocation.numRuns(); ++i) {
@@ -212,8 +212,8 @@ int64_t MallocAllocator::freeNonContiguous(Allocation& allocation) {
     const int64_t numPages = run.numPages();
     freedPages += numPages;
 
-    freeTotalPages_ += numPages;
-    numFreedPages_.push_back(numPages);
+//    freeTotalPages_ += numPages;
+//    numFreedPages_.push_back(numPages);
 //        LOG(ERROR) << "freeNonContiguous numPages=" << numPages;
 
     stats_.recordFree(AllocationTraits::pageBytes(numPages), [&]() {

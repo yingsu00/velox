@@ -38,20 +38,20 @@ class OptimizedPartitionedOutput : public Operator {
       const std::shared_ptr<const core::PartitionedOutputNode>& planNode,
       bool eagerFlush);
 
-  ~OptimizedPartitionedOutput() {
-    std::cout << "numSerializedPages_=" << numSerializedPages_;
-
-    int64_t totalSizes = 0;
-    for (auto size : serializedPageSizes_) {
-      totalSizes += size;
-      //      std::cout << size << " ";
-    }
-
-    int64_t avgPageSize =
-        numSerializedPages_ == 0 ? -1 : totalSizes / numSerializedPages_;
-    std::cout << " totalPageSizes=" << totalSizes
-              << " avgPageSize=" << avgPageSize << std::endl;
-  }
+//  ~OptimizedPartitionedOutput() {
+//    std::cout << "numSerializedPages_=" << numSerializedPages_;
+//
+//    int64_t totalSizes = 0;
+//    for (auto size : serializedPageSizes_) {
+//      totalSizes += size;
+//      //      std::cout << size << " ";
+//    }
+//
+//    int64_t avgPageSize =
+//        numSerializedPages_ == 0 ? -1 : totalSizes / numSerializedPages_;
+//    std::cout << " totalPageSizes=" << totalSizes
+//              << " avgPageSize=" << avgPageSize << std::endl;
+//  }
 
   void addInput(RowVectorPtr input) override;
 
@@ -94,16 +94,18 @@ class OptimizedPartitionedOutput : public Operator {
   inline static float minCompressionRatio_ = 0.8;
   static constexpr int32_t kMinMessageSize = 128;
 
-  // Empty if column order in the output is exactly the same as in input.
   const std::string taskId_;
+  // TODO: For now assume input is the same as output
+  const RowTypePtr inputType_;
   const std::vector<column_index_t> keyChannels_;
+  // Empty if column order in the output is exactly the same as in input.
   const std::vector<column_index_t> outputChannels_;
   const int32_t numDestinations_;
   //        const std::unique_ptr<core::PartitionFunction> partitionFunction_;
   const bool replicateNullsAndAny_;
   const bool eagerFlush_;
   const std::weak_ptr<exec::OutputBufferManager> bufferManager_;
-  const std::function<void()> bufferReleaseFn_;
+//  const std::function<void()> bufferReleaseFn_;
   const int64_t maxBufferedBytes_;
   const int64_t maxSerializedPageBytes_;
 

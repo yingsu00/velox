@@ -227,9 +227,9 @@ class MallocAllocator : public MemoryAllocator {
 
   std::shared_ptr<Cache> cache_;
 
-  std::atomic<int64_t> freeNonContiguousCounts_{0};
-  std::atomic<int64_t> freeRunCounts_{0};
-  std::atomic<int64_t> freeTotalPages_{0};
-  std::vector<int32_t> numFreedPages_;
+//  std::atomic<int64_t> freeNonContiguousCounts_{0};
+//  std::atomic<int64_t> freeRunCounts_{0};
+//  std::atomic<int64_t> freeTotalPages_{0};
+//  std::vector<int32_t> numFreedPages_;
 };
 } // namespace facebook::velox::memory
