@@ -23,6 +23,7 @@ add_executable(
   LazyVectorTest.cpp
   MayHaveNullsRecursiveTest.cpp
   SelectivityVectorTest.cpp
+  PartitionedVectorTest.cpp
   VariantToVectorTest.cpp
   VectorCompareTest.cpp
   VectorEstimateFlatSizeTest.cpp
@@ -34,8 +35,7 @@ add_executable(
   VectorStreamTest.cpp
   VectorTest.cpp
   VectorTestUtils.cpp
-  VectorToStringTest.cpp
-  PartitionedVectorTest.cpp)
+  VectorToStringTest.cpp)
 
 add_test(velox_vector_test velox_vector_test)
 

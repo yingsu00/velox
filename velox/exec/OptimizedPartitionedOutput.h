@@ -74,25 +74,13 @@ class OptimizedPartitionedOutput : public Operator {
     //    destinations_.clear();
   }
 
-  void partitionInput(RowVectorPtr input);
-
-  static void testingSetMinCompressionRatio(float ratio) {
-    minCompressionRatio_ = ratio;
-  }
-
-  static float minCompressionRatio() {
-    return minCompressionRatio_;
-  }
-
  private:
-  //        void initializeDestinations();
-
   void flush();
 
-  // If compression in serde is enabled, this is the minimum compression that
-  // must be achieved before starting to skip compression. Used for testing.
-  inline static float minCompressionRatio_ = 0.8;
-  static constexpr int32_t kMinMessageSize = 128;
+//  // If compression in serde is enabled, this is the minimum compression that
+//  // must be achieved before starting to skip compression. Used for testing.
+//  inline static float minCompressionRatio_ = 0.8;
+//  static constexpr int32_t kMinMessageSize = 128;
 
   const std::string taskId_;
   // TODO: For now assume input is the same as output
@@ -101,29 +89,23 @@ class OptimizedPartitionedOutput : public Operator {
   // Empty if column order in the output is exactly the same as in input.
   const std::vector<column_index_t> outputChannels_;
   const int32_t numDestinations_;
-  //        const std::unique_ptr<core::PartitionFunction> partitionFunction_;
-  const bool replicateNullsAndAny_;
-  const bool eagerFlush_;
-  const std::weak_ptr<exec::OutputBufferManager> bufferManager_;
-//  const std::function<void()> bufferReleaseFn_;
-  const int64_t maxBufferedBytes_;
-  const int64_t maxSerializedPageBytes_;
 
-  //        std::vector<std::unique_ptr<detail::Destination>> destinations_;
+  const bool replicateNullsAndAny_;
+  const std::weak_ptr<exec::OutputBufferManager> bufferManager_;
+  const std::function<void()> bufferReleaseFn_;
+  const int64_t maxBufferedBytes_;
+
   velox::memory::MemoryPool* pool_;
-  std::vector<uint32_t> partitions_;
-  std::vector<uint32_t> partitionsCopy_;
+//  std::vector<uint32_t> partitions_;
+//  std::vector<uint32_t> partitionsCopy_;
   std::unique_ptr<serializer::presto::IterativePartitioningSerializer>
       serializer_;
 
-  //
 
   BlockingReason blockingReason_{BlockingReason::kNotBlocked};
   ContinueFuture future_;
   bool finished_{false};
-  bool replicatedAny_{false};
 
-  //        std::vector<PartitionedVector> PartitionedVectors_;
 
   std::vector<IOBufOutputStream> outputStreams_;
 

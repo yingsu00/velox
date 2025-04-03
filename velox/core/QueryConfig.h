@@ -125,6 +125,9 @@ class QueryConfig {
   static constexpr const char* kAbandonPartialTopNRowNumberMinPct =
       "abandon_partial_topn_row_number_min_pct";
 
+  static constexpr const char* kOptimizedPartitionedOutputEnabled =
+      "optimized_repartitioning";
+
   /// The maximum number of bytes to buffer in PartitionedOutput operator to
   /// avoid creating tiny SerializedPages.
   ///
@@ -483,6 +486,10 @@ class QueryConfig {
   uint64_t maxSpillBytes() const {
     static constexpr uint64_t kDefault = 100UL << 30;
     return get<uint64_t>(kMaxSpillBytes, kDefault);
+  }
+
+  bool optimizedPartitionedOutputEnabled() const {
+    return get<bool>(kOptimizedPartitionedOutputEnabled, false);
   }
 
   uint64_t maxPartitionedOutputBufferSize() const {

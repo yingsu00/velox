@@ -16,13 +16,10 @@
 
 #include "velox/exec/OptimizedPartitionedOutput.h"
 
-// #include <xsimd/xsimd.hpp>
 #include <iostream>
 
-#include "velox/common/base/SimdUtil.h"
 #include "velox/exec/HashPartitionFunction.h"
 #include "velox/exec/Task.h"
-#include "velox/type/Type.h"
 
 namespace facebook::velox::exec {
 // namespace
@@ -46,27 +43,21 @@ OptimizedPartitionedOutput::OptimizedPartitionedOutput(
           planNode->outputType(),
           planNode->outputType())),
       numDestinations_(planNode->numPartitions()),
-      //              partitionFunction_(
-      //                      numPartitions_ == 1
-      //                      ? nullptr
-      //                      :
-      //                      planNode->partitionFunctionSpec().create(numPartitions_)),
       replicateNullsAndAny_(planNode->isReplicateNullsAndAny()),
-      eagerFlush_(eagerFlush),
       bufferManager_(OutputBufferManager::getInstance()),
       // NOTE: 'bufferReleaseFn_' holds a reference on the associated task to
       // prevent it from deleting while there are output buffers being accessed
       // out of the partitioned output buffer manager such as in Prestissimo,
       // the http server holds the buffers while sending the data response.
-//      bufferReleaseFn_([task = operatorCtx_->task()]() {}),
+      bufferReleaseFn_([task = operatorCtx_->task()]() {}),
       maxBufferedBytes_(ctx->task->queryCtx()
                             ->queryConfig()
                             .maxPartitionedOutputBufferSize()),
-      maxSerializedPageBytes_(std::max<uint64_t>(
-          kMinDestinationSize, // 60KB
-          std::min<uint64_t>(
-              1 << 20,
-              maxBufferedBytes_ /*32MB*/ / numDestinations_))),
+//      maxSerializedPageBytes_(std::max<uint64_t>(
+//          kMinDestinationSize, // 60KB
+//          std::min<uint64_t>(
+//              1 << 20,
+//              maxBufferedBytes_ /*32MB*/ / numPartitions_))),
       pool_(pool()) {
   if (!planNode->isPartitioned()) {
     VELOX_USER_CHECK_EQ(numDestinations_, 1);
@@ -88,7 +79,7 @@ OptimizedPartitionedOutput::OptimizedPartitionedOutput(
       std::make_unique<serializer::presto::IterativePartitioningSerializer>(
           inputType_,
           numDestinations_,
-//          bufferReleaseFn_,
+          bufferReleaseFn_,
           options,
           std::move(partitionFunction),
           pool_);
@@ -110,7 +101,7 @@ void OptimizedPartitionedOutput::addInput(RowVectorPtr input) {
 
   if (serializer_->bytesBuffered() + input->inMemoryBytes()
       >= maxBufferedBytes_) {
-//      >=   maxSerializedPageBytes_ * numDestinations_) {
+//      >=   maxSerializedPageBytes_ * numPartitions_) {
     flush();
   }
 
@@ -128,7 +119,7 @@ RowVectorPtr OptimizedPartitionedOutput::getOutput() {
 
   if (noMoreInput_ ||
       serializer_->bytesBuffered() >= maxBufferedBytes_) {
-//      serializer_->bytesBuffered() >=   maxSerializedPageBytes_ * numDestinations_) {
+//      serializer_->bytesBuffered() >=   maxSerializedPageBytes_ * numPartitions_) {
     // VLOG(0) << "OptimizedPartitionedOutput::getOutput. noMoreInput_: " <<
     // noMoreInput_ << " flushing";
     flush();

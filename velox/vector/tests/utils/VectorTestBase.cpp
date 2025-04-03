@@ -143,11 +143,20 @@ VectorPtr VectorTestBase::asArray(VectorPtr elements) {
 }
 
 void assertEqualVectors(const VectorPtr& expected, const VectorPtr& actual) {
+  if ((expected->size() != actual->size())) {
+    VELOX_FAIL(
+        "Vectors should have the same size. Expected: {}, actual: {}",
+        expected->size(),
+        actual->size());
+  }
   ASSERT_EQ(expected->size(), actual->size());
   ASSERT_TRUE(expected->type()->equivalent(*actual->type()))
       << "Expected " << expected->type()->toString() << ", but got "
       << actual->type()->toString();
   for (auto i = 0; i < expected->size(); i++) {
+    if (!expected->equalValueAt(actual.get(), i, i)) {
+      break;
+    }
     ASSERT_TRUE(expected->equalValueAt(actual.get(), i, i))
         << "at " << i << ": expected " << expected->toString(i) << ", but got "
         << actual->toString(i);

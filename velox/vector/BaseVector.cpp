@@ -151,7 +151,8 @@ VectorPtr BaseVector::wrapInDictionary(
       std::move(nulls),
       std::move(indices),
       size,
-      std::move(vector));
+      vector);
+//      std::move(vector));
 }
 
 template <TypeKind kind>

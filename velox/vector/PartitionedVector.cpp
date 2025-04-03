@@ -14,59 +14,13 @@
  * limitations under the License.
  */
 #include "velox/vector/PartitionedVector.h"
-#include <dwio/common/BufferUtil.h>
 
-#include "DictionaryVector.h"
-#include "VectorTypeUtils.h"
-#include "velox/vector/FlatVector.h"
+#include "velox/vector/DictionaryVector.h"
+#include "velox/vector/VectorTypeUtils.h"
 
 namespace facebook::velox {
 
 namespace {
-constexpr int8_t kCompressedBitMask = 1;
-constexpr int8_t kEncryptedBitMask = 2;
-constexpr int8_t kCheckSumBitMask = 4;
-// uncompressed size comes after the number of rows and the codec
-constexpr int32_t kSizeInBytesOffset{4 + 1};
-constexpr int32_t kHeaderSize{kSizeInBytesOffset + 4 + 4 + 8};
-
-static inline const std::string_view kByteArray{"BYTE_ARRAY"};
-static inline const std::string_view kShortArray{"SHORT_ARRAY"};
-static inline const std::string_view kIntArray{"INT_ARRAY"};
-static inline const std::string_view kLongArray{"LONG_ARRAY"};
-static inline const std::string_view kInt128Array{"INT128_ARRAY"};
-static inline const std::string_view kVariableWidth{"VARIABLE_WIDTH"};
-static inline const std::string_view kArray{"ARRAY"};
-static inline const std::string_view kMap{"MAP"};
-static inline const std::string_view kRow{"ROW"};
-static inline const std::string_view kRLE{"RLE"};
-static inline const std::string_view kDictionary{"DICTIONARY"};
-
-//        __attribute__((target("default")))
-//        inline void countPartitionSizes(const std::vector<uint32_t>
-//        &partitions, std::vector<uint32_t> &counts) {
-//            for (auto i = 0; i < partitions.size(); i++) {
-//                counts[partitions[i]]++;
-//            }
-//        }
-//
-////        __attribute__((target("default")))
-//        inline void prefixSum(std::vector<uint32_t> &offsets, uint32_t
-//        numPartitions) {
-//            for (uint32_t i = 1; i <= numPartitions; i++) {
-//                offsets[i] += offsets[i - 1];
-//            }
-////            return offsets;
-//        }
-//
-//        template<typename T>
-//        void addVector(const std::vector<T> &additionVec, std::vector<T>
-//        &outputVec) {
-//            VELOX_CHECK_EQ(additionVec.size(), outputVec.size());
-//            for (auto i = 0; i < additionVec.size(); i++) {
-//                outputVec[i] += additionVec[i];
-//            }
-//        }
 
 inline void countPartitionSizes(
     const std::vector<uint32_t>& partitions,
@@ -92,20 +46,6 @@ inline void countPartitionSizes(
   counts[p] += lastTopRowOffset - topRowOffsets[numTopRows - 1];
 }
 
-//        __attribute__((target("default")))
-inline void prefixSum(vector_size_t*& offsets, uint32_t numPartitions) {
-  for (uint32_t i = 1; i < numPartitions; i++) {
-    offsets[i] += offsets[i - 1];
-  }
-}
-
-// inline void
-// addVector(const uint32_t* additionVec, uint32_t* outputVec, int32_t size) {
-//   for (auto i = 0; i < size; i++) {
-//     outputVec[i] += additionVec[i];
-//   }
-// }
-
 template <typename T>
 void partitionFixedWidthValuesInPlace(
     T*& values,
@@ -113,29 +53,6 @@ void partitionFixedWidthValuesInPlace(
     uint32_t numPartitions,
     vector_size_t*& beginPartitionOffsets,
     vector_size_t*& endPartitionOffsets) {
-  // This is slower than the second version
-  //        auto n = vector->size();
-  //        int i = 0;
-  //        int partition = 0;
-  //        while (i < n) {
-  //            while (i < offsets[partition]) {
-  //                int p = topRowPartitions_[i];
-  //                int target_index = beginOffsets_[p];
-  //
-  //                if (i == target_index) {
-  //                    // Element is in the correct position for its
-  //                    partition beginOffsets_[p]++; i++;
-  //                } else {
-  //                    // Swap the current element with the element at its
-  //                    target position std::swap(values[i],
-  //                    values[target_index]); std::swap(topRowPartitions_[i],
-  //                    topRowPartitions_[target_index]); beginOffsets_[p]++;
-  //                    // Do not increment 'i' to handle the new element at
-  //                    index 'i'
-  //                }
-  //            }
-  //            i = beginOffsets_[++partition];
-  //        }
   for (auto partition = 0; partition < numPartitions; partition++) {
     auto& offset = beginPartitionOffsets[partition];
     auto endOffset = endPartitionOffsets[partition];
@@ -151,32 +68,74 @@ void partitionFixedWidthValuesInPlace(
   }
 }
 
-//// Update topRowOffsets on the fly, this needs the output to be separate from
-//// inputOffsets
-// template <typename T>
-// void partitionFixedWidthValues(
-//     T*& input,
-//     vector_size_t*& inputOffsets,
-//     const std::vector<uint32_t>& topRowPartitions,
-//     vector_size_t*& topRowOffsets,
-//     vector_size_t*& beginPartitionOffsets,
-//     T*& output) {
-//   VELOX_CHECK_NE(input, output);
-//   VELOX_CHECK_NE(inputOffsets, output);
-//
-//   for (auto topRow = 0; topRow < topRowPartitions.size() - 1; topRow++) {
-//     uint32_t partition = topRowPartitions[topRow];
-//
-//     auto& toBegin = beginPartitionOffsets[partition];
-//     auto fromBegin = topRowOffsets[topRow];
-//     auto fromEnd = topRowOffsets[topRow + 1];
-//     auto length = fromEnd - fromBegin;
-//     std::memcpy(output + toBegin, input + fromBegin, sizeof(T) * length);
-//
-//     topRowOffsets[topRow] = inputOffsets[fromBegin];
-//     toBegin += length;
-//   }
-// }
+// This has to be called after endPartitionOffsetsBuffer is populated
+void initializeBeginPartitionOffsets(
+    BufferPtr& beginPartitionOffsetsBuffer,
+    BufferPtr& endPartitionOffsetsBuffer,
+    int32_t numPartitions,
+    velox::memory::MemoryPool* pool) {
+  ensureCapacity<vector_size_t>(
+      beginPartitionOffsetsBuffer, numPartitions, pool);
+
+  beginPartitionOffsetsBuffer->asMutable<vector_size_t>()[0] = 0;
+  std::memcpy(
+      &beginPartitionOffsetsBuffer->asMutable<vector_size_t>()[1],
+      endPartitionOffsetsBuffer->asMutable<vector_size_t>(),
+      sizeof(uint32_t) * (numPartitions - 1));
+  beginPartitionOffsetsBuffer->setSize(numPartitions * sizeof(vector_size_t));
+}
+
+void swapBit(char& byte1, int8_t bit1, char& byte2, int8_t bit2) {
+  // Calculate the difference between the bits
+  char bitDiff = ((byte1 >> bit1) & 1) ^ ((byte2 >> bit2) & 1);
+
+  // Apply the difference to toggle the bits
+  byte1 ^= (bitDiff << bit1);
+  byte2 ^= (bitDiff << bit2);
+}
+
+void partitionBitsInPlace(
+    char*& bits,
+    const std::vector<uint32_t>& partitions,
+    uint32_t numPartitions,
+    BufferPtr& beginPartitionOffsetsBuffer,
+    BufferPtr& endPartitionOffsetsBuffer,
+    velox::memory::MemoryPool* pool) {
+  initializeBeginPartitionOffsets(
+      beginPartitionOffsetsBuffer,
+      endPartitionOffsetsBuffer,
+      numPartitions,
+      pool);
+
+  auto beginPartitionOffsets =
+      beginPartitionOffsetsBuffer->asMutable<vector_size_t>();
+  auto endPartitionOffsets =
+      endPartitionOffsetsBuffer->asMutable<vector_size_t>();
+
+  for (auto partition = 0; partition < numPartitions; partition++) {
+    auto& offset = beginPartitionOffsets[partition];
+    auto endOffset = endPartitionOffsets[partition];
+    while (offset < endOffset) {
+      uint32_t p = partitions[offset];
+      while (p != partition) {
+        vector_size_t destinationOffset = beginPartitionOffsets[p]++;
+
+        vector_size_t destinationAddr = destinationOffset / 8;
+        int8_t destinationBitInByte = destinationOffset - destinationAddr * 8;
+        vector_size_t fromAddr = offset / 8;
+        int8_t fromBitInByte = offset - fromAddr * 8;
+
+        swapBit(
+            bits[destinationAddr],
+            destinationBitInByte,
+            bits[fromAddr],
+            fromBitInByte);
+        p = partitions[destinationOffset];
+      }
+      offset = ++beginPartitionOffsets[partition];
+    }
+  }
+}
 
 template <typename T>
 void partitionFixedWidthValuesToOutput(
@@ -227,17 +186,16 @@ void partitionFixedWidthValues(
     bool useSwapping = false) {
   auto input = inputBuffer->asMutable<T>();
 
-  ensureCapacity<vector_size_t>(
-      beginPartitionOffsetsBuffer, numPartitions, pool);
+  initializeBeginPartitionOffsets(
+      beginPartitionOffsetsBuffer,
+      endPartitionOffsetsBuffer,
+      numPartitions,
+      pool);
+
   auto beginPartitionOffsets =
       beginPartitionOffsetsBuffer->asMutable<vector_size_t>();
   auto endPartitionOffsets =
       endPartitionOffsetsBuffer->asMutable<vector_size_t>();
-  beginPartitionOffsets[0] = 0;
-  std::memcpy(
-      &beginPartitionOffsets[1],
-      endPartitionOffsets,
-      sizeof(uint32_t) * (numPartitions - 1));
 
   if (nestLevel == 0) {
     // It's the top level so just partition in place
@@ -266,28 +224,8 @@ void partitionFixedWidthValues(
   }
 }
 
-// This has to be called after endPartitionOffsetsBuffer is populated
-void initializeBeginPartitionOffsets(
-    BufferPtr& beginPartitionOffsetsBuffer,
-    BufferPtr& endPartitionOffsetsBuffer,
-    int32_t numPartitions,
-    velox::memory::MemoryPool* pool) {
-  ensureCapacity<vector_size_t>(
-      beginPartitionOffsetsBuffer, numPartitions, pool);
-  vector_size_t* endPartitionOffsets =
-      endPartitionOffsetsBuffer->asMutable<vector_size_t>();
-  vector_size_t* beginPartitionOffsets =
-      beginPartitionOffsetsBuffer->asMutable<vector_size_t>();
-
-  beginPartitionOffsets[0] = 0;
-  std::memcpy(
-      &beginPartitionOffsets[1],
-      endPartitionOffsets,
-      sizeof(uint32_t) * (numPartitions - 1));
-}
-
 template <TypeKind typeKind>
-PartitioningVectorPtr createPartitioningFlatVector(
+PartitionedVectorPtr createPartitionedFlatVector(
     VectorPtr vector,
     const std::vector<uint32_t>& topRowPartitions,
     BufferPtr& topRowOffsets,
@@ -321,7 +259,7 @@ PartitioningVectorPtr createPartitioningFlatVector(
 }
 
 template <TypeKind typeKind>
-PartitioningVectorPtr createWrappedPartitioningFlatVector(
+PartitionedVectorPtr createWrappedPartitionedFlatVector(
     VectorPtr vector,
     int32_t numPartitions,
     BufferPtr& partitionOffsets,
@@ -340,7 +278,7 @@ PartitioningVectorPtr createWrappedPartitioningFlatVector(
 }
 
 template <TypeKind typeKind>
-PartitioningVectorPtr createPartitioningVectorFromDictionary(
+PartitionedVectorPtr createPartitionedVectorFromDictionary(
     VectorPtr vector,
     const std::vector<uint32_t>& topRowPartitions,
     BufferPtr& topRowOffsetsBuffer,
@@ -375,7 +313,7 @@ PartitioningVectorPtr createPartitioningVectorFromDictionary(
         pool);
   }
 
-  auto partitioningVector = PartitionedVector::createWrapped(
+  auto partitionedVector = PartitionedVector::createWrapped(
       dictionaryValues,
       topRowPartitions,
       topRowOffsetsBuffer,
@@ -388,11 +326,11 @@ PartitioningVectorPtr createPartitioningVectorFromDictionary(
       nestLevel + 1,
       pool);
 
-  return partitioningVector;
+  return partitionedVector;
 }
 
 template <TypeKind typeKind>
-PartitioningVectorPtr remapIdsAndCreatePartitioningVector(
+PartitionedVectorPtr remapIdsAndCreatePartitionedVector(
     VectorPtr vector,
     const std::vector<uint32_t>& topRowPartitions,
     BufferPtr& upperLevelOffsetsBuffer,
@@ -459,11 +397,13 @@ void preparePartitionOffsetsForNextLevel(
 
 } // namespace
 
+PartitionedVector::~PartitionedVector() = default;
+
 // The detection of (numPartitions == 1) is done when the
 // endPartitionOffsetsBuffer is populated and will be passed to the next level.
 // There are 2 cases of this: 1) RowVector 2) ArrayVector. So we don't need to
 // test it when the partitioning is actually happening.
-PartitioningVectorPtr PartitionedVector::create(
+PartitionedVectorPtr PartitionedVector::create(
     VectorPtr& vector,
     const std::vector<uint32_t>& topRowPartitions,
     BufferPtr& topRowOffsetsForCurrentLevel,
@@ -484,12 +424,16 @@ PartitioningVectorPtr PartitionedVector::create(
       // partitionOffsets should be passed from upper level and already
       // calculated
       VELOX_CHECK(endPartitionOffsetsBuffer);
+      if (endPartitionOffsetsBuffer->size() <
+          numPartitions * sizeof(vector_size_t)) {
+        break;
+      }
       VELOX_CHECK_GE(
           endPartitionOffsetsBuffer->size(),
           numPartitions * sizeof(vector_size_t));
 
       auto partitionedFlatVector = VELOX_DYNAMIC_SCALAR_TYPE_DISPATCH_ALL(
-          createPartitioningFlatVector,
+          createPartitionedFlatVector,
           typeKind,
           vector,
           topRowPartitions,
@@ -541,7 +485,7 @@ PartitioningVectorPtr PartitionedVector::create(
                 pool));
       }
 
-      auto partitionedRowVector = std::make_shared<PartitioningRowVector>(
+      auto partitionedRowVector = std::make_shared<PartitionedRowVector>(
           vector,
           numPartitions,
 
@@ -562,7 +506,7 @@ PartitioningVectorPtr PartitionedVector::create(
           endPartitionOffsetsBuffer->asMutable<vector_size_t>();
 
       // Create without child elements first
-      auto partitionedArrayVector = std::make_shared<PartitioningArrayVector>(
+      auto partitionedArrayVector = std::make_shared<PartitionedArrayVector>(
           vector,
           numPartitions,
           endPartitionOffsetsBuffer,
@@ -639,7 +583,7 @@ PartitioningVectorPtr PartitionedVector::create(
           numPartitions,
           pool);
       return VELOX_DYNAMIC_TYPE_DISPATCH(
-          createPartitioningVectorFromDictionary,
+          createPartitionedVectorFromDictionary,
           typeKind,
           vector,
           topRowPartitions,
@@ -667,7 +611,7 @@ PartitioningVectorPtr PartitionedVector::create(
   }
 }
 
-PartitioningVectorPtr PartitionedVector::createWrapped(
+PartitionedVectorPtr PartitionedVector::createWrapped(
     VectorPtr& vector,
     const std::vector<uint32_t>& topRowPartitions,
     BufferPtr& upperLevelOffsets,
@@ -691,7 +635,7 @@ PartitioningVectorPtr PartitionedVector::createWrapped(
   switch (encoding) {
     case VectorEncoding::Simple::FLAT: {
       auto partitionedFlatVector = VELOX_DYNAMIC_SCALAR_TYPE_DISPATCH_ALL(
-          createWrappedPartitioningFlatVector,
+          createWrappedPartitionedFlatVector,
           typeKind,
           vector,
           numPartitions,
@@ -778,7 +722,7 @@ PartitioningVectorPtr PartitionedVector::createWrapped(
           indicesForNextLevelBuffer,
           nestLevel + 1,
           pool);
-      auto partitioningArrayVector = std::make_shared<PartitioningArrayVector>(
+      auto partitioningArrayVector = std::make_shared<PartitionedArrayVector>(
           vector,
           numPartitions,
           beginPartitionOffsetsBuffer,
@@ -791,7 +735,7 @@ PartitioningVectorPtr PartitionedVector::createWrapped(
     case VectorEncoding::Simple::DICTIONARY: {
       // Flatten to no more than one level of indicesBuffer.
       return VELOX_DYNAMIC_TYPE_DISPATCH(
-          remapIdsAndCreatePartitioningVector,
+          remapIdsAndCreatePartitionedVector,
           typeKind,
           vector,
           topRowPartitions,
@@ -804,11 +748,16 @@ PartitioningVectorPtr PartitionedVector::createWrapped(
           indicesBuffer,
           nestLevel,
           pool);
+
+      default:
+        VELOX_UNSUPPORTED(
+            "Unsupported vector encoding for OptimizedPartitionedOutput: ",
+            encoding);
     }
   }
 }
 
-VectorPtr PartitionedVector::vector() {
+VectorPtr PartitionedVector::baseVector() {
   return vector_;
 }
 
@@ -836,6 +785,16 @@ void PartitionedFlatVector<T>::partition(
   auto valuesBuffer = vector_->as<FlatVector<T>>()->values();
 
   // TODO: partition nulls
+  char* rawNulls = (char*)vector_->rawNulls();
+  if (rawNulls) {
+    partitionBitsInPlace(
+        rawNulls,
+        topRowPartitions,
+        numPartitions_,
+        beginPartitionOffsetsBuffer,
+        partitionOffsets_,
+        pool_);
+  }
 
   partitionFixedWidthValues<T>(
       valuesBuffer,
@@ -849,95 +808,29 @@ void PartitionedFlatVector<T>::partition(
       swappingBuffer,
       nestLevel,
       pool_);
-
-  partitioned_ = true;
 }
 
-// void PartitioningArrayVector::partition(
-//     const std::vector<uint32_t>& topRowPartitions,
-//     BufferPtr& topRowOffsetsForCurrentLevel,
-//     BufferPtr& topRowOffsetsForNextLevel,
-//     BufferPtr& beginPartitionOffsetsBuffer,
-//     int32_t nestLevel) {
-////  initializeBeginPartitionOffsets(beginPartitionOffsetsBuffer);
-//
-//  //  if (numPartitions_ == 1) {
-//  //    endPartitionOffsets[0] = vector_->size();
-//  //    return;
-//  //  }
-//
-//  auto numRows = vector_->size();
-//  auto numTopRows = topRowPartitions.size();
-//  auto arrayVector = vector_->as<ArrayVector>();
-//  auto arraySizesBuffer = arrayVector->mutableSizes(numRows);
-//  auto* arraySizes = arraySizesBuffer->asMutable<vector_size_t>();
-//  auto arrayOffsetsBuffer = arrayVector->mutableOffsets(numRows);
-//  auto* arrayOffsets = arrayOffsetsBuffer->asMutable<vector_size_t>();
-//
-//  auto* beginPartitionOffsets =
-//      beginPartitionOffsetsBuffer->asMutable<vector_size_t>();
-//  auto* endPartitionOffsets = partitionOffsets_->asMutable<vector_size_t>();
-//  initializeBeginPartitionOffsets(
-//      beginPartitionOffsetsBuffer,
-//      partitionOffsets_,
-//      numPartitions_,
-//      pool_);
-//
-//  if (nestLevel == 0) {
-//    // Top level. Just swap the rows in place as there is no order
-//    requirements partitionFixedWidthValuesInPlace<vector_size_t>(
-//        arraySizes,
-//        topRowPartitions,
-//        numPartitions_,
-//        beginPartitionOffsets,
-//        endPartitionOffsets);
-//
-//    // top level array. Use its offsets array as topRowOffsets.
-//    ensureCapacity<vector_size_t>(topRowOffsetsForNextLevel, numTopRows,
-//    pool_); auto* topRowOffsetsForNext =
-//        topRowOffsetsForNextLevel->asMutable<vector_size_t>();
-//    topRowOffsetsForNext[0] = 0;
-//    std::memcpy(
-//        topRowOffsetsForNext, arrayOffsets, numTopRows *
-//        sizeof(vector_size_t));
-//    topRowOffsetsForCurrentLevel = arrayOffsetsBuffer;
-//  } else {
-//    // This is not the top level. Calculate the topRowOffsetsForNextLevel
-//    // from arrayOffsets first, because partitioning arraySizes may need to
-//    // overwrite the arrayOffsets
-//    VELOX_CHECK(topRowOffsetsForNextLevel);
-//    VELOX_CHECK(topRowOffsetsForCurrentLevel);
-//
-//    auto* topRowOffsetsForCurrent =
-//        topRowOffsetsForCurrentLevel->asMutable<vector_size_t>();
-//    auto* topRowOffsetsForNext =
-//        topRowOffsetsForNextLevel->asMutable<vector_size_t>();
-//
-//    for (auto topRow = 0; topRow < numTopRows - 1; topRow++) {
-//      topRowOffsetsForNext[topRow] =
-//          arrayOffsets[topRowOffsetsForCurrent[topRow]];
-//    }
-//
-//    // Partition arraySizes based on the partition offsets for this level,
-//    using
-//    // arrayOffsets as the buffer
-//    //    initializeBeginPartitionOffsets(beginPartitionOffsetsBuffer);
-//    auto lastTopRowOffset = arrayOffsets[numRows - 1] + arraySizes[numRows -
-//    1]; partitionFixedWidthValuesToOutput<vector_size_t>(
-//        arraySizes,
-//        topRowPartitions,
-//        topRowOffsetsForCurrent,
-//        lastTopRowOffset,
-//        beginPartitionOffsets,
-//        arrayOffsets);
-//
-//    std::swap(arraySizesBuffer, arrayOffsetsBuffer);
-//  }
-//
-//  partitioned_ = true;
-//}
+template <typename T>
+VectorPtr PartitionedFlatVector<T>::partitionAt(int32_t partition) {
+  VELOX_CHECK(partition < numPartitions_);
 
-void PartitioningArrayVector::partition(
+  vector_size_t beginOffset =
+      partition == 0 ? 0 : rawPartitionOffsets_[partition - 1];
+  vector_size_t numRowsInPartition =
+      rawPartitionOffsets_[partition] - beginOffset;
+
+  if (indices_) {
+    auto indicesOfPartition = Buffer::slice<vector_size_t>(
+        indices_, beginOffset, numRowsInPartition, pool_);
+
+    return BaseVector::wrapInDictionary(
+        nullptr, indicesOfPartition, numRowsInPartition, vector_);
+  } else {
+    return vector_->slice(beginOffset, numRowsInPartition);
+  }
+}
+
+void PartitionedArrayVector::partition(
     const std::vector<uint32_t>& topRowPartitions,
     BufferPtr& topRowOffsetsForCurrentLevel,
     BufferPtr& topRowOffsetsForNextLevel,
@@ -992,15 +885,13 @@ void PartitioningArrayVector::partition(
       nestLevel,
       pool_,
       true);
-
-  partitioned_ = true;
 }
 
-void PartitioningArrayVector::setElements(PartitionedVectorPtr elements) {
+void PartitionedArrayVector::setElements(PartitionedVectorPtr elements) {
   elements_ = elements;
 }
 
-PartitionedVectorPtr PartitioningArrayVector::elements() {
+PartitionedVectorPtr PartitionedArrayVector::elements() {
   return elements_;
 }
 

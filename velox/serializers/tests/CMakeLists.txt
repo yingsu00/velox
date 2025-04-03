@@ -23,6 +23,7 @@ add_test(velox_serializer_test velox_serializer_test)
 target_link_libraries(
   velox_serializer_test
   velox_exec
+  velox_vector
   velox_presto_serializer
   velox_vector_test_lib
   velox_vector_fuzzer
