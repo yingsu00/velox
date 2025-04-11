@@ -55,6 +55,7 @@ velox_add_library(
   NestedLoopJoinProbe.cpp
   Operator.cpp
   OperatorUtils.cpp
+  OptimizedPartitionedOutput.cpp
   OrderBy.cpp
   OutputBuffer.cpp
   OutputBufferManager.cpp
@@ -109,7 +110,8 @@ velox_link_libraries(
   velox_common_base
   velox_test_util
   velox_arrow_bridge
-  velox_common_compression)
+  velox_common_compression
+  velox_partitioning_serializer)
 
 velox_add_library(velox_cursor Cursor.cpp)
 velox_link_libraries(

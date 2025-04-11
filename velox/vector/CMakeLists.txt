@@ -20,6 +20,7 @@ velox_add_library(
   EncodedVectorCopy.cpp
   FlatVector.cpp
   LazyVector.cpp
+  PartitionedVector.cpp
   SelectivityVector.cpp
   SequenceVector.cpp
   SimpleVector.cpp
