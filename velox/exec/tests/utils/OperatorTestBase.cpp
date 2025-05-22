@@ -18,9 +18,16 @@
 #include "velox/common/base/PeriodicStatsReporter.h"
 #include "velox/common/caching/AsyncDataCache.h"
 #include "velox/common/file/FileSystems.h"
+#include "velox/common/file/tests/FaultyFileSystem.h"
 #include "velox/common/memory/MallocAllocator.h"
 #include "velox/common/memory/SharedArbitrator.h"
 #include "velox/common/testutil/TestValue.h"
+#include "velox/dwio/common/tests/utils/BatchMaker.h"
+#include "velox/dwio/dwrf/RegisterDwrfReader.h"
+#include "velox/dwio/dwrf/RegisterDwrfWriter.h"
+#include "velox/dwio/dwrf/reader/DwrfReader.h"
+#include "velox/dwio/dwrf/writer/FlushPolicy.h"
+#include "velox/dwio/dwrf/writer/Writer.h"
 #include "velox/exec/tests/utils/LocalExchangeSource.h"
 #include "velox/functions/prestosql/aggregates/RegisterAggregateFunctions.h"
 #include "velox/functions/prestosql/registration/RegistrationFunctions.h"
@@ -49,6 +56,9 @@ OperatorTestBase::OperatorTestBase() {
   vectorMaker_ = velox::test::VectorMaker(pool_.get());
 
   parse::registerTypeResolver();
+
+  filesystems::registerLocalFileSystem();
+  tests::utils::registerFaultyFileSystem();
 }
 
 void OperatorTestBase::registerVectorSerde() {
@@ -149,9 +159,16 @@ void OperatorTestBase::SetUp() {
   options.spillStatsIntervalMs = 2'000;
   startPeriodicStatsReporter(options);
   testingStartLocalExchangeSource();
+
+  dwio::common::registerFileSinks();
+  dwrf::registerDwrfReaderFactory();
+  dwrf::registerDwrfWriterFactory();
 }
 
 void OperatorTestBase::TearDown() {
+  dwrf::unregisterDwrfReaderFactory();
+  dwrf::unregisterDwrfWriterFactory();
+
   waitForAllTasksToBeDeleted();
   stopPeriodicStatsReporter();
   // There might be lingering exchange source on executor even after all tasks
@@ -264,6 +281,110 @@ core::TypedExprPtr OperatorTestBase::parseExpr(
   // gone.
   auto fs = filesystems::getFileSystem(spillDirectoryStr, nullptr);
   EXPECT_FALSE(fs->exists(spillDirectoryStr));
+}
+
+void OperatorTestBase::writeToFiles(
+    const std::vector<std::string>& filePaths,
+    std::vector<RowVectorPtr> vectors) {
+  VELOX_CHECK_EQ(filePaths.size(), vectors.size());
+  for (int i = 0; i < filePaths.size(); ++i) {
+    writeToFile(filePaths[i], std::vector{vectors[i]});
+  }
+}
+
+void OperatorTestBase::writeToFile(
+    const std::string& filePath,
+    RowVectorPtr vector) {
+  writeToFile(filePath, std::vector{vector});
+}
+
+void OperatorTestBase::writeToFile(
+    const std::string& filePath,
+    const std::vector<RowVectorPtr>& vectors,
+    std::shared_ptr<dwrf::Config> config,
+    const std::function<std::unique_ptr<dwrf::DWRFFlushPolicy>()>&
+        flushPolicyFactory) {
+  writeToFile(
+      filePath,
+      vectors,
+      std::move(config),
+      vectors[0]->type(),
+      flushPolicyFactory);
+}
+
+void OperatorTestBase::writeToFile(
+    const std::string& filePath,
+    const std::vector<RowVectorPtr>& vectors,
+    std::shared_ptr<dwrf::Config> config,
+    const TypePtr& schema,
+    const std::function<std::unique_ptr<dwrf::DWRFFlushPolicy>()>&
+        flushPolicyFactory) {
+  velox::dwrf::WriterOptions options;
+  options.config = config;
+  options.schema = schema;
+  auto fs = filesystems::getFileSystem(filePath, {});
+  auto writeFile = fs->openFileForWrite(
+      filePath,
+      {.shouldCreateParentDirectories = true,
+       .shouldThrowOnFileAlreadyExists = false});
+  auto sink = std::make_unique<dwio::common::WriteFileSink>(
+      std::move(writeFile), filePath);
+  auto childPool = rootPool_->addAggregateChild("OperatorTestBase.Writer");
+  options.memoryPool = childPool.get();
+  options.flushPolicyFactory = flushPolicyFactory;
+
+  facebook::velox::dwrf::Writer writer{std::move(sink), options};
+  for (size_t i = 0; i < vectors.size(); ++i) {
+    writer.write(vectors[i]);
+  }
+  writer.close();
+}
+
+void OperatorTestBase::writeToFile(
+    const std::string& path,
+    const VectorPtr& vector,
+    memory::MemoryPool* pool) {
+  dwrf::WriterOptions options;
+  options.schema = vector->type();
+  options.memoryPool = pool;
+  auto writeFile = std::make_unique<LocalWriteFile>(path, true, false);
+  auto sink =
+      std::make_unique<dwio::common::WriteFileSink>(std::move(writeFile), path);
+  dwrf::Writer writer(std::move(sink), options);
+  writer.write(vector);
+  writer.close();
+}
+
+void OperatorTestBase::createDirectory(const std::string& directoryPath) {
+  auto fs = filesystems::getFileSystem(directoryPath, {});
+  fs->mkdir(directoryPath);
+}
+
+void OperatorTestBase::removeDirectory(const std::string& directoryPath) {
+  auto fs = filesystems::getFileSystem(directoryPath, {});
+  if (fs->exists(directoryPath)) {
+    fs->rmdir(directoryPath);
+  }
+}
+
+void OperatorTestBase::removeFile(const std::string& filePath) {
+  auto fs = filesystems::getFileSystem(filePath, {});
+  if (fs->exists(filePath)) {
+    fs->remove(filePath);
+  }
+}
+
+std::vector<RowVectorPtr> OperatorTestBase::makeVectors(
+    const RowTypePtr& rowType,
+    int32_t numVectors,
+    int32_t rowsPerVector) {
+  std::vector<RowVectorPtr> vectors;
+  for (int32_t i = 0; i < numVectors; ++i) {
+    auto vector = std::dynamic_pointer_cast<RowVector>(
+        velox::test::BatchMaker::createBatch(rowType, rowsPerVector, *pool_));
+    vectors.push_back(vector);
+  }
+  return vectors;
 }
 
 } // namespace facebook::velox::exec::test

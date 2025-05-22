@@ -21,6 +21,8 @@
 #include "velox/common/caching/SsdCache.h"
 #include "velox/core/Expressions.h"
 #include "velox/core/PlanNode.h"
+#include "velox/dwio/dwrf/common/Config.h"
+#include "velox/dwio/dwrf/writer/FlushPolicy.h"
 #include "velox/exec/HashProbe.h"
 #include "velox/exec/tests/utils/QueryAssertions.h"
 #include "velox/parse/ExpressionsParser.h"
@@ -165,6 +167,50 @@ class OperatorTestBase : public virtual testing::Test,
       const std::string& text,
       RowTypePtr rowType,
       const parse::ParseOptions& options = {});
+
+  void writeToFiles(
+      const std::vector<std::string>& filePaths,
+      std::vector<RowVectorPtr> vectors);
+
+  void writeToFile(const std::string& filePath, RowVectorPtr vector);
+
+  void writeToFile(
+      const std::string& filePath,
+      const std::vector<RowVectorPtr>& vectors,
+      std::shared_ptr<dwrf::Config> config =
+          std::make_shared<facebook::velox::dwrf::Config>(),
+      const std::function<std::unique_ptr<dwrf::DWRFFlushPolicy>()>&
+          flushPolicyFactory = nullptr);
+
+  void writeToFile(
+      const std::string& filePath,
+      const std::vector<RowVectorPtr>& vectors,
+      std::shared_ptr<dwrf::Config> config,
+      const TypePtr& schema,
+      const std::function<std::unique_ptr<dwrf::DWRFFlushPolicy>()>&
+          flushPolicyFactory = nullptr);
+
+  void writeToFile(
+      const std::string& path,
+      const VectorPtr& vector,
+      memory::MemoryPool* pool);
+
+  // Creates a directory using matching file system based on directoryPath.
+  // No throw when directory already exists.
+  void createDirectory(const std::string& directoryPath);
+
+  // Removes a directory using matching file system based on directoryPath.
+  // No op when directory does not exist.
+  void removeDirectory(const std::string& directoryPath);
+
+  // Removes a file using matching file system based on filePath.
+  // No op when file does not exist.
+  void removeFile(const std::string& filePath);
+
+  std::vector<RowVectorPtr> makeVectors(
+      const RowTypePtr& rowType,
+      int32_t numVectors,
+      int32_t rowsPerVector);
 
  public:
   static void deleteTaskAndCheckSpillDirectory(std::shared_ptr<Task>& task);

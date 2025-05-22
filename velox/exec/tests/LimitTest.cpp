@@ -21,6 +21,7 @@ using namespace facebook::velox;
 using namespace facebook::velox::exec;
 using namespace facebook::velox::exec::test;
 
+// requres writeToFile, makeHiveConnectorSplit
 class LimitTest : public HiveConnectorTestBase {};
 
 TEST_F(LimitTest, basic) {

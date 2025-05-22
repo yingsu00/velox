@@ -16,22 +16,9 @@
 
 #include "velox/exec/tests/utils/HiveConnectorTestBase.h"
 
-#include "velox/common/file/FileSystems.h"
-#include "velox/common/file/tests/FaultyFileSystem.h"
-#include "velox/dwio/common/tests/utils/BatchMaker.h"
-#include "velox/dwio/dwrf/RegisterDwrfReader.h"
-#include "velox/dwio/dwrf/RegisterDwrfWriter.h"
-#include "velox/dwio/dwrf/reader/DwrfReader.h"
-#include "velox/dwio/dwrf/writer/FlushPolicy.h"
-#include "velox/dwio/dwrf/writer/Writer.h"
 #include "velox/exec/tests/utils/AssertQueryBuilder.h"
 
 namespace facebook::velox::exec::test {
-
-HiveConnectorTestBase::HiveConnectorTestBase() {
-  filesystems::registerLocalFileSystem();
-  tests::utils::registerFaultyFileSystem();
-}
 
 void HiveConnectorTestBase::SetUp() {
   OperatorTestBase::SetUp();
@@ -46,17 +33,12 @@ void HiveConnectorTestBase::SetUp() {
                   std::unordered_map<std::string, std::string>()),
               ioExecutor_.get());
   connector::registerConnector(hiveConnector);
-  dwio::common::registerFileSinks();
-  dwrf::registerDwrfReaderFactory();
-  dwrf::registerDwrfWriterFactory();
 }
 
 void HiveConnectorTestBase::TearDown() {
   // Make sure all pending loads are finished or cancelled before unregister
   // connector.
   ioExecutor_.reset();
-  dwrf::unregisterDwrfReaderFactory();
-  dwrf::unregisterDwrfWriterFactory();
   connector::unregisterConnector(kHiveConnectorId);
   connector::unregisterConnectorFactory(
       connector::hive::HiveConnectorFactory::kHiveConnectorName);
@@ -71,95 +53,6 @@ void HiveConnectorTestBase::resetHiveConnector(
           connector::hive::HiveConnectorFactory::kHiveConnectorName)
           ->newConnector(kHiveConnectorId, config, ioExecutor_.get());
   connector::registerConnector(hiveConnector);
-}
-
-void HiveConnectorTestBase::writeToFiles(
-    const std::vector<std::string>& filePaths,
-    std::vector<RowVectorPtr> vectors) {
-  VELOX_CHECK_EQ(filePaths.size(), vectors.size());
-  for (int i = 0; i < filePaths.size(); ++i) {
-    writeToFile(filePaths[i], std::vector{vectors[i]});
-  }
-}
-
-void HiveConnectorTestBase::writeToFile(
-    const std::string& filePath,
-    RowVectorPtr vector) {
-  writeToFile(filePath, std::vector{vector});
-}
-
-void HiveConnectorTestBase::writeToFile(
-    const std::string& filePath,
-    const std::vector<RowVectorPtr>& vectors,
-    std::shared_ptr<dwrf::Config> config,
-    const std::function<std::unique_ptr<dwrf::DWRFFlushPolicy>()>&
-        flushPolicyFactory) {
-  writeToFile(
-      filePath,
-      vectors,
-      std::move(config),
-      vectors[0]->type(),
-      flushPolicyFactory);
-}
-
-void HiveConnectorTestBase::writeToFile(
-    const std::string& filePath,
-    const std::vector<RowVectorPtr>& vectors,
-    std::shared_ptr<dwrf::Config> config,
-    const TypePtr& schema,
-    const std::function<std::unique_ptr<dwrf::DWRFFlushPolicy>()>&
-        flushPolicyFactory) {
-  velox::dwrf::WriterOptions options;
-  options.config = config;
-  options.schema = schema;
-  auto fs = filesystems::getFileSystem(filePath, {});
-  auto writeFile = fs->openFileForWrite(
-      filePath,
-      {.shouldCreateParentDirectories = true,
-       .shouldThrowOnFileAlreadyExists = false});
-  auto sink = std::make_unique<dwio::common::WriteFileSink>(
-      std::move(writeFile), filePath);
-  auto childPool = rootPool_->addAggregateChild("HiveConnectorTestBase.Writer");
-  options.memoryPool = childPool.get();
-  options.flushPolicyFactory = flushPolicyFactory;
-
-  facebook::velox::dwrf::Writer writer{std::move(sink), options};
-  for (size_t i = 0; i < vectors.size(); ++i) {
-    writer.write(vectors[i]);
-  }
-  writer.close();
-}
-
-void HiveConnectorTestBase::createDirectory(const std::string& directoryPath) {
-  auto fs = filesystems::getFileSystem(directoryPath, {});
-  fs->mkdir(directoryPath);
-}
-
-void HiveConnectorTestBase::removeDirectory(const std::string& directoryPath) {
-  auto fs = filesystems::getFileSystem(directoryPath, {});
-  if (fs->exists(directoryPath)) {
-    fs->rmdir(directoryPath);
-  }
-}
-
-void HiveConnectorTestBase::removeFile(const std::string& filePath) {
-  auto fs = filesystems::getFileSystem(filePath, {});
-  if (fs->exists(filePath)) {
-    fs->remove(filePath);
-  }
-}
-
-std::vector<RowVectorPtr> HiveConnectorTestBase::makeVectors(
-    const RowTypePtr& rowType,
-    int32_t numVectors,
-    int32_t rowsPerVector) {
-  std::vector<RowVectorPtr> vectors;
-  for (int32_t i = 0; i < numVectors; ++i) {
-    auto vector = std::dynamic_pointer_cast<RowVector>(
-        velox::test::BatchMaker::createBatch(rowType, rowsPerVector, *pool_));
-    vectors.push_back(vector);
-  }
-  return vectors;
 }
 
 std::shared_ptr<exec::Task> HiveConnectorTestBase::assertQuery(
