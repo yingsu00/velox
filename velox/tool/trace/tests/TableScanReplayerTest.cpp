@@ -300,7 +300,9 @@ TEST_F(TableScanReplayerTest, subfieldPrunning) {
   writeToFile(filePath->getPath(), vectors);
   std::vector<common::Subfield> requiredSubfields;
   requiredSubfields.emplace_back("e.c");
-  std::unordered_map<std::string, std::shared_ptr<connector::ColumnHandle>>
+  std::unordered_map<
+      std::string,
+      std::shared_ptr<connector::ConnectorColumnHandle>>
       assignments;
   assignments["e"] = std::make_shared<HiveColumnHandle>(
       "e",

@@ -74,7 +74,7 @@ PlanBuilder& PlanBuilder::tableScan(
     const RowTypePtr& dataColumns,
     const std::unordered_map<
         std::string,
-        std::shared_ptr<connector::ColumnHandle>>& assignments) {
+        std::shared_ptr<connector::ConnectorColumnHandle>>& assignments) {
   return TableScanBuilder(*this)
       .filtersAsNode(filtersAsNode_ ? planNodeIdGenerator_ : nullptr)
       .outputType(outputType)
@@ -94,7 +94,7 @@ PlanBuilder& PlanBuilder::tableScan(
     const RowTypePtr& dataColumns,
     const std::unordered_map<
         std::string,
-        std::shared_ptr<connector::ColumnHandle>>& assignments) {
+        std::shared_ptr<connector::ConnectorColumnHandle>>& assignments) {
   return TableScanBuilder(*this)
       .filtersAsNode(filtersAsNode_ ? planNodeIdGenerator_ : nullptr)
       .tableName(tableName)
@@ -112,7 +112,9 @@ PlanBuilder& PlanBuilder::tpchTableScan(
     std::vector<std::string> columnNames,
     double scaleFactor,
     std::string_view connectorId) {
-  std::unordered_map<std::string, std::shared_ptr<connector::ColumnHandle>>
+  std::unordered_map<
+      std::string,
+      std::shared_ptr<connector::ConnectorColumnHandle>>
       assignmentsMap;
   std::vector<TypePtr> outputTypes;
 

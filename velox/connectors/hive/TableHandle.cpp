@@ -53,7 +53,7 @@ HiveColumnHandle::ColumnType HiveColumnHandle::columnTypeFromName(
 }
 
 folly::dynamic HiveColumnHandle::serialize() const {
-  folly::dynamic obj = ColumnHandle::serializeBase("HiveColumnHandle");
+  folly::dynamic obj = ConnectorColumnHandle::serializeBase("HiveColumnHandle");
   obj["hiveColumnHandleName"] = name_;
   obj["columnType"] = columnTypeName(columnType_);
   obj["dataType"] = dataType_->serialize();
@@ -81,7 +81,7 @@ std::string HiveColumnHandle::toString() const {
   return out.str();
 }
 
-ColumnHandlePtr HiveColumnHandle::create(const folly::dynamic& obj) {
+ConnectorColumnHandlePtr HiveColumnHandle::create(const folly::dynamic& obj) {
   auto name = obj["hiveColumnHandleName"].asString();
   auto columnType = columnTypeFromName(obj["columnType"].asString());
   auto dataType = ISerializable::deserialize<Type>(obj["dataType"]);

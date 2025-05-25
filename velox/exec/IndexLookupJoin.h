@@ -195,7 +195,9 @@ class IndexLookupJoin : public Operator {
   const RowTypePtr lookupType_;
   const std::shared_ptr<connector::ConnectorTableHandle> lookupTableHandle_;
   const std::vector<core::IndexLookupConditionPtr> lookupConditions_;
-  std::unordered_map<std::string, std::shared_ptr<connector::ColumnHandle>>
+  std::unordered_map<
+      std::string,
+      std::shared_ptr<connector::ConnectorColumnHandle>>
       lookupColumnHandles_;
   const std::shared_ptr<connector::ConnectorQueryCtx> connectorQueryCtx_;
   const std::shared_ptr<connector::Connector> connector_;

@@ -110,9 +110,10 @@ class TableScan : public WaveSourceOperator {
   static std::atomic<uint64_t> ioWaitNanos_;
 
   const std::shared_ptr<connector::ConnectorTableHandle> tableHandle_;
-  const std::
-      unordered_map<std::string, std::shared_ptr<connector::ColumnHandle>>
-          columnHandles_;
+  const std::unordered_map<
+      std::string,
+      std::shared_ptr<connector::ConnectorColumnHandle>>
+      columnHandles_;
   exec::DriverCtx* const driverCtx_;
   memory::MemoryPool* const connectorPool_;
   ContinueFuture blockingFuture_{ContinueFuture::makeEmpty()};

@@ -1101,14 +1101,17 @@ PlanNodePtr TableScanNode::create(const folly::dynamic& obj, void* context) {
       ISerializable::deserialize<connector::ConnectorTableHandle>(
           obj["tableHandle"], context));
 
-  std::unordered_map<std::string, std::shared_ptr<connector::ColumnHandle>>
+  std::unordered_map<
+      std::string,
+      std::shared_ptr<connector::ConnectorColumnHandle>>
       assignments;
   for (const auto& pair : obj["assignments"]) {
     auto assign = pair["assign"].asString();
-    auto columnHandle = ISerializable::deserialize<connector::ColumnHandle>(
-        pair["columnHandle"]);
+    auto columnHandle =
+        ISerializable::deserialize<connector::ConnectorColumnHandle>(
+            pair["columnHandle"]);
     assignments[assign] =
-        std::const_pointer_cast<connector::ColumnHandle>(columnHandle);
+        std::const_pointer_cast<connector::ConnectorColumnHandle>(columnHandle);
   }
 
   return std::make_shared<const TableScanNode>(

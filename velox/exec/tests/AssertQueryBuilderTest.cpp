@@ -93,7 +93,7 @@ TEST_F(AssertQueryBuilderTest, hiveSplits) {
       .assertResults("VALUES (1), (2), (3)");
 
   // Split with partition key.
-  ColumnHandleMap assignments = {
+  ConnectorColumnHandleMap assignments = {
       {"ds", partitionKey("ds", VARCHAR())},
       {"c0", regularColumn("c0", BIGINT())}};
 

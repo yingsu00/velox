@@ -196,7 +196,7 @@ class TableScanTest : public HiveConnectorTestBase {
                      .build();
     auto outputType =
         ROW({"pkey", "c0", "c1"}, {partitionType, BIGINT(), DOUBLE()});
-    ColumnHandleMap assignments = {
+    ConnectorColumnHandleMap assignments = {
         {"pkey", partitionKey("pkey", partitionType)},
         {"c0", regularColumn("c0", BIGINT())},
         {"c1", regularColumn("c1", DOUBLE())}};
@@ -479,7 +479,7 @@ TEST_F(TableScanTest, partitionKeyAlias) {
   writeToFile(filePath->getPath(), vectors);
   createDuckDbTable(vectors);
 
-  ColumnHandleMap assignments = {
+  ConnectorColumnHandleMap assignments = {
       {"a", regularColumn("c0", BIGINT())},
       {"ds_alias", partitionKey("ds", VARCHAR())}};
 
@@ -713,7 +713,9 @@ TEST_F(TableScanTest, subfieldPruningRowType) {
   writeToFile(filePath->getPath(), vectors);
   std::vector<common::Subfield> requiredSubfields;
   requiredSubfields.emplace_back("e.c");
-  std::unordered_map<std::string, std::shared_ptr<connector::ColumnHandle>>
+  std::unordered_map<
+      std::string,
+      std::shared_ptr<connector::ConnectorColumnHandle>>
       assignments;
   assignments["e"] = std::make_shared<HiveColumnHandle>(
       "e",
@@ -770,7 +772,9 @@ TEST_F(TableScanTest, subfieldPruningRemainingFilterSubfieldsMissing) {
   writeToFile(filePath->getPath(), vectors);
   std::vector<common::Subfield> requiredSubfields;
   requiredSubfields.emplace_back("e.c");
-  std::unordered_map<std::string, std::shared_ptr<connector::ColumnHandle>>
+  std::unordered_map<
+      std::string,
+      std::shared_ptr<connector::ConnectorColumnHandle>>
       assignments;
   assignments["e"] = std::make_shared<HiveColumnHandle>(
       "e",
@@ -826,7 +830,9 @@ TEST_F(TableScanTest, subfieldPruningRemainingFilterRootFieldMissing) {
   auto vectors = makeVectors(10, 1'000, rowType);
   auto filePath = TempFilePath::create();
   writeToFile(filePath->getPath(), vectors);
-  std::unordered_map<std::string, std::shared_ptr<connector::ColumnHandle>>
+  std::unordered_map<
+      std::string,
+      std::shared_ptr<connector::ConnectorColumnHandle>>
       assignments;
   assignments["d"] = std::make_shared<HiveColumnHandle>(
       "d", HiveColumnHandle::ColumnType::kRegular, BIGINT(), BIGINT());
@@ -869,7 +875,9 @@ TEST_F(TableScanTest, subfieldPruningRemainingFilterStruct) {
     for (int filterColumn = kWholeColumn; filterColumn <= kSubfieldOnly;
          ++filterColumn) {
       SCOPED_TRACE(fmt::format("{} {}", outputColumn, filterColumn));
-      std::unordered_map<std::string, std::shared_ptr<connector::ColumnHandle>>
+      std::unordered_map<
+          std::string,
+          std::shared_ptr<connector::ConnectorColumnHandle>>
           assignments;
       assignments["d"] = std::make_shared<HiveColumnHandle>(
           "d", HiveColumnHandle::ColumnType::kRegular, BIGINT(), BIGINT());
@@ -955,7 +963,9 @@ TEST_F(TableScanTest, subfieldPruningRemainingFilterMap) {
     for (int filterColumn = kWholeColumn; filterColumn <= kSubfieldOnly;
          ++filterColumn) {
       SCOPED_TRACE(fmt::format("{} {}", outputColumn, filterColumn));
-      std::unordered_map<std::string, std::shared_ptr<connector::ColumnHandle>>
+      std::unordered_map<
+          std::string,
+          std::shared_ptr<connector::ConnectorColumnHandle>>
           assignments;
       assignments["a"] = std::make_shared<HiveColumnHandle>(
           "a", HiveColumnHandle::ColumnType::kRegular, BIGINT(), BIGINT());
@@ -1055,7 +1065,9 @@ TEST_F(TableScanTest, subfieldPruningMapType) {
   requiredSubfields.emplace_back("c[0]");
   requiredSubfields.emplace_back("c[2]");
   requiredSubfields.emplace_back("c[4]");
-  std::unordered_map<std::string, std::shared_ptr<connector::ColumnHandle>>
+  std::unordered_map<
+      std::string,
+      std::shared_ptr<connector::ConnectorColumnHandle>>
       assignments;
   assignments["c"] = std::make_shared<HiveColumnHandle>(
       "c",
@@ -1139,7 +1151,9 @@ TEST_F(TableScanTest, subfieldPruningArrayType) {
   writeToFile(filePath->getPath(), vectors);
   std::vector<common::Subfield> requiredSubfields;
   requiredSubfields.emplace_back("c[3]");
-  std::unordered_map<std::string, std::shared_ptr<connector::ColumnHandle>>
+  std::unordered_map<
+      std::string,
+      std::shared_ptr<connector::ConnectorColumnHandle>>
       assignments;
   assignments["c"] = std::make_shared<HiveColumnHandle>(
       "c",
@@ -1302,7 +1316,7 @@ TEST_F(TableScanTest, missingColumns) {
   filters[common::Subfield("c1")] = lessThanOrEqualDouble(1050.0, true);
   auto tableHandle = std::make_shared<HiveTableHandle>(
       kHiveConnectorId, "tmp", true, std::move(filters), nullptr, dataColumns);
-  ColumnHandleMap assignments;
+  ConnectorColumnHandleMap assignments;
   assignments["c0"] = regularColumn("c0", BIGINT());
   op = PlanBuilder(pool_.get())
            .startTableScan()
@@ -2143,7 +2157,7 @@ TEST_F(TableScanTest, partitionedTableDateKey) {
                      .partitionKey("pkey", partitionValue)
                      .build();
     auto outputType = ROW({"pkey", "c0", "c1"}, {DATE(), BIGINT(), DOUBLE()});
-    ColumnHandleMap assignments = {
+    ConnectorColumnHandleMap assignments = {
         {"pkey", partitionKey("pkey", DATE())},
         {"c0", regularColumn("c0", BIGINT())},
         {"c1", regularColumn("c1", DOUBLE())}};
@@ -2183,7 +2197,7 @@ TEST_F(TableScanTest, partitionedTableTimestampKey) {
                    .partitionKey("pkey", partitionValue)
                    .build();
 
-  ColumnHandleMap assignments = {
+  ConnectorColumnHandleMap assignments = {
       {"pkey", partitionKey("pkey", TIMESTAMP())},
       {"c0", regularColumn("c0", BIGINT())},
       {"c1", regularColumn("c1", DOUBLE())}};
@@ -2511,7 +2525,8 @@ TEST_F(TableScanTest, statsBasedSkipping) {
   // c0 <= -1 -> whole file should be skipped based on stats
   auto subfieldFilters = singleSubfieldFilter("c0", lessThanOrEqual(-1));
 
-  ColumnHandleMap assignments = {{"c1", regularColumn("c1", INTEGER())}};
+  ConnectorColumnHandleMap assignments = {
+      {"c1", regularColumn("c1", INTEGER())}};
 
   auto assertQuery = [&](const std::string& query) {
     auto tableHandle = makeTableHandle(
@@ -3705,7 +3720,8 @@ TEST_F(TableScanTest, remainingFilter) {
       "SELECT * FROM tmp WHERE c1 > c0 AND c0 >= 0");
 
   // Remaining filter uses columns that are not used otherwise.
-  ColumnHandleMap assignments = {{"c2", regularColumn("c2", DOUBLE())}};
+  ConnectorColumnHandleMap assignments = {
+      {"c2", regularColumn("c2", DOUBLE())}};
 
   assertQuery(
       PlanBuilder(pool_.get())
@@ -4314,7 +4330,8 @@ TEST_F(TableScanTest, interleaveLazyEager) {
   auto eagerFile = TempFilePath::create();
   writeToFile(eagerFile->getPath(), rowsWithNulls);
 
-  ColumnHandleMap assignments = {{"c0", regularColumn("c0", column->type())}};
+  ConnectorColumnHandleMap assignments = {
+      {"c0", regularColumn("c0", column->type())}};
   CursorParameters params;
   params.planNode = PlanBuilder()
                         .startTableScan()
@@ -5127,7 +5144,7 @@ TEST_F(TableScanTest, varbinaryPartitionKey) {
   writeToFile(filePath->getPath(), vectors);
   createDuckDbTable(vectors);
 
-  ColumnHandleMap assignments = {
+  ConnectorColumnHandleMap assignments = {
       {"a", regularColumn("c0", BIGINT())},
       {"ds_alias", partitionKey("ds", VARBINARY())}};
 
@@ -5184,7 +5201,8 @@ TEST_F(TableScanTest, timestampPartitionKey) {
     return splits;
   };
 
-  ColumnHandleMap assignments = {{"t", partitionKey("t", TIMESTAMP())}};
+  ConnectorColumnHandleMap assignments = {
+      {"t", partitionKey("t", TIMESTAMP())}};
   auto plan = PlanBuilder()
                   .startTableScan()
                   .outputType(ROW({"t"}, {TIMESTAMP()}))
@@ -5337,7 +5355,9 @@ TEST_F(TableScanTest, dynamicFilterWithRowIndexColumn) {
       {"row_index", "a"},
       {makeFlatVector<int64_t>(5, folly::identity),
        makeFlatVector<int64_t>(5, folly::identity)});
-  std::unordered_map<std::string, std::shared_ptr<connector::ColumnHandle>>
+  std::unordered_map<
+      std::string,
+      std::shared_ptr<connector::ConnectorColumnHandle>>
       assignments;
   assignments["a"] = std::make_shared<connector::hive::HiveColumnHandle>(
       "a",

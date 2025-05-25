@@ -23,7 +23,7 @@
 
 namespace facebook::velox::connector::hive {
 
-class HiveColumnHandle : public ColumnHandle {
+class HiveColumnHandle : public ConnectorColumnHandle {
  public:
   enum class ColumnType {
     kPartitionKey,
@@ -114,7 +114,7 @@ class HiveColumnHandle : public ColumnHandle {
 
   folly::dynamic serialize() const override;
 
-  static ColumnHandlePtr create(const folly::dynamic& obj);
+  static ConnectorColumnHandlePtr create(const folly::dynamic& obj);
 
   static std::string columnTypeName(HiveColumnHandle::ColumnType columnType);
 

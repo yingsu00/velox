@@ -801,7 +801,9 @@ TEST_P(IndexLookupJoinTest, equalJoin) {
     const auto indexTableHandle =
         makeIndexTableHandle(indexTable, GetParam().asyncLookup);
     auto planNodeIdGenerator = std::make_shared<core::PlanNodeIdGenerator>();
-    std::unordered_map<std::string, std::shared_ptr<connector::ColumnHandle>>
+    std::unordered_map<
+        std::string,
+        std::shared_ptr<connector::ConnectorColumnHandle>>
         columnHandles;
     const auto indexScanNode = makeIndexScanNode(
         planNodeIdGenerator,
@@ -1256,7 +1258,9 @@ TEST_P(IndexLookupJoinTest, betweenJoinCondition) {
     const auto indexTableHandle =
         makeIndexTableHandle(indexTable, GetParam().asyncLookup);
     auto planNodeIdGenerator = std::make_shared<core::PlanNodeIdGenerator>();
-    std::unordered_map<std::string, std::shared_ptr<connector::ColumnHandle>>
+    std::unordered_map<
+        std::string,
+        std::shared_ptr<connector::ConnectorColumnHandle>>
         columnHandles;
     const auto indexScanNode = makeIndexScanNode(
         planNodeIdGenerator,
@@ -1577,7 +1581,9 @@ TEST_P(IndexLookupJoinTest, inJoinCondition) {
     const auto indexTableHandle =
         makeIndexTableHandle(indexTable, GetParam().asyncLookup);
     auto planNodeIdGenerator = std::make_shared<core::PlanNodeIdGenerator>();
-    std::unordered_map<std::string, std::shared_ptr<connector::ColumnHandle>>
+    std::unordered_map<
+        std::string,
+        std::shared_ptr<connector::ConnectorColumnHandle>>
         columnHandles;
     const auto indexScanNode = makeIndexScanNode(
         planNodeIdGenerator,
@@ -1628,7 +1634,9 @@ DEBUG_ONLY_TEST_P(IndexLookupJoinTest, connectorError) {
   const auto indexTableHandle =
       makeIndexTableHandle(indexTable, GetParam().asyncLookup);
   auto planNodeIdGenerator = std::make_shared<core::PlanNodeIdGenerator>();
-  std::unordered_map<std::string, std::shared_ptr<connector::ColumnHandle>>
+  std::unordered_map<
+      std::string,
+      std::shared_ptr<connector::ConnectorColumnHandle>>
       columnHandles;
   const auto indexScanNode = makeIndexScanNode(
       planNodeIdGenerator,
@@ -1697,7 +1705,9 @@ DEBUG_ONLY_TEST_P(IndexLookupJoinTest, prefetch) {
   const auto indexTableHandle =
       makeIndexTableHandle(indexTable, GetParam().asyncLookup);
   auto planNodeIdGenerator = std::make_shared<core::PlanNodeIdGenerator>();
-  std::unordered_map<std::string, std::shared_ptr<connector::ColumnHandle>>
+  std::unordered_map<
+      std::string,
+      std::shared_ptr<connector::ConnectorColumnHandle>>
       columnHandles;
   const auto indexScanNode = makeIndexScanNode(
       planNodeIdGenerator,
@@ -1786,7 +1796,9 @@ TEST_P(IndexLookupJoinTest, outputBatchSize) {
     const auto indexTableHandle =
         makeIndexTableHandle(indexTable, GetParam().asyncLookup);
     auto planNodeIdGenerator = std::make_shared<core::PlanNodeIdGenerator>();
-    std::unordered_map<std::string, std::shared_ptr<connector::ColumnHandle>>
+    std::unordered_map<
+        std::string,
+        std::shared_ptr<connector::ConnectorColumnHandle>>
         columnHandles;
     const auto indexScanNode = makeIndexScanNode(
         planNodeIdGenerator,
@@ -1855,7 +1867,9 @@ DEBUG_ONLY_TEST_P(IndexLookupJoinTest, runtimeStats) {
   const auto indexTableHandle =
       makeIndexTableHandle(indexTable, GetParam().asyncLookup);
   auto planNodeIdGenerator = std::make_shared<core::PlanNodeIdGenerator>();
-  std::unordered_map<std::string, std::shared_ptr<connector::ColumnHandle>>
+  std::unordered_map<
+      std::string,
+      std::shared_ptr<connector::ConnectorColumnHandle>>
       columnHandles;
   const auto indexScanNode = makeIndexScanNode(
       planNodeIdGenerator,
@@ -1942,7 +1956,9 @@ TEST_P(IndexLookupJoinTest, barrier) {
   const auto indexTableHandle =
       makeIndexTableHandle(indexTable, GetParam().asyncLookup);
   auto planNodeIdGenerator = std::make_shared<core::PlanNodeIdGenerator>();
-  std::unordered_map<std::string, std::shared_ptr<connector::ColumnHandle>>
+  std::unordered_map<
+      std::string,
+      std::shared_ptr<connector::ConnectorColumnHandle>>
       columnHandles;
   const auto indexScanNode = makeIndexScanNode(
       planNodeIdGenerator,
@@ -2017,7 +2033,9 @@ TEST_P(IndexLookupJoinTest, joinFuzzer) {
   std::random_device rd;
   std::mt19937 g(rd());
   std::shuffle(scanOutput.begin(), scanOutput.end(), g);
-  std::unordered_map<std::string, std::shared_ptr<connector::ColumnHandle>>
+  std::unordered_map<
+      std::string,
+      std::shared_ptr<connector::ConnectorColumnHandle>>
       columnHandles;
   const auto indexScanNode = makeIndexScanNode(
       planNodeIdGenerator,

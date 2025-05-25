@@ -61,7 +61,7 @@ HiveDataSource::HiveDataSource(
     const std::shared_ptr<connector::ConnectorTableHandle>& tableHandle,
     const std::unordered_map<
         std::string,
-        std::shared_ptr<connector::ColumnHandle>>& columnHandles,
+        std::shared_ptr<connector::ConnectorColumnHandle>>& columnHandles,
     FileHandleFactory* fileHandleFactory,
     folly::Executor* executor,
     const ConnectorQueryCtx* connectorQueryCtx,

@@ -127,7 +127,7 @@ class IndexLookupJoinTestBase
       const facebook::velox::RowTypePtr& outputType,
       std::unordered_map<
           std::string,
-          std::shared_ptr<facebook::velox::connector::ColumnHandle>>&
+          std::shared_ptr<facebook::velox::connector::ConnectorColumnHandle>>&
           assignments);
 
   /// Generate sequence storage table which will be persisted by mock zippydb

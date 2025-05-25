@@ -152,13 +152,13 @@ CommitStrategy stringToCommitStrategy(const std::string& strategy) {
   }
 }
 
-folly::dynamic ColumnHandle::serializeBase(std::string_view name) {
+folly::dynamic ConnectorColumnHandle::serializeBase(std::string_view name) {
   folly::dynamic obj = folly::dynamic::object;
   obj["name"] = name;
   return obj;
 }
 
-folly::dynamic ColumnHandle::serialize() const {
+folly::dynamic ConnectorColumnHandle::serialize() const {
   return serializeBase("ColumnHandle");
 }
 

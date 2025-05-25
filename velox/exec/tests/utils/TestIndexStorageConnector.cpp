@@ -33,7 +33,7 @@ core::TypedExprPtr toJoinConditionExpr(
     const RowTypePtr& inputType,
     const std::unordered_map<
         std::string,
-        std::shared_ptr<connector::ColumnHandle>>& columnHandles) {
+        std::shared_ptr<connector::ConnectorColumnHandle>>& columnHandles) {
   if (joinConditions.empty()) {
     return nullptr;
   }
@@ -463,7 +463,7 @@ std::shared_ptr<connector::IndexSource> TestIndexConnector::createIndexSource(
     const std::shared_ptr<connector::ConnectorTableHandle>& tableHandle,
     const std::unordered_map<
         std::string,
-        std::shared_ptr<connector::ColumnHandle>>& columnHandles,
+        std::shared_ptr<connector::ConnectorColumnHandle>>& columnHandles,
     connector::ConnectorQueryCtx* connectorQueryCtx) {
   VELOX_CHECK_GE(inputType->size(), numJoinKeys + joinConditions.size());
   auto testIndexTableHandle =

@@ -186,11 +186,12 @@ TEST_F(PlanNodeBuilderTest, TableScanNode) {
   const RowTypePtr outputType = ROW({"c0", "c1"}, {INTEGER(), VARCHAR()});
   const auto tableHandle =
       std::make_shared<connector::ConnectorTableHandle>("connector_id");
-  const std::
-      unordered_map<std::string, std::shared_ptr<connector::ColumnHandle>>
-          assignments{
-              {"c0", std::make_shared<connector::ColumnHandle>()},
-              {"c1", std::make_shared<connector::ColumnHandle>()}};
+  const std::unordered_map<
+      std::string,
+      std::shared_ptr<connector::ConnectorColumnHandle>>
+      assignments{
+          {"c0", std::make_shared<connector::ConnectorColumnHandle>()},
+          {"c1", std::make_shared<connector::ConnectorColumnHandle>()}};
 
   const auto verify = [&](const std::shared_ptr<const TableScanNode>& node) {
     EXPECT_EQ(node->id(), id);
@@ -688,7 +689,8 @@ TEST_F(PlanNodeBuilderTest, IndexLookupJoinNode) {
           .outputType(ROW({"c1"}, {VARCHAR()}))
           .tableHandle(std::make_shared<TestConnectorTableHandleForLookupJoin>(
               "connector_id"))
-          .assignments({{"c1", std::make_shared<connector::ColumnHandle>()}})
+          .assignments(
+              {{"c1", std::make_shared<connector::ConnectorColumnHandle>()}})
           .build();
   const auto outputType = ROW({"c0"}, {BIGINT()});
 

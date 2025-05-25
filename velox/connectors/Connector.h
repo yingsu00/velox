@@ -88,9 +88,9 @@ struct ConnectorSplit : public ISerializable {
   }
 };
 
-class ColumnHandle : public ISerializable {
+class ConnectorColumnHandle : public ISerializable {
  public:
-  virtual ~ColumnHandle() = default;
+  virtual ~ConnectorColumnHandle() = default;
 
   virtual const std::string& name() const {
     VELOX_UNSUPPORTED();
@@ -102,7 +102,7 @@ class ColumnHandle : public ISerializable {
   static folly::dynamic serializeBase(std::string_view name);
 };
 
-using ColumnHandlePtr = std::shared_ptr<const ColumnHandle>;
+using ConnectorColumnHandlePtr = std::shared_ptr<const ConnectorColumnHandle>;
 
 class ConnectorTableHandle : public ISerializable {
  public:
@@ -555,7 +555,7 @@ class Connector {
       const std::shared_ptr<ConnectorTableHandle>& tableHandle,
       const std::unordered_map<
           std::string,
-          std::shared_ptr<connector::ColumnHandle>>& columnHandles,
+          std::shared_ptr<connector::ConnectorColumnHandle>>& columnHandles,
       ConnectorQueryCtx* connectorQueryCtx) = 0;
 
   /// Returns true if addSplit of DataSource can use 'dataSource' from
@@ -616,7 +616,7 @@ class Connector {
       const std::shared_ptr<ConnectorTableHandle>& tableHandle,
       const std::unordered_map<
           std::string,
-          std::shared_ptr<connector::ColumnHandle>>& columnHandles,
+          std::shared_ptr<connector::ConnectorColumnHandle>>& columnHandles,
       ConnectorQueryCtx* connectorQueryCtx) {
     VELOX_UNSUPPORTED(
         "Connector {} does not support index source", connectorId());

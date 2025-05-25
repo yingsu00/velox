@@ -285,7 +285,7 @@ IndexLookupJoinTestBase::makeIndexScanNode(
     const facebook::velox::RowTypePtr& outputType,
     std::unordered_map<
         std::string,
-        std::shared_ptr<facebook::velox::connector::ColumnHandle>>&
+        std::shared_ptr<facebook::velox::connector::ConnectorColumnHandle>>&
         assignments) {
   auto planBuilder = facebook::velox::exec::test::PlanBuilder(
       planNodeIdGenerator, pool_.get());

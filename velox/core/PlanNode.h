@@ -880,7 +880,7 @@ class TableScanNode : public PlanNode {
       const std::shared_ptr<connector::ConnectorTableHandle>& tableHandle,
       const std::unordered_map<
           std::string,
-          std::shared_ptr<connector::ColumnHandle>>& assignments)
+          std::shared_ptr<connector::ConnectorColumnHandle>>& assignments)
       : PlanNode(id),
         outputType_(std::move(outputType)),
         tableHandle_(tableHandle),
@@ -916,7 +916,7 @@ class TableScanNode : public PlanNode {
     Builder& assignments(
         std::unordered_map<
             std::string,
-            std::shared_ptr<connector::ColumnHandle>> assignments) {
+            std::shared_ptr<connector::ConnectorColumnHandle>> assignments) {
       assignments_ = std::move(assignments);
       return *this;
     }
@@ -944,7 +944,7 @@ class TableScanNode : public PlanNode {
         tableHandle_;
     std::optional<std::unordered_map<
         std::string,
-        std::shared_ptr<connector::ColumnHandle>>>
+        std::shared_ptr<connector::ConnectorColumnHandle>>>
         assignments_;
   };
 
@@ -969,9 +969,10 @@ class TableScanNode : public PlanNode {
     return tableHandle_;
   }
 
-  const std::
-      unordered_map<std::string, std::shared_ptr<connector::ColumnHandle>>&
-      assignments() const {
+  const std::unordered_map<
+      std::string,
+      std::shared_ptr<connector::ConnectorColumnHandle>>&
+  assignments() const {
     return assignments_;
   }
 
@@ -988,9 +989,10 @@ class TableScanNode : public PlanNode {
 
   const RowTypePtr outputType_;
   const std::shared_ptr<connector::ConnectorTableHandle> tableHandle_;
-  const std::
-      unordered_map<std::string, std::shared_ptr<connector::ColumnHandle>>
-          assignments_;
+  const std::unordered_map<
+      std::string,
+      std::shared_ptr<connector::ConnectorColumnHandle>>
+      assignments_;
 };
 
 using TableScanNodePtr = std::shared_ptr<const TableScanNode>;

@@ -28,8 +28,9 @@ namespace facebook::velox::exec::test {
 
 static const std::string kHiveConnectorId = "test-hive";
 
-using ColumnHandleMap =
-    std::unordered_map<std::string, std::shared_ptr<connector::ColumnHandle>>;
+using ConnectorColumnHandleMap = std::unordered_map<
+    std::string,
+    std::shared_ptr<connector::ConnectorColumnHandle>>;
 
 class HiveConnectorTestBase : public OperatorTestBase {
  public:
@@ -193,8 +194,8 @@ class HiveConnectorTestBase : public OperatorTestBase {
       const std::string& name,
       const TypePtr& type);
 
-  static ColumnHandleMap allRegularColumns(const RowTypePtr& rowType) {
-    ColumnHandleMap assignments;
+  static ConnectorColumnHandleMap allRegularColumns(const RowTypePtr& rowType) {
+    ConnectorColumnHandleMap assignments;
     assignments.reserve(rowType->size());
     for (uint32_t i = 0; i < rowType->size(); ++i) {
       const auto& name = rowType->nameOf(i);

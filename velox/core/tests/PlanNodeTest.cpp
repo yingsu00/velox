@@ -46,7 +46,9 @@ TEST_F(PlanNodeTest, findFirstNode) {
   auto rowType = ROW({"name1"}, {BIGINT()});
 
   std::shared_ptr<connector::ConnectorTableHandle> tableHandle;
-  std::unordered_map<std::string, std::shared_ptr<connector::ColumnHandle>>
+  std::unordered_map<
+      std::string,
+      std::shared_ptr<connector::ConnectorColumnHandle>>
       assignments;
 
   std::shared_ptr<PlanNode> tableScan3 =
@@ -179,7 +181,7 @@ TEST_F(PlanNodeTest, isIndexLookupJoin) {
       nullptr,
       std::unordered_map<
           std::string,
-          std::shared_ptr<connector::ColumnHandle>>{});
+          std::shared_ptr<connector::ConnectorColumnHandle>>{});
   ASSERT_FALSE(isIndexLookupJoin(probeNode.get()));
   const auto buildNode = std::make_shared<TableScanNode>(
       "tableScan-build",
@@ -187,7 +189,7 @@ TEST_F(PlanNodeTest, isIndexLookupJoin) {
       indexTableHandle,
       std::unordered_map<
           std::string,
-          std::shared_ptr<connector::ColumnHandle>>{});
+          std::shared_ptr<connector::ConnectorColumnHandle>>{});
   ASSERT_FALSE(isIndexLookupJoin(buildNode.get()));
   const std::vector<FieldAccessTypedExprPtr> leftKeys{
       std::make_shared<FieldAccessTypedExpr>(BIGINT(), "c0")};

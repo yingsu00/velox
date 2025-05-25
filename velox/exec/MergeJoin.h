@@ -443,7 +443,7 @@ class MergeJoin : public Operator {
     }
 
     void reset();
-    
+
     bool isRightJoinForFullOuter(vector_size_t row) {
       return rawRightJoinRows_[row];
     }

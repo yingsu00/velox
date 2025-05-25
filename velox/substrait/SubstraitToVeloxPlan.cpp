@@ -430,7 +430,9 @@ core::PlanNodePtr SubstraitVeloxPlanConverter::toVeloxPlan(
   // Get assignments and out names.
   std::vector<std::string> outNames;
   outNames.reserve(colNameList.size());
-  std::unordered_map<std::string, std::shared_ptr<connector::ColumnHandle>>
+  std::unordered_map<
+      std::string,
+      std::shared_ptr<connector::ConnectorColumnHandle>>
       assignments;
   for (int idx = 0; idx < colNameList.size(); idx++) {
     auto outName = substraitParser_->makeNodeName(planNodeId_, idx);

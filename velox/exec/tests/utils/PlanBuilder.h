@@ -130,7 +130,7 @@ class PlanBuilder {
   /// types (for all columns) in this argument as opposed to 'outputType', where
   /// you define the output types only. See 'missingColumns' test in
   /// 'TableScanTest'.
-  /// @param assignments Optional ColumnHandles.
+  /// @param assignments Optional ConnectorColumnHandles.
   PlanBuilder& tableScan(
       const RowTypePtr& outputType,
       const std::vector<std::string>& subfieldFilters = {},
@@ -138,7 +138,7 @@ class PlanBuilder {
       const RowTypePtr& dataColumns = nullptr,
       const std::unordered_map<
           std::string,
-          std::shared_ptr<connector::ColumnHandle>>& assignments = {});
+          std::shared_ptr<connector::ConnectorColumnHandle>>& assignments = {});
 
   /// Add a TableScanNode to scan a Hive table.
   ///
@@ -170,7 +170,7 @@ class PlanBuilder {
       const RowTypePtr& dataColumns = nullptr,
       const std::unordered_map<
           std::string,
-          std::shared_ptr<connector::ColumnHandle>>& assignments = {});
+          std::shared_ptr<connector::ConnectorColumnHandle>>& assignments = {});
 
   /// Add a TableScanNode to scan a TPC-H table.
   ///
@@ -277,14 +277,14 @@ class PlanBuilder {
       return *this;
     }
 
-    /// @param assignments Optional ColumnHandles.
+    /// @param assignments Optional ConnectorColumnHandles.
     /// outputType names should match the keys in the 'assignments' map. The
     /// 'assignments' map may contain more columns than 'outputType' if some
     /// columns are only used by pushed-down filters.
     TableScanBuilder& assignments(
         std::unordered_map<
             std::string,
-            std::shared_ptr<connector::ColumnHandle>> assignments) {
+            std::shared_ptr<connector::ConnectorColumnHandle>> assignments) {
       assignments_ = std::move(assignments);
       return *this;
     }
@@ -308,7 +308,9 @@ class PlanBuilder {
     RowTypePtr dataColumns_;
     std::unordered_map<std::string, std::string> columnAliases_;
     std::shared_ptr<connector::ConnectorTableHandle> tableHandle_;
-    std::unordered_map<std::string, std::shared_ptr<connector::ColumnHandle>>
+    std::unordered_map<
+        std::string,
+        std::shared_ptr<connector::ConnectorColumnHandle>>
         assignments_;
 
     // produce filters as a FilterNode instead of pushdown.

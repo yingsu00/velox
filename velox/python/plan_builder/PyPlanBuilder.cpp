@@ -138,7 +138,9 @@ PyPlanBuilder& PyPlanBuilder::tableScan(
   // If there are subfields, create the appropriate structures and add to the
   // scan.
   if (!subfields.empty() || !rowIndexColumnName.empty()) {
-    std::unordered_map<std::string, std::shared_ptr<connector::ColumnHandle>>
+    std::unordered_map<
+        std::string,
+        std::shared_ptr<connector::ConnectorColumnHandle>>
         assignments;
 
     for (size_t i = 0; i < outputRowSchema->size(); ++i) {

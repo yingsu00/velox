@@ -415,8 +415,8 @@ bool CompanionFunctionsRegistrar::registerMergeExtractFunction(
   bool registered = false;
   if (CompanionSignatures::hasSameIntermediateTypesAcrossSignatures(
           signatures)) {
-    registered |=
-        registerMergeExtractFunctionWithSuffix(name, signatures, metadata, overwrite);
+    registered |= registerMergeExtractFunctionWithSuffix(
+        name, signatures, metadata, overwrite);
   }
 
   auto mergeExtractSignatures =

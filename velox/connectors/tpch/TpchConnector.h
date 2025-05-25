@@ -26,7 +26,7 @@ class TpchConnector;
 
 // TPC-H column handle only needs the column name (all columns are generated in
 // the same way).
-class TpchColumnHandle : public ColumnHandle {
+class TpchColumnHandle : public ConnectorColumnHandle {
  public:
   explicit TpchColumnHandle(const std::string& name) : name_(name) {}
 
@@ -75,7 +75,7 @@ class TpchDataSource : public DataSource {
       const std::shared_ptr<connector::ConnectorTableHandle>& tableHandle,
       const std::unordered_map<
           std::string,
-          std::shared_ptr<connector::ColumnHandle>>& columnHandles,
+          std::shared_ptr<connector::ConnectorColumnHandle>>& columnHandles,
       velox::memory::MemoryPool* pool);
 
   void addSplit(std::shared_ptr<ConnectorSplit> split) override;
@@ -142,7 +142,7 @@ class TpchConnector final : public Connector {
       const std::shared_ptr<ConnectorTableHandle>& tableHandle,
       const std::unordered_map<
           std::string,
-          std::shared_ptr<connector::ColumnHandle>>& columnHandles,
+          std::shared_ptr<connector::ConnectorColumnHandle>>& columnHandles,
       ConnectorQueryCtx* connectorQueryCtx) override final {
     return std::make_unique<TpchDataSource>(
         outputType,
