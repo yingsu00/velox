@@ -15,8 +15,8 @@
  */
 #include "velox/exec/IndexLookupJoin.h"
 
+#include "velox/connectors/common/Connector.h"
 #include "velox/buffer/Buffer.h"
-#include "velox/connectors/Connector.h"
 #include "velox/exec/Task.h"
 #include "velox/expression/Expr.h"
 #include "velox/expression/FieldReference.h"
@@ -158,7 +158,7 @@ IndexLookupJoin::IndexLookupJoin(
               operatorType(),
               lookupTableHandle_->connectorId()),
           spillConfig_.has_value() ? &(spillConfig_.value()) : nullptr)},
-      connector_(connector::getConnector(lookupTableHandle_->connectorId())),
+      connector_(connector::common::getConnector(lookupTableHandle_->connectorId())),
       maxNumInputBatches_(
           1 + driverCtx->queryConfig().indexLookupJoinMaxPrefetchBatches()),
       joinNode_{joinNode} {
@@ -474,7 +474,7 @@ void IndexLookupJoin::startLookup(InputBatchState& batch) {
   VELOX_CHECK(!batch.lookupFuture.valid());
 
   batch.lookupResultIter = indexSource_->lookup(
-      connector::IndexSource::LookupRequest{batch.lookupInput});
+      connector::common::IndexSource::LookupRequest{batch.lookupInput});
   auto lookupResultOr =
       batch.lookupResultIter->next(outputBatchSize_, batch.lookupFuture);
   if (!lookupResultOr.has_value()) {

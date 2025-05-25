@@ -126,8 +126,8 @@ class TestFormatReader {
       const TypePtr& requestedType,
       const std::shared_ptr<const dwio::common::TypeWithId>& fileType,
       TestFormatParams& params,
-      common::ScanSpec& scanSpec,
-      std::vector<std::unique_ptr<common::Subfield::PathElement>>& path,
+      velox::common::ScanSpec& scanSpec,
+      std::vector<std::unique_ptr<velox::common::Subfield::PathElement>>& path,
       const DefinesMap& defines,
       bool isRoot = false);
 };

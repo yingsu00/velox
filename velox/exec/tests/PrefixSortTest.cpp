@@ -63,7 +63,7 @@ class PrefixSortTest : public exec::test::OperatorTestBase {
     const auto maxBytes = PrefixSort::maxRequiredBytes(
         &rowContainer,
         compareFlags,
-        common::PrefixSortConfig{
+        velox::common::PrefixSortConfig{
             1024,
             // Set threshold to 0 to enable prefix-sort in small dataset.
             0,
@@ -75,7 +75,7 @@ class PrefixSortTest : public exec::test::OperatorTestBase {
     PrefixSort::sort(
         &rowContainer,
         compareFlags,
-        common::PrefixSortConfig{
+        velox::common::PrefixSortConfig{
             1024,
             // Set threshold to 0 to enable prefix-sort in small dataset.
             0,

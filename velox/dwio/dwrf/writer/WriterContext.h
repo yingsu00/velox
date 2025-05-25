@@ -103,7 +103,7 @@ class WriterContext : public CompressionBufferPool {
   }
 
   std::unique_ptr<BufferedOutputStream> newStream(
-      common::CompressionKind kind,
+      velox::common::CompressionKind kind,
       DataBufferHolder& holder,
       const dwio::common::encryption::Encrypter* encrypter = nullptr) {
     return createCompressor(kind, *this, holder, *config_, encrypter);
@@ -151,7 +151,7 @@ class WriterContext : public CompressionBufferPool {
   }
 
   bool isStreamPaged(uint32_t nodeId) const {
-    return (compression_ != common::CompressionKind::CompressionKind_NONE) ||
+    return (compression_ != velox::common::CompressionKind::CompressionKind_NONE) ||
         handler_->isEncrypted(nodeId);
   }
 
@@ -386,7 +386,7 @@ class WriterContext : public CompressionBufferPool {
     return indexStride_;
   }
 
-  common::CompressionKind compression() const {
+  velox::common::CompressionKind compression() const {
     return compression_;
   }
 
@@ -629,7 +629,7 @@ class WriterContext : public CompressionBufferPool {
   // config
   const bool indexEnabled_;
   const uint32_t indexStride_;
-  const common::CompressionKind compression_;
+  const velox::common::CompressionKind compression_;
   const uint64_t compressionBlockSize_;
   const bool shareFlatMapDictionaries_;
   const uint64_t stripeSizeFlushThreshold_;

@@ -18,7 +18,7 @@
 #include <folly/Executor.h>
 #include <folly/container/F14Map.h>
 
-#include "velox/connectors/Connector.h"
+#include "velox/connectors/common/Connector.h"
 #include "velox/connectors/hive/FileHandle.h"
 #include "velox/dwio/common/BufferedInput.h"
 #include "velox/dwio/common/Reader.h"
@@ -30,12 +30,12 @@ class HiveTableHandle;
 class HiveConfig;
 struct HiveConnectorSplit;
 
-const std::string& getColumnName(const common::Subfield& subfield);
+const std::string& getColumnName(const velox::common::Subfield& subfield);
 
 void checkColumnNameLowerCase(const std::shared_ptr<const Type>& type);
 
 void checkColumnNameLowerCase(
-    const common::SubfieldFilters& filters,
+    const velox::common::SubfieldFilters& filters,
     const std::unordered_map<std::string, std::shared_ptr<HiveColumnHandle>>&
         infoColumns);
 
@@ -46,11 +46,11 @@ struct SpecialColumnNames {
   std::optional<std::string> rowId;
 };
 
-std::shared_ptr<common::ScanSpec> makeScanSpec(
+std::shared_ptr<velox::common::ScanSpec> makeScanSpec(
     const RowTypePtr& rowType,
-    const folly::F14FastMap<std::string, std::vector<const common::Subfield*>>&
+    const folly::F14FastMap<std::string, std::vector<const velox::common::Subfield*>>&
         outputSubfields,
-    const common::SubfieldFilters& filters,
+    const velox::common::SubfieldFilters& filters,
     const RowTypePtr& dataColumns,
     const std::unordered_map<std::string, std::shared_ptr<HiveColumnHandle>>&
         partitionKeys,
@@ -62,14 +62,14 @@ std::shared_ptr<common::ScanSpec> makeScanSpec(
 
 void configureReaderOptions(
     const std::shared_ptr<const HiveConfig>& config,
-    const ConnectorQueryCtx* connectorQueryCtx,
+    const connector::common::ConnectorQueryCtx* connectorQueryCtx,
     const std::shared_ptr<const HiveTableHandle>& hiveTableHandle,
     const std::shared_ptr<const HiveConnectorSplit>& hiveSplit,
     dwio::common::ReaderOptions& readerOptions);
 
 void configureReaderOptions(
     const std::shared_ptr<const HiveConfig>& hiveConfig,
-    const ConnectorQueryCtx* connectorQueryCtx,
+    const connector::common::ConnectorQueryCtx* connectorQueryCtx,
     const RowTypePtr& fileSchema,
     const std::shared_ptr<const HiveConnectorSplit>& hiveSplit,
     const std::unordered_map<std::string, std::string>& tableParameters,
@@ -77,8 +77,8 @@ void configureReaderOptions(
 
 void configureRowReaderOptions(
     const std::unordered_map<std::string, std::string>& tableParameters,
-    const std::shared_ptr<common::ScanSpec>& scanSpec,
-    std::shared_ptr<common::MetadataFilter> metadataFilter,
+    const std::shared_ptr<velox::common::ScanSpec>& scanSpec,
+    std::shared_ptr<velox::common::MetadataFilter> metadataFilter,
     const RowTypePtr& rowType,
     const std::shared_ptr<const HiveConnectorSplit>& hiveSplit,
     const std::shared_ptr<const HiveConfig>& hiveConfig,
@@ -86,7 +86,7 @@ void configureRowReaderOptions(
     dwio::common::RowReaderOptions& rowReaderOptions);
 
 bool testFilters(
-    const common::ScanSpec* scanSpec,
+    const velox::common::ScanSpec* scanSpec,
     const dwio::common::Reader* reader,
     const std::string& filePath,
     const std::unordered_map<std::string, std::optional<std::string>>&
@@ -98,7 +98,7 @@ bool testFilters(
 std::unique_ptr<dwio::common::BufferedInput> createBufferedInput(
     const FileHandle& fileHandle,
     const dwio::common::ReaderOptions& readerOpts,
-    const ConnectorQueryCtx* connectorQueryCtx,
+    const connector::common::ConnectorQueryCtx* connectorQueryCtx,
     std::shared_ptr<io::IoStatistics> ioStats,
     std::shared_ptr<filesystems::File::IoStats> fsStats,
     folly::Executor* executor);
@@ -107,7 +107,7 @@ core::TypedExprPtr extractFiltersFromRemainingFilter(
     const core::TypedExprPtr& expr,
     core::ExpressionEvaluator* evaluator,
     bool negated,
-    common::SubfieldFilters& filters,
+    velox::common::SubfieldFilters& filters,
     double& sampleRate);
 
 } // namespace facebook::velox::connector::hive

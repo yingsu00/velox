@@ -36,12 +36,12 @@ template <typename T, bool HllAsFinalResult>
 inline uint64_t hashOne(T value) {
   if constexpr (HllAsFinalResult) {
     if constexpr (std::is_same_v<T, int64_t>) {
-      return common::hll::Murmur3Hash128::hash64ForLong(value, 0);
+      return velox::common::hll::Murmur3Hash128::hash64ForLong(value, 0);
     } else if constexpr (std::is_same_v<T, double>) {
-      return common::hll::Murmur3Hash128::hash64ForLong(
+      return velox::common::hll::Murmur3Hash128::hash64ForLong(
           *reinterpret_cast<int64_t*>(&value), 0);
     }
-    return common::hll::Murmur3Hash128::hash64(&value, sizeof(T), 0);
+    return velox::common::hll::Murmur3Hash128::hash64(&value, sizeof(T), 0);
   } else {
     return XXH64(&value, sizeof(T), 0);
   }
@@ -65,7 +65,7 @@ inline uint64_t hashOne<StringView, false>(StringView value) {
 
 template <>
 inline uint64_t hashOne<StringView, true>(StringView value) {
-  return common::hll::Murmur3Hash128::hash64(value.data(), value.size(), 0);
+  return velox::common::hll::Murmur3Hash128::hash64(value.data(), value.size(), 0);
 }
 
 template <typename T, bool HllAsFinalResult>
@@ -473,11 +473,11 @@ class HyperLogLogAggregate : public exec::Aggregate {
   }
 
   void checkSetMaxStandardError(double error) {
-    common::hll::checkMaxStandardError(error);
+    velox::common::hll::checkMaxStandardError(error);
 
     if (maxStandardError_ < 0) {
       maxStandardError_ = error;
-      indexBitLength_ = common::hll::toIndexBitLength(error);
+      indexBitLength_ = velox::common::hll::toIndexBitLength(error);
     } else {
       VELOX_USER_CHECK_EQ(
           error,

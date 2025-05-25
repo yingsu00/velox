@@ -177,7 +177,7 @@ std::pair<std::vector<T>, bool> toValues(
 // no values or only null values. The boolean is true if the list is
 // non-empty and consists of nulls only.
 template <typename T>
-std::pair<std::unique_ptr<common::Filter>, bool> createBigintValuesFilter(
+std::pair<std::unique_ptr<velox::common::Filter>, bool> createBigintValuesFilter(
     const VectorPtr& valuesVector,
     vector_size_t offset,
     vector_size_t size) {
@@ -199,13 +199,13 @@ std::pair<std::unique_ptr<common::Filter>, bool> createBigintValuesFilter(
         false};
   }
 
-  return {common::createBigintValues(values, nullAllowed), false};
+  return {velox::common::createBigintValues(values, nullAllowed), false};
 }
 
 // For double, cast double to Int64 and reuse Int64 filters
 // For float, cast float to Int32 and promote to Int64
 template <typename T>
-std::pair<std::unique_ptr<common::Filter>, bool>
+std::pair<std::unique_ptr<velox::common::Filter>, bool>
 createFloatingPointValuesFilter(
     const VectorPtr& valuesVector,
     vector_size_t offset,
@@ -243,12 +243,12 @@ createFloatingPointValuesFilter(
       intValues[i] = reinterpret_cast<const int64_t&>(values[i]);
     }
   }
-  return {common::createBigintValues(intValues, nullAllowed), false};
+  return {velox::common::createBigintValues(intValues, nullAllowed), false};
 }
 
 // See createBigintValuesFilter.
 template <typename T>
-std::pair<std::unique_ptr<common::Filter>, bool> createHugeintValuesFilter(
+std::pair<std::unique_ptr<velox::common::Filter>, bool> createHugeintValuesFilter(
     const VectorPtr& valuesVector,
     vector_size_t offset,
     vector_size_t size) {
@@ -274,7 +274,7 @@ std::pair<std::unique_ptr<common::Filter>, bool> createHugeintValuesFilter(
 }
 
 // See createBigintValuesFilter.
-std::pair<std::unique_ptr<common::Filter>, bool> createBytesValuesFilter(
+std::pair<std::unique_ptr<velox::common::Filter>, bool> createBytesValuesFilter(
     const VectorPtr& valuesVector,
     vector_size_t offset,
     vector_size_t size) {
@@ -297,14 +297,14 @@ std::pair<std::unique_ptr<common::Filter>, bool> createBytesValuesFilter(
         false};
   }
 
-  return {std::make_unique<common::BytesValues>(values, nullAllowed), false};
+  return {std::make_unique<velox::common::BytesValues>(values, nullAllowed), false};
 }
 
 /// x IN (2, null) returns null when x != 2 and true when x == 2.
 /// Null for x always produces null, regardless of 'IN' list.
 class InPredicate : public exec::VectorFunction {
  public:
-  explicit InPredicate(std::unique_ptr<common::Filter> filter, bool alwaysNull)
+  explicit InPredicate(std::unique_ptr<velox::common::Filter> filter, bool alwaysNull)
       : filter_{std::move(filter)}, alwaysNull_(alwaysNull) {}
 
   static std::shared_ptr<exec::VectorFunction> create(
@@ -349,7 +349,7 @@ class InPredicate : public exec::VectorFunction {
       return VectorSetInPredicate::create(elements, offset, size);
     }
 
-    std::pair<std::unique_ptr<common::Filter>, bool> filter;
+    std::pair<std::unique_ptr<velox::common::Filter>, bool> filter;
 
     switch (elementType->kind()) {
       case TypeKind::HUGEINT:
@@ -588,7 +588,7 @@ class InPredicate : public exec::VectorFunction {
     }
   }
 
-  const std::unique_ptr<common::Filter> filter_;
+  const std::unique_ptr<velox::common::Filter> filter_;
   const bool alwaysNull_;
 };
 } // namespace

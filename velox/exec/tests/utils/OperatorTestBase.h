@@ -99,7 +99,7 @@ class OperatorTestBase : public virtual testing::Test,
   /// Assumes plan has a single leaf node. All splits are added to that node.
   std::shared_ptr<Task> assertQueryOrdered(
       const core::PlanNodePtr& plan,
-      const std::vector<std::shared_ptr<connector::ConnectorSplit>>& splits,
+      const std::vector<std::shared_ptr<connector::common::ConnectorSplit>>& splits,
       const std::string& duckDbSql,
       const std::vector<uint32_t>& sortingKeys) {
     return assertQuery(plan, splits, duckDbSql, sortingKeys);
@@ -136,7 +136,7 @@ class OperatorTestBase : public virtual testing::Test,
   /// Assumes plan has a single leaf node. All splits are added to that node.
   std::shared_ptr<Task> assertQuery(
       const core::PlanNodePtr& plan,
-      const std::vector<std::shared_ptr<connector::ConnectorSplit>>&
+      const std::vector<std::shared_ptr<connector::common::ConnectorSplit>>&
           connectorSplits,
       const std::string& duckDbSql,
       std::optional<std::vector<uint32_t>> sortingKeys = std::nullopt);
@@ -167,6 +167,8 @@ class OperatorTestBase : public virtual testing::Test,
       const std::string& text,
       RowTypePtr rowType,
       const parse::ParseOptions& options = {});
+
+
 
   void writeToFiles(
       const std::vector<std::string>& filePaths,

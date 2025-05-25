@@ -126,7 +126,7 @@ Split makeSplit(
   return Split{makeConnectorSplit(filePath, partitionKeys, tableBucketNumber)};
 }
 
-std::shared_ptr<connector::ConnectorSplit> makeConnectorSplit(
+std::shared_ptr<connector::common::ConnectorSplit> makeConnectorSplit(
     const std::string& filePath,
     const std::unordered_map<std::string, std::optional<std::string>>&
         partitionKeys,
@@ -368,16 +368,16 @@ void registerHiveConnector(
   auto configs = hiveConfigs;
   if (!connector::hasConnectorFactory(
           connector::hive::HiveConnectorFactory::kHiveConnectorName)) {
-    connector::registerConnectorFactory(
+    connector::common::registerConnectorFactory(
         std::make_shared<connector::hive::HiveConnectorFactory>());
   }
   auto hiveConnector =
-      connector::getConnectorFactory(
+      connector::common::getConnectorFactory(
           connector::hive::HiveConnectorFactory::kHiveConnectorName)
           ->newConnector(
               kHiveConnectorId,
               std::make_shared<config::ConfigBase>(std::move(configs)));
-  connector::registerConnector(hiveConnector);
+  connector::common::registerConnector(hiveConnector);
 }
 
 std::unique_ptr<ReferenceQueryRunner> setupReferenceQueryRunner(

@@ -457,7 +457,7 @@ class SpillPartition {
   std::unique_ptr<UnorderedStreamReader<BatchStream>> createUnorderedReader(
       uint64_t bufferSize,
       memory::MemoryPool* pool,
-      folly::Synchronized<common::SpillStats>* spillStats);
+      folly::Synchronized<velox::common::SpillStats>* spillStats);
 
   /// Invoked to create an ordered stream reader from this spill partition.
   /// The created reader will take the ownership of the spill files.
@@ -468,7 +468,7 @@ class SpillPartition {
   std::unique_ptr<TreeOfLosers<SpillMergeStream>> createOrderedReader(
       uint64_t bufferSize,
       memory::MemoryPool* pool,
-      folly::Synchronized<common::SpillStats>* spillStats);
+      folly::Synchronized<velox::common::SpillStats>* spillStats);
 
   std::string toString() const;
 
@@ -531,16 +531,16 @@ class SpillState {
   /// target size of a single file.  'pool' owns the memory for state and
   /// results.
   SpillState(
-      const common::GetSpillDirectoryPathCB& getSpillDirectoryPath,
-      const common::UpdateAndCheckSpillLimitCB& updateAndCheckSpillLimitCb,
+      const velox::common::GetSpillDirectoryPathCB& getSpillDirectoryPath,
+      const velox::common::UpdateAndCheckSpillLimitCB& updateAndCheckSpillLimitCb,
       const std::string& fileNamePrefix,
       const std::vector<SpillSortKey>& sortingKeys,
       uint64_t targetFileSize,
       uint64_t writeBufferSize,
-      common::CompressionKind compressionKind,
+      velox::common::CompressionKind compressionKind,
       const std::optional<common::PrefixSortConfig>& prefixSortConfig,
       memory::MemoryPool* pool,
-      folly::Synchronized<common::SpillStats>* stats,
+      folly::Synchronized<velox::common::SpillStats>* stats,
       const std::string& fileCreateConfig = {});
 
   static std::vector<SpillSortKey> makeSortingKeys(
@@ -562,7 +562,7 @@ class SpillState {
     return targetFileSize_;
   }
 
-  common::CompressionKind compressionKind() const {
+  velox::common::CompressionKind compressionKind() const {
     return compressionKind_;
   }
 
@@ -630,22 +630,22 @@ class SpillState {
 
   // A callback function that returns the spill directory path.
   // Implementations can use it to ensure the path exists before returning.
-  common::GetSpillDirectoryPathCB getSpillDirPathCb_;
+  velox::common::GetSpillDirectoryPathCB getSpillDirPathCb_;
 
   // Updates the aggregated spill bytes of this query, and throws if exceeds
   // the max spill bytes limit.
-  common::UpdateAndCheckSpillLimitCB updateAndCheckSpillLimitCb_;
+  velox::common::UpdateAndCheckSpillLimitCB updateAndCheckSpillLimitCb_;
 
   // Prefix for spill files.
   const std::string fileNamePrefix_;
   const std::vector<SpillSortKey> sortingKeys_;
   const uint64_t targetFileSize_;
   const uint64_t writeBufferSize_;
-  const common::CompressionKind compressionKind_;
+  const velox::common::CompressionKind compressionKind_;
   const std::optional<common::PrefixSortConfig> prefixSortConfig_;
   const std::string fileCreateConfig_;
   memory::MemoryPool* const pool_;
-  folly::Synchronized<common::SpillStats>* const stats_;
+  folly::Synchronized<velox::common::SpillStats>* const stats_;
 
   // A set of spilled partition ids.
   SpillPartitionIdSet spilledPartitionIdSet_;

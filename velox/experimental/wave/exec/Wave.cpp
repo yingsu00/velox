@@ -118,11 +118,11 @@ void OperatorStateMap::addIfNew(
 
 AbstractOperand* pathToOperand(
     const DefinesMap& map,
-    std::vector<std::unique_ptr<common::Subfield::PathElement>>& path) {
+    std::vector<std::unique_ptr<velox::common::Subfield::PathElement>>& path) {
   if (path.empty()) {
     return nullptr;
   }
-  common::Subfield field(std::move(path));
+  velox::common::Subfield field(std::move(path));
   const auto subfieldMap = threadSubfieldMap();
   auto it = threadSubfieldMap()->find(field.toString());
   if (it == subfieldMap->end()) {

@@ -54,7 +54,7 @@ class PrestoVectorSerde : public VectorSerde {
 
     PrestoOptions(
         bool _useLosslessTimestamp,
-        common::CompressionKind _compressionKind,
+        velox::common::CompressionKind _compressionKind,
         float _minCompressionRatio = 0.8,
         bool _nullsFirst = false,
         bool _preserveEncodings = false)

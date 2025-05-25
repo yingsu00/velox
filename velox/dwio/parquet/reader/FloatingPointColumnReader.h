@@ -34,7 +34,7 @@ class FloatingPointColumnReader
       const TypePtr& requestedType,
       std::shared_ptr<const dwio::common::TypeWithId> fileType,
       ParquetParams& params,
-      common::ScanSpec& scanSpec);
+      velox::common::ScanSpec& scanSpec);
 
   void seekToRowGroup(int64_t index) override {
     base::seekToRowGroup(index);
@@ -61,7 +61,7 @@ FloatingPointColumnReader<TData, TRequested>::FloatingPointColumnReader(
     const TypePtr& requestedType,
     std::shared_ptr<const dwio::common::TypeWithId> fileType,
     ParquetParams& params,
-    common::ScanSpec& scanSpec)
+    velox::common::ScanSpec& scanSpec)
     : dwio::common::SelectiveFloatingPointColumnReader<TData, TRequested>(
           requestedType,
           std::move(fileType),

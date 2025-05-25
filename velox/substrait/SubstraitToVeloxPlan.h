@@ -125,7 +125,7 @@ class SubstraitVeloxPlanConverter {
 
   /// Used to convert Substrait Filter into Velox SubfieldFilters which will
   /// be used in TableScan.
-  common::SubfieldFilters toVeloxFilter(
+  velox::common::SubfieldFilters toVeloxFilter(
       const std::vector<std::string>& inputNameList,
       const std::vector<TypePtr>& inputTypeList,
       const ::substrait::Expression& substraitFilter);

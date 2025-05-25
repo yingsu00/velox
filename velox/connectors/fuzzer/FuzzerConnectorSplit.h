@@ -15,13 +15,13 @@
  */
 #pragma once
 
-#include "velox/connectors/Connector.h"
+#include "../common/Connector.h"
 
 namespace facebook::velox::connector::fuzzer {
 
-struct FuzzerConnectorSplit : public connector::ConnectorSplit {
+struct FuzzerConnectorSplit : public connector::common::ConnectorSplit {
   explicit FuzzerConnectorSplit(const std::string& connectorId, size_t numRows)
-      : ConnectorSplit(connectorId), numRows(numRows) {}
+      : connector::common::ConnectorSplit(connectorId), numRows(numRows) {}
 
   // Row many rows to generate.
   size_t numRows;

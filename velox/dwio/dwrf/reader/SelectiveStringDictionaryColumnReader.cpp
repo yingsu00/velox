@@ -25,7 +25,7 @@ using namespace dwio::common;
 SelectiveStringDictionaryColumnReader::SelectiveStringDictionaryColumnReader(
     const std::shared_ptr<const TypeWithId>& fileType,
     DwrfParams& params,
-    common::ScanSpec& scanSpec)
+    velox::common::ScanSpec& scanSpec)
     : SelectiveColumnReader(fileType->type(), fileType, params, scanSpec),
       lastStrideIndex_(-1),
       provider_(params.stripeStreams().getStrideIndexProvider()),

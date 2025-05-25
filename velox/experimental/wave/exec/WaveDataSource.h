@@ -16,8 +16,8 @@
 
 #pragma once
 
+#include "../../../connectors/common/Connector.h"
 #include "velox/common/time/Timer.h"
-#include "velox/connectors/Connector.h"
 #include "velox/exec/Task.h"
 #include "velox/experimental/wave/exec/WaveOperator.h"
 #include "velox/expression/Expr.h"
@@ -26,7 +26,7 @@ namespace facebook::velox::wave {
 
 class WaveSplitReader;
 
-/// A delegate produced by a regular Velox connector::DataSource for reading its
+/// A delegate produced by a regular Velox connector::common::DataSource for reading its
 /// particular file format on GPU. Same methods, except that Wave schedule() and
 /// related are exposed instead of an iterator model.
 class WaveDataSource : public std::enable_shared_from_this<WaveDataSource> {
@@ -40,9 +40,9 @@ class WaveDataSource : public std::enable_shared_from_this<WaveDataSource> {
 
   virtual void addDynamicFilter(
       column_index_t outputChannel,
-      const std::shared_ptr<common::Filter>& filter) = 0;
+      const std::shared_ptr<velox::common::Filter>& filter) = 0;
 
-  virtual void addSplit(std::shared_ptr<connector::ConnectorSplit> split) = 0;
+  virtual void addSplit(std::shared_ptr<connector::common::ConnectorSplit> split) = 0;
 
   virtual int32_t canAdvance(WaveStream& stream) = 0;
 

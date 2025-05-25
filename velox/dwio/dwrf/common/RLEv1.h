@@ -48,35 +48,35 @@ class RleEncoderV1 : public IntEncoder<isSigned> {
   /// can support uint64_t overload.
   uint64_t add(
       const int64_t* data,
-      const common::Ranges& ranges,
+      const velox::common::Ranges& ranges,
       const uint64_t* nulls) override {
     return addImpl(data, ranges, nulls);
   }
 
   uint64_t add(
       const int32_t* data,
-      const common::Ranges& ranges,
+      const velox::common::Ranges& ranges,
       const uint64_t* nulls) override {
     return addImpl(data, ranges, nulls);
   }
 
   uint64_t add(
       const uint32_t* data,
-      const common::Ranges& ranges,
+      const velox::common::Ranges& ranges,
       const uint64_t* nulls) override {
     return addImpl(data, ranges, nulls);
   }
 
   uint64_t add(
       const int16_t* data,
-      const common::Ranges& ranges,
+      const velox::common::Ranges& ranges,
       const uint64_t* nulls) override {
     return addImpl(data, ranges, nulls);
   }
 
   uint64_t add(
       const uint16_t* data,
-      const common::Ranges& ranges,
+      const velox::common::Ranges& ranges,
       const uint64_t* nulls) override {
     return addImpl(data, ranges, nulls);
   }
@@ -155,7 +155,7 @@ class RleEncoderV1 : public IntEncoder<isSigned> {
 
   template <typename T>
   uint64_t
-  addImpl(const T* data, const common::Ranges& ranges, const uint64_t* nulls);
+  addImpl(const T* data, const velox::common::Ranges& ranges, const uint64_t* nulls);
 
   template <typename Integer>
   FOLLY_ALWAYS_INLINE bool isRunRepeating(const Integer& value) {
@@ -216,7 +216,7 @@ template <bool isSigned>
 template <typename T>
 uint64_t RleEncoderV1<isSigned>::addImpl(
     const T* data,
-    const common::Ranges& ranges,
+    const velox::common::Ranges& ranges,
     const uint64_t* nulls) {
   uint64_t count = 0;
   if (nulls) {
@@ -314,7 +314,7 @@ class RleDecoderV1 : public dwio::common::IntDecoder<isSigned> {
   template <bool hasNulls, typename Visitor>
   void fastPath(const uint64_t* nulls, Visitor& visitor) {
     constexpr bool hasFilter =
-        !std::is_same_v<typename Visitor::FilterType, common::AlwaysTrue>;
+        !std::is_same_v<typename Visitor::FilterType, velox::common::AlwaysTrue>;
     constexpr bool hasHook =
         !std::is_same_v<typename Visitor::HookType, dwio::common::NoHook>;
     auto rows = visitor.rows();

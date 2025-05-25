@@ -285,7 +285,7 @@ int main(int argc, char** argv) {
   memory::initializeMemoryManager(memory::MemoryManager::Options{});
 
   filesystems::registerLocalFileSystem();
-  connector::registerConnectorFactory(
+  connector::common::registerConnectorFactory(
       std::make_shared<connector::hive::HiveConnectorFactory>());
   exec::test::registerHiveConnector({});
   dwrf::registerDwrfWriterFactory();

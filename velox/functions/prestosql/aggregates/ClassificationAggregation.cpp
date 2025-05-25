@@ -115,7 +115,7 @@ class FixedDoubleHistogram {
   /// histogram.
   size_t serialize(char* output) const {
     VELOX_CHECK(output);
-    common::OutputByteStream stream(output);
+    velox::common::OutputByteStream stream(output);
     size_t bytesUsed = 0;
     stream.append(
         reinterpret_cast<const char*>(&kSerializationVersionHeader),
@@ -143,7 +143,7 @@ class FixedDoubleHistogram {
   /// Merges the current histogram with another histogram represented as a
   /// buffer.
   void mergeWith(const char* data, size_t expectedSize) {
-    auto input = common::InputByteStream(data);
+    auto input = velox::common::InputByteStream(data);
     deserialize(*this, input, expectedSize);
   }
 
@@ -162,7 +162,7 @@ class FixedDoubleHistogram {
   /// Deserializes the histogram from a buffer.
   static void deserialize(
       FixedDoubleHistogram& histogram,
-      common::InputByteStream& in,
+      velox::common::InputByteStream& in,
       size_t expectedSize) {
     if (FOLLY_UNLIKELY(expectedSize < minDeserializedBufferSize())) {
       VELOX_USER_FAIL(

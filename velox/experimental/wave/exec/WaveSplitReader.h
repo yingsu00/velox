@@ -31,14 +31,14 @@ namespace facebook::velox::wave {
 /// Parameters for a Wave Hive SplitReaderFactory.
 struct SplitReaderParams {
   std ::shared_ptr<connector::hive::HiveTableHandle> hiveTableHandle;
-  std::shared_ptr<common::ScanSpec> scanSpec;
+  std::shared_ptr<velox::common::ScanSpec> scanSpec;
   RowTypePtr readerOutputType;
   std::unordered_map<
       std::string,
       std::shared_ptr<connector::hive::HiveColumnHandle>>* partitionKeys;
   FileHandleFactory* fileHandleFactory;
   folly::Executor* executor;
-  const connector::ConnectorQueryCtx* connectorQueryCtx;
+  const connector::common::ConnectorQueryCtx* connectorQueryCtx;
   std::shared_ptr<connector::hive::HiveConfig> hiveConfig;
   std::shared_ptr<io::IoStatistics> ioStats;
 };
@@ -50,7 +50,7 @@ class WaveSplitReader {
   virtual ~WaveSplitReader() = default;
 
   static std::shared_ptr<WaveSplitReader> create(
-      const std::shared_ptr<velox::connector::ConnectorSplit>& split,
+      const std::shared_ptr<velox::connector::common::ConnectorSplit>& split,
       const SplitReaderParams& params,
       const DefinesMap* defines);
 
@@ -70,7 +70,7 @@ class WaveSplitReader {
 
   virtual void configureReaderOptions() {}
   virtual void prepareSplit(
-      std::shared_ptr<common::MetadataFilter> metadataFilter,
+      std::shared_ptr<velox::common::MetadataFilter> metadataFilter,
       dwio::common::RuntimeStatistics& runtimeStats) {}
 
   static void registerFactory(std::unique_ptr<WaveSplitReaderFactory> factory);
@@ -85,7 +85,7 @@ class WaveSplitReaderFactory {
   /// Returns a new split reader corresponding to 'split' if 'this' recognizes
   /// the split, otherwise returns nullptr.
   virtual std::shared_ptr<WaveSplitReader> create(
-      const std::shared_ptr<connector::ConnectorSplit>& split,
+      const std::shared_ptr<connector::common::ConnectorSplit>& split,
       const SplitReaderParams& params,
       const DefinesMap* defines) = 0;
 };

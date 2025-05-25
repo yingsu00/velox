@@ -14,14 +14,25 @@
  * limitations under the License.
  */
 
-#include "velox/connectors/Connector.h"
+#include "velox/connectors/common/Connector.h"
 
-namespace facebook::velox::connector {
+#include "velox/connectors/common/ConnectorObjectFactory.h"
+
+namespace facebook::velox::connector::common {
+
 namespace {
 std::unordered_map<std::string, std::shared_ptr<ConnectorFactory>>&
 connectorFactories() {
   static std::unordered_map<std::string, std::shared_ptr<ConnectorFactory>>
       factories;
+  return factories;
+}
+
+std::unordered_map<std::string, std::shared_ptr<ConnectorObjectFactory>>&
+connectorObjectFactories() {
+  static std::
+      unordered_map<std::string, std::shared_ptr<ConnectorObjectFactory>>
+          factories;
   return factories;
 }
 

@@ -151,7 +151,7 @@ class WriterFuzzer {
   // Generates table column handles based on table column properties
   std::unordered_map<
       std::string,
-      std::shared_ptr<connector::ConnectorColumnHandle>>
+      std::shared_ptr<connector::common::ConnectorColumnHandle>>
   getTableColumnHandles(
       const std::vector<std::string>& names,
       const std::vector<TypePtr>& types,
@@ -639,7 +639,7 @@ void WriterFuzzer::verifyWriter(
 
 std::unordered_map<
     std::string,
-    std::shared_ptr<connector::ConnectorColumnHandle>>
+    std::shared_ptr<connector::common::ConnectorColumnHandle>>
 WriterFuzzer::getTableColumnHandles(
     const std::vector<std::string>& names,
     const std::vector<TypePtr>& types,
@@ -647,7 +647,7 @@ WriterFuzzer::getTableColumnHandles(
     const int32_t bucketCount) {
   std::unordered_map<
       std::string,
-      std::shared_ptr<connector::ConnectorColumnHandle>>
+      std::shared_ptr<connector::common::ConnectorColumnHandle>>
       columnHandle;
   for (int i = 0; i < names.size(); ++i) {
     HiveColumnHandle::ColumnType columnType;

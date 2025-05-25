@@ -31,7 +31,7 @@ class MapUnionSumTest : public AggregationTestBase {};
 TEST_F(MapUnionSumTest, global) {
   auto data = makeRowVector({
       makeNullableMapVector<int64_t, int64_t>({
-          common::testutil::optionalEmpty, // empty map
+          velox::common::testutil::optionalEmpty, // empty map
           std::nullopt, // null map
           {{{1, 10}, {2, 20}}},
           {{{1, 11}, {3, 30}, {4, 40}}},
@@ -63,7 +63,7 @@ TEST_F(MapUnionSumTest, globalVarcharKey) {
 
   auto data = makeRowVector({
       makeNullableMapVector<StringView, int64_t>({
-          common::testutil::optionalEmpty, // empty map
+          velox::common::testutil::optionalEmpty, // empty map
           std::nullopt, // null map
           {{{keys[0], 10}, {keys[1], 20}}},
           {{{keys[0], 11}, {keys[2], 30}, {keys[3], 40}}},
@@ -120,9 +120,9 @@ TEST_F(MapUnionSumTest, nullAndEmptyMaps) {
   auto emptyAndNullMaps = makeRowVector({
       makeNullableMapVector<int64_t, int64_t>({
           std::nullopt,
-          common::testutil::optionalEmpty,
+          velox::common::testutil::optionalEmpty,
           std::nullopt,
-          common::testutil::optionalEmpty,
+          velox::common::testutil::optionalEmpty,
       }),
   });
 

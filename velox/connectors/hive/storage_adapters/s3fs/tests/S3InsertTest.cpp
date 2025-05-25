@@ -35,16 +35,16 @@ class S3InsertTest : public S3Test, public test::InsertTest {
   void SetUp() override {
     S3Test::SetUp();
     filesystems::registerS3FileSystem();
-    connector::registerConnectorFactory(
+    connector::common::registerConnectorFactory(
         std::make_shared<connector::hive::HiveConnectorFactory>());
     auto hiveConnector =
-        connector::getConnectorFactory(
+        connector::common::getConnectorFactory(
             connector::hive::HiveConnectorFactory::kHiveConnectorName)
             ->newConnector(
                 ::exec::test::kHiveConnectorId,
                 minioServer_->hiveConfig(),
                 ioExecutor_.get());
-    connector::registerConnector(hiveConnector);
+    connector::common::registerConnector(hiveConnector);
     parquet::registerParquetReaderFactory();
     parquet::registerParquetWriterFactory();
   }
@@ -52,9 +52,9 @@ class S3InsertTest : public S3Test, public test::InsertTest {
   void TearDown() override {
     parquet::unregisterParquetReaderFactory();
     parquet::unregisterParquetWriterFactory();
-    connector::unregisterConnectorFactory(
+    connector::common::unregisterConnectorFactory(
         connector::hive::HiveConnectorFactory::kHiveConnectorName);
-    connector::unregisterConnector(::exec::test::kHiveConnectorId);
+    connector::common::unregisterConnector(::exec::test::kHiveConnectorId);
     S3Test::TearDown();
     filesystems::finalizeS3FileSystem();
   }

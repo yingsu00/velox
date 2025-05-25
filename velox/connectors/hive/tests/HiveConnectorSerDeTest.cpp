@@ -15,7 +15,7 @@
  */
 
 #include <gtest/gtest.h>
-#include "velox/connectors/Connector.h"
+#include "../../common/Connector.h"
 #include "velox/connectors/hive/HiveConnector.h"
 #include "velox/exec/tests/utils/HiveConnectorTestBase.h"
 #include "velox/expression/ExprToSubfieldFilter.h"
@@ -29,7 +29,7 @@ class HiveConnectorSerDeTest : public exec::test::HiveConnectorTestBase {
  protected:
   HiveConnectorSerDeTest() {
     Type::registerSerDe();
-    common::Filter::registerSerDe();
+    velox::common::Filter::registerSerDe();
     core::ITypedExpr::registerSerDe();
     HiveTableHandle::registerSerDe();
     HiveColumnHandle::registerSerDe();
@@ -123,7 +123,7 @@ TEST_F(HiveConnectorSerDeTest, hiveTableHandle) {
       ROW({"c0c0", "c1", "c2", "c3", "c4", "c5"},
           {INTEGER(), BIGINT(), DOUBLE(), BOOLEAN(), BIGINT(), VARCHAR()});
   auto tableHandle = makeTableHandle(
-      common::test::SubfieldFiltersBuilder()
+      velox::common::test::SubfieldFiltersBuilder()
           .add("c0.c0", isNotNull())
           .add(
               "c1",
@@ -226,7 +226,7 @@ TEST_F(HiveConnectorSerDeTest, hiveInsertTableHandle) {
           bucketProperty,
           locationHandle,
           dwio::common::FileFormat::NIMBLE,
-          common::CompressionKind::CompressionKind_SNAPPY,
+          velox::common::CompressionKind::CompressionKind_SNAPPY,
           serdeParameters);
   testSerde(*hiveInsertTableHandle);
 }

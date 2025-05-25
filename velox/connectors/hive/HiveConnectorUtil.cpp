@@ -27,7 +27,7 @@ namespace facebook::velox::connector::hive {
 namespace {
 
 struct SubfieldSpec {
-  const common::Subfield* subfield;
+  const velox::common::Subfield* subfield;
   bool filterOnly;
 };
 
@@ -44,9 +44,9 @@ void deduplicate(std::vector<T>& values) {
 // generates a[9223372036854775807]; for anything smaller than
 // -9223372036854775808 it generates a[-9223372036854775808].
 template <typename T>
-std::unique_ptr<common::Filter> makeFloatingPointMapKeyFilter(
+std::unique_ptr<velox::common::Filter> makeFloatingPointMapKeyFilter(
     const std::vector<int64_t>& subscripts) {
-  std::vector<std::unique_ptr<common::Filter>> filters;
+  std::vector<std::unique_ptr<velox::common::Filter>> filters;
   for (auto subscript : subscripts) {
     T lower = subscript;
     T upper = subscript;
@@ -73,7 +73,7 @@ std::unique_ptr<common::Filter> makeFloatingPointMapKeyFilter(
     if (lowerUnbounded && upperUnbounded) {
       continue;
     }
-    filters.push_back(std::make_unique<common::FloatingPointRange<T>>(
+    filters.push_back(std::make_unique<velox::common::FloatingPointRange<T>>(
         lower,
         lowerUnbounded,
         lowerExclusive,
@@ -85,7 +85,7 @@ std::unique_ptr<common::Filter> makeFloatingPointMapKeyFilter(
   if (filters.size() == 1) {
     return std::move(filters[0]);
   }
-  return std::make_unique<common::MultiRange>(std::move(filters), false);
+  return std::make_unique<velox::common::MultiRange>(std::move(filters), false);
 }
 
 // Recursively add subfields to scan spec.
@@ -94,7 +94,7 @@ void addSubfields(
     std::vector<SubfieldSpec>& subfields,
     int level,
     memory::MemoryPool* pool,
-    common::ScanSpec& spec) {
+    velox::common::ScanSpec& spec) {
   int newSize = 0;
   for (int i = 0; i < subfields.size(); ++i) {
     if (level < subfields[i].subfield->path().size()) {
@@ -111,7 +111,7 @@ void addSubfields(
       for (auto& subfield : subfields) {
         auto* element = subfield.subfield->path()[level].get();
         auto* nestedField =
-            dynamic_cast<const common::Subfield::NestedField*>(element);
+            dynamic_cast<const velox::common::Subfield::NestedField*>(element);
         VELOX_CHECK(
             nestedField,
             "Unsupported for row subfields pruning: {}",
@@ -150,12 +150,12 @@ void addSubfields(
       std::vector<int64_t> longSubscripts;
       for (auto& subfield : subfields) {
         auto* element = subfield.subfield->path()[level].get();
-        if (dynamic_cast<const common::Subfield::AllSubscripts*>(element)) {
+        if (dynamic_cast<const velox::common::Subfield::AllSubscripts*>(element)) {
           return;
         }
         if (stringKey) {
           auto* subscript =
-              dynamic_cast<const common::Subfield::StringSubscript*>(element);
+              dynamic_cast<const velox::common::Subfield::StringSubscript*>(element);
           VELOX_CHECK(
               subscript,
               "Unsupported for string map pruning: {}",
@@ -163,7 +163,7 @@ void addSubfields(
           stringSubscripts.push_back(subscript->index());
         } else {
           auto* subscript =
-              dynamic_cast<const common::Subfield::LongSubscript*>(element);
+              dynamic_cast<const velox::common::Subfield::LongSubscript*>(element);
           VELOX_CHECK(
               subscript,
               "Unsupported for long map pruning: {}",
@@ -171,10 +171,10 @@ void addSubfields(
           longSubscripts.push_back(subscript->index());
         }
       }
-      std::unique_ptr<common::Filter> filter;
+      std::unique_ptr<velox::common::Filter> filter;
       if (stringKey) {
         deduplicate(stringSubscripts);
-        filter = std::make_unique<common::BytesValues>(stringSubscripts, false);
+        filter = std::make_unique<velox::common::BytesValues>(stringSubscripts, false);
         spec.setFlatMapFeatureSelection(std::move(stringSubscripts));
       } else {
         deduplicate(longSubscripts);
@@ -183,7 +183,7 @@ void addSubfields(
         } else if (keyType->isDouble()) {
           filter = makeFloatingPointMapKeyFilter<double>(longSubscripts);
         } else {
-          filter = common::createBigintValues(longSubscripts, false);
+          filter = velox::common::createBigintValues(longSubscripts, false);
         }
         std::vector<std::string> features;
         for (auto num : longSubscripts) {
@@ -208,11 +208,11 @@ void addSubfields(
       long maxIndex = -1;
       for (auto& subfield : subfields) {
         auto* element = subfield.subfield->path()[level].get();
-        if (dynamic_cast<const common::Subfield::AllSubscripts*>(element)) {
+        if (dynamic_cast<const velox::common::Subfield::AllSubscripts*>(element)) {
           return;
         }
         auto* subscript =
-            dynamic_cast<const common::Subfield::LongSubscript*>(element);
+            dynamic_cast<const velox::common::Subfield::LongSubscript*>(element);
         VELOX_CHECK(
             subscript,
             "Unsupported for array pruning: {}",
@@ -255,9 +255,9 @@ bool isSpecialColumn(
 
 } // namespace
 
-const std::string& getColumnName(const common::Subfield& subfield) {
+const std::string& getColumnName(const velox::common::Subfield& subfield) {
   VELOX_CHECK_GT(subfield.path().size(), 0);
-  auto* field = dynamic_cast<const common::Subfield::NestedField*>(
+  auto* field = dynamic_cast<const velox::common::Subfield::NestedField*>(
       subfield.path()[0].get());
   VELOX_CHECK_NOT_NULL(field);
   return field->name();
@@ -288,7 +288,7 @@ void checkColumnNameLowerCase(const std::shared_ptr<const Type>& type) {
 }
 
 void checkColumnNameLowerCase(
-    const common::SubfieldFilters& filters,
+    const velox::common::SubfieldFilters& filters,
     const std::unordered_map<std::string, std::shared_ptr<HiveColumnHandle>>&
         infoColumns) {
   for (const auto& filterIt : filters) {
@@ -300,7 +300,7 @@ void checkColumnNameLowerCase(
 
     for (int i = 0; i < path.size(); ++i) {
       auto* nestedField =
-          dynamic_cast<const common::Subfield::NestedField*>(path[i].get());
+          dynamic_cast<const velox::common::Subfield::NestedField*>(path[i].get());
       if (nestedField == nullptr) {
         continue;
       }
@@ -325,12 +325,12 @@ namespace {
 void processFieldSpec(
     const RowTypePtr& dataColumns,
     const TypePtr& outputType,
-    common::ScanSpec& fieldSpec) {
-  fieldSpec.visit(*outputType, [](const Type& type, common::ScanSpec& spec) {
+    velox::common::ScanSpec& fieldSpec) {
+  fieldSpec.visit(*outputType, [](const Type& type, velox::common::ScanSpec& spec) {
     if (type.isMap() && !spec.isConstant()) {
-      auto* keys = spec.childByName(common::ScanSpec::kMapKeysFieldName);
+      auto* keys = spec.childByName(velox::common::ScanSpec::kMapKeysFieldName);
       VELOX_CHECK_NOT_NULL(keys);
-      keys->addFilter(common::IsNotNull());
+      keys->addFilter(velox::common::IsNotNull());
     }
   });
   if (dataColumns) {
@@ -345,11 +345,11 @@ void processFieldSpec(
 
 } // namespace
 
-std::shared_ptr<common::ScanSpec> makeScanSpec(
+std::shared_ptr<velox::common::ScanSpec> makeScanSpec(
     const RowTypePtr& rowType,
-    const folly::F14FastMap<std::string, std::vector<const common::Subfield*>>&
+    const folly::F14FastMap<std::string, std::vector<const velox::common::Subfield*>>&
         outputSubfields,
-    const common::SubfieldFilters& filters,
+    const velox::common::SubfieldFilters& filters,
     const RowTypePtr& dataColumns,
     const std::unordered_map<std::string, std::shared_ptr<HiveColumnHandle>>&
         partitionKeys,
@@ -358,8 +358,8 @@ std::shared_ptr<common::ScanSpec> makeScanSpec(
     const SpecialColumnNames& specialColumns,
     bool disableStatsBasedFilterReorder,
     memory::MemoryPool* pool) {
-  auto spec = std::make_shared<common::ScanSpec>("root");
-  folly::F14FastMap<std::string, std::vector<const common::Subfield*>>
+  auto spec = std::make_shared<velox::common::ScanSpec>("root");
+  folly::F14FastMap<std::string, std::vector<const velox::common::Subfield*>>
       filterSubfields;
   std::vector<SubfieldSpec> subfieldSpecs;
   for (auto& [subfield, _] : filters) {
@@ -379,16 +379,16 @@ std::shared_ptr<common::ScanSpec> makeScanSpec(
     if (isSpecialColumn(name, specialColumns.rowIndex)) {
       VELOX_CHECK(type->isBigint());
       auto* fieldSpec = spec->addField(name, i);
-      fieldSpec->setColumnType(common::ScanSpec::ColumnType::kRowIndex);
+      fieldSpec->setColumnType(velox::common::ScanSpec::ColumnType::kRowIndex);
       continue;
     }
     if (isSpecialColumn(name, specialColumns.rowId)) {
       VELOX_CHECK(type->isRow() && type->size() == 5);
       auto& rowIdType = type->asRow();
       auto* fieldSpec = spec->addFieldRecursively(name, rowIdType, i);
-      fieldSpec->setColumnType(common::ScanSpec::ColumnType::kComposite);
+      fieldSpec->setColumnType(velox::common::ScanSpec::ColumnType::kComposite);
       fieldSpec->childByName(rowIdType.nameOf(0))
-          ->setColumnType(common::ScanSpec::ColumnType::kRowIndex);
+          ->setColumnType(velox::common::ScanSpec::ColumnType::kRowIndex);
       continue;
     }
     auto it = outputSubfields.find(name);
@@ -526,7 +526,7 @@ std::unique_ptr<dwio::common::SerDeOptions> parseSerdeParameters(
 
 void configureReaderOptions(
     const std::shared_ptr<const HiveConfig>& hiveConfig,
-    const ConnectorQueryCtx* connectorQueryCtx,
+    const connector::common::ConnectorQueryCtx* connectorQueryCtx,
     const std::shared_ptr<const HiveTableHandle>& hiveTableHandle,
     const std::shared_ptr<const HiveConnectorSplit>& hiveSplit,
     dwio::common::ReaderOptions& readerOptions) {
@@ -541,7 +541,7 @@ void configureReaderOptions(
 
 void configureReaderOptions(
     const std::shared_ptr<const HiveConfig>& hiveConfig,
-    const ConnectorQueryCtx* connectorQueryCtx,
+    const connector::common::ConnectorQueryCtx* connectorQueryCtx,
     const RowTypePtr& fileSchema,
     const std::shared_ptr<const HiveConnectorSplit>& hiveSplit,
     const std::unordered_map<std::string, std::string>& tableParameters,
@@ -607,8 +607,8 @@ void configureReaderOptions(
 
 void configureRowReaderOptions(
     const std::unordered_map<std::string, std::string>& tableParameters,
-    const std::shared_ptr<common::ScanSpec>& scanSpec,
-    std::shared_ptr<common::MetadataFilter> metadataFilter,
+    const std::shared_ptr<velox::common::ScanSpec>& scanSpec,
+    std::shared_ptr<velox::common::MetadataFilter> metadataFilter,
     const RowTypePtr& rowType,
     const std::shared_ptr<const HiveConnectorSplit>& hiveSplit,
     const std::shared_ptr<const HiveConfig>& hiveConfig,
@@ -636,7 +636,7 @@ bool applyPartitionFilter(
     const TypePtr& type,
     const std::string& partitionValue,
     bool isPartitionDateDaysSinceEpoch,
-    common::Filter* filter,
+    velox::common::Filter* filter,
     bool asLocalTime) {
   if (type->isDate()) {
     int32_t result = 0;
@@ -685,7 +685,7 @@ bool applyPartitionFilter(
 } // namespace
 
 bool testFilters(
-    const common::ScanSpec* scanSpec,
+    const velox::common::ScanSpec* scanSpec,
     const dwio::common::Reader* reader,
     const std::string& filePath,
     const std::unordered_map<std::string, std::optional<std::string>>&
@@ -749,7 +749,7 @@ bool testFilters(
 std::unique_ptr<dwio::common::BufferedInput> createBufferedInput(
     const FileHandle& fileHandle,
     const dwio::common::ReaderOptions& readerOpts,
-    const ConnectorQueryCtx* connectorQueryCtx,
+    const connector::common::ConnectorQueryCtx* connectorQueryCtx,
     std::shared_ptr<io::IoStatistics> ioStats,
     std::shared_ptr<filesystems::File::IoStats> fsStats,
     folly::Executor* executor) {
@@ -759,7 +759,7 @@ std::unique_ptr<dwio::common::BufferedInput> createBufferedInput(
         dwio::common::MetricsLog::voidLog(),
         fileHandle.uuid.id(),
         connectorQueryCtx->cache(),
-        Connector::getTracker(
+        connector::common::Connector::getTracker(
             connectorQueryCtx->scanId(), readerOpts.loadQuantum()),
         fileHandle.groupId.id(),
         ioStats,
@@ -771,7 +771,7 @@ std::unique_ptr<dwio::common::BufferedInput> createBufferedInput(
       fileHandle.file,
       dwio::common::MetricsLog::voidLog(),
       fileHandle.uuid.id(),
-      Connector::getTracker(
+      connector::common::Connector::getTracker(
           connectorQueryCtx->scanId(), readerOpts.loadQuantum()),
       fileHandle.groupId.id(),
       std::move(ioStats),
@@ -853,15 +853,15 @@ core::TypedExprPtr extractFiltersFromRemainingFilter(
     const core::TypedExprPtr& expr,
     core::ExpressionEvaluator* evaluator,
     bool negated,
-    common::SubfieldFilters& filters,
+    velox::common::SubfieldFilters& filters,
     double& sampleRate) {
   auto* call = dynamic_cast<const core::CallTypedExpr*>(expr.get());
   if (call == nullptr) {
     return expr;
   }
-  common::Filter* oldFilter = nullptr;
+  velox::common::Filter* oldFilter = nullptr;
   try {
-    common::Subfield subfield;
+    velox::common::Subfield subfield;
     if (auto filter = exec::ExprToSubfieldFilterParser::getInstance()
                           ->leafCallToSubfieldFilter(
                               *call, subfield, evaluator, negated)) {

@@ -128,9 +128,9 @@ class ScopedOOMInjector {
     }
 
     // Make sure TestValues are enabled.
-    common::testutil::TestValue::enable();
+    velox::common::testutil::TestValue::enable();
 
-    common::testutil::TestValue::set(
+    velox::common::testutil::TestValue::set(
         kInjectionPoint,
         std::function<void(memory::MemoryPool*)>([&](memory::MemoryPool*) {
           const auto currentTime = now();
@@ -145,7 +145,7 @@ class ScopedOOMInjector {
   }
 
   ~ScopedOOMInjector() {
-    common::testutil::TestValue::clear(kInjectionPoint);
+    velox::common::testutil::TestValue::clear(kInjectionPoint);
     enabled_ = false;
   }
 

@@ -61,7 +61,7 @@ Split makeSplit(
     std::optional<int32_t> tableBucketNumber = std::nullopt);
 
 /// Create a connector split from an exsiting file.
-std::shared_ptr<connector::ConnectorSplit> makeConnectorSplit(
+std::shared_ptr<connector::common::ConnectorSplit> makeConnectorSplit(
     const std::string& filePath,
     const std::unordered_map<std::string, std::optional<std::string>>&
         partitionKeys = {},

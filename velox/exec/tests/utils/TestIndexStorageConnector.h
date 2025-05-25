@@ -41,13 +41,13 @@ struct TestIndexTable {
 };
 
 // The index table handle which provides the index table for index lookup.
-class TestIndexTableHandle : public connector::ConnectorTableHandle {
+class TestIndexTableHandle : public connector::common::ConnectorTableHandle {
  public:
   explicit TestIndexTableHandle(
       std::string connectorId,
       std::shared_ptr<TestIndexTable> indexTable,
       bool asyncLookup)
-      : ConnectorTableHandle(std::move(connectorId)),
+      : connector::common::ConnectorTableHandle(std::move(connectorId)),
         indexTable_(std::move(indexTable)),
         asyncLookup_(asyncLookup) {}
 
@@ -105,7 +105,7 @@ class TestIndexTableHandle : public connector::ConnectorTableHandle {
   const bool asyncLookup_;
 };
 
-class TestIndexSource : public connector::IndexSource,
+class TestIndexSource : public connector::common::IndexSource,
                         public std::enable_shared_from_this<TestIndexSource> {
  public:
   TestIndexSource(
@@ -114,7 +114,7 @@ class TestIndexSource : public connector::IndexSource,
       size_t numEqualJoinKeys,
       const core::TypedExprPtr& joinConditionExpr,
       const std::shared_ptr<TestIndexTableHandle>& tableHandle,
-      connector::ConnectorQueryCtx* connectorQueryCtx,
+      connector::common::ConnectorQueryCtx* connectorQueryCtx,
       folly::Executor* executor);
 
   std::shared_ptr<LookupResultIterator> lookup(
@@ -236,7 +236,7 @@ class TestIndexSource : public connector::IndexSource,
   const RowTypePtr outputType_;
   const RowTypePtr keyType_;
   const RowTypePtr valueType_;
-  connector::ConnectorQueryCtx* const connectorQueryCtx_;
+  connector::common::ConnectorQueryCtx* const connectorQueryCtx_;
   const size_t numEqualJoinKeys_;
   const std::unique_ptr<exec::ExprSet> conditionExprSet_;
   const std::shared_ptr<memory::MemoryPool> pool_;
@@ -261,7 +261,7 @@ class TestIndexSource : public connector::IndexSource,
   std::unordered_map<std::string, RuntimeMetric> runtimeStats_;
 };
 
-class TestIndexConnector : public connector::Connector {
+class TestIndexConnector : public connector::common::Connector {
  public:
   TestIndexConnector(
       const std::string& id,
@@ -272,32 +272,32 @@ class TestIndexConnector : public connector::Connector {
     return true;
   }
 
-  std::unique_ptr<connector::DataSource> createDataSource(
+  std::unique_ptr<connector::common::DataSource> createDataSource(
       const RowTypePtr&,
-      const std::shared_ptr<connector::ConnectorTableHandle>&,
+      const std::shared_ptr<connector::common::ConnectorTableHandle>&,
       const std::unordered_map<
           std::string,
-          std::shared_ptr<connector::ConnectorColumnHandle>>&,
-      connector::ConnectorQueryCtx*) override {
+          std::shared_ptr<connector::common::ConnectorColumnHandle>>&,
+      connector::common::ConnectorQueryCtx*) override {
     VELOX_UNSUPPORTED("{} not implemented", __FUNCTION__);
   }
 
-  std::shared_ptr<connector::IndexSource> createIndexSource(
+  std::shared_ptr<connector::common::IndexSource> createIndexSource(
       const RowTypePtr& inputType,
       size_t numJoinKeys,
       const std::vector<core::IndexLookupConditionPtr>& joinConditions,
       const RowTypePtr& outputType,
-      const std::shared_ptr<connector::ConnectorTableHandle>& tableHandle,
+      const std::shared_ptr<connector::common::ConnectorTableHandle>& tableHandle,
       const std::unordered_map<
           std::string,
-          std::shared_ptr<connector::ConnectorColumnHandle>>& columnHandles,
-      connector::ConnectorQueryCtx* connectorQueryCtx) override;
+          std::shared_ptr<connector::common::ConnectorColumnHandle>>& columnHandles,
+      connector::common::ConnectorQueryCtx* connectorQueryCtx) override;
 
-  std::unique_ptr<connector::DataSink> createDataSink(
+  std::unique_ptr<connector::common::DataSink> createDataSink(
       RowTypePtr,
-      std::shared_ptr<connector::ConnectorInsertTableHandle>,
-      connector::ConnectorQueryCtx*,
-      connector::CommitStrategy) override {
+      std::shared_ptr<connector::common::ConnectorInsertTableHandle>,
+      connector::common::ConnectorQueryCtx*,
+      connector::common::CommitStrategy) override {
     VELOX_UNSUPPORTED("{} not implemented", __FUNCTION__);
   }
 
@@ -305,12 +305,12 @@ class TestIndexConnector : public connector::Connector {
   folly::Executor* const executor_;
 };
 
-class TestIndexConnectorFactory : public connector::ConnectorFactory {
+class TestIndexConnectorFactory : public connector::common::ConnectorFactory {
  public:
   TestIndexConnectorFactory()
-      : ConnectorFactory(kTestIndexConnectorName.c_str()) {}
+      : connector::common::ConnectorFactory(kTestIndexConnectorName.c_str()) {}
 
-  std::shared_ptr<connector::Connector> newConnector(
+  std::shared_ptr<connector::common::Connector> newConnector(
       const std::string& id,
       std::shared_ptr<const config::ConfigBase> properties,
       folly::Executor* /*unused*/,

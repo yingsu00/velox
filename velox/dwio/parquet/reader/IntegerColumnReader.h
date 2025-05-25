@@ -26,7 +26,7 @@ class IntegerColumnReader : public dwio::common::SelectiveIntegerColumnReader {
       const TypePtr& requestedType,
       std::shared_ptr<const dwio::common::TypeWithId> fileType,
       ParquetParams& params,
-      common::ScanSpec& scanSpec)
+      velox::common::ScanSpec& scanSpec)
       : SelectiveIntegerColumnReader(
             requestedType,
             params,

@@ -44,7 +44,7 @@ class ParquetParams : public dwio::common::FormatParams {
         timestampPrecision_(timestampPrecision) {}
   std::unique_ptr<dwio::common::FormatData> toFormatData(
       const std::shared_ptr<const dwio::common::TypeWithId>& type,
-      const common::ScanSpec& scanSpec) override;
+      const velox::common::ScanSpec& scanSpec) override;
 
   TimestampPrecision timestampPrecision() const {
     return timestampPrecision_;
@@ -81,7 +81,7 @@ class ParquetData : public dwio::common::FormatData {
   dwio::common::PositionProvider seekToRowGroup(int64_t index) override;
 
   void filterRowGroups(
-      const common::ScanSpec& scanSpec,
+      const velox::common::ScanSpec& scanSpec,
       uint64_t rowsPerRowGroup,
       const dwio::common::StatsContext& writerContext,
       FilterRowGroupsResult&) override;
@@ -206,7 +206,7 @@ class ParquetData : public dwio::common::FormatData {
  private:
   /// True if 'filter' may have hits for the column of 'this' according to the
   /// stats in 'rowGroup'.
-  bool rowGroupMatches(uint32_t rowGroupId, common::Filter* filter);
+  bool rowGroupMatches(uint32_t rowGroupId, velox::common::Filter* filter);
 
  protected:
   memory::MemoryPool& pool_;

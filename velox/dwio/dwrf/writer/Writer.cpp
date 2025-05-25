@@ -306,7 +306,7 @@ void Writer::write(const VectorPtr& input) {
     }
 
     const auto rawSize = writer_->write(
-        input, common::Ranges::of(rowOffset, rowOffset + numRowsToWrite));
+        input, velox::common::Ranges::of(rowOffset, rowOffset + numRowsToWrite));
     rowOffset += numRowsToWrite;
     context.incRawSize(rawSize);
 

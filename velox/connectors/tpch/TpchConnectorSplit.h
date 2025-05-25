@@ -16,11 +16,11 @@
 #pragma once
 
 #include <fmt/format.h>
-#include "velox/connectors/Connector.h"
+#include "../common/Connector.h"
 
 namespace facebook::velox::connector::tpch {
 
-struct TpchConnectorSplit : public connector::ConnectorSplit {
+struct TpchConnectorSplit : public connector::common::ConnectorSplit {
   explicit TpchConnectorSplit(
       const std::string& connectorId,
       size_t totalParts,
@@ -32,7 +32,7 @@ struct TpchConnectorSplit : public connector::ConnectorSplit {
       bool cacheable,
       size_t totalParts,
       size_t partNumber)
-      : ConnectorSplit(connectorId, /*splitWeight=*/0, cacheable),
+      : connector::common::ConnectorSplit(connectorId, /*splitWeight=*/0, cacheable),
         totalParts(totalParts),
         partNumber(partNumber) {
     VELOX_CHECK_GE(totalParts, 1, "totalParts must be >= 1");

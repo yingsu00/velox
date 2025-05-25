@@ -617,7 +617,7 @@ TEST_P(EncodedVectorCopyTest, fuzzer) {
   VectorFuzzer::Options fuzzerOptions;
   fuzzerOptions.allowLazyVector = reuseSource();
   fuzzerOptions.nullRatio = 0.05;
-  auto seed = common::testutil::getRandomSeed(42);
+  auto seed = velox::common::testutil::getRandomSeed(42);
   VectorFuzzer fuzzer(fuzzerOptions, pool(), seed);
   fuzzer::FuzzerGenerator rng(seed);
 #ifndef NDEBUG

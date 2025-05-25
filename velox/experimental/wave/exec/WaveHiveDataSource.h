@@ -25,24 +25,24 @@ class WaveHiveDataSource : public WaveDataSource {
  public:
   WaveHiveDataSource(
       const std::shared_ptr<connector::hive::HiveTableHandle>& hiveTableHandle,
-      const std::shared_ptr<common::ScanSpec>& scanSpec,
+      const std::shared_ptr<velox::common::ScanSpec>& scanSpec,
       const RowTypePtr& readerOutputType,
       std::unordered_map<
           std::string,
           std::shared_ptr<connector::hive::HiveColumnHandle>>* partitionKeys,
       FileHandleFactory* fileHandleFactory,
       folly::Executor* executor,
-      const connector::ConnectorQueryCtx* connectorQueryCtx,
+      const connector::common::ConnectorQueryCtx* connectorQueryCtx,
       const std::shared_ptr<connector::hive::HiveConfig>& hiveConfig,
       const std::shared_ptr<io::IoStatistics>& ioStats,
       const exec::ExprSet* remainingFilter,
-      std::shared_ptr<common::MetadataFilter> metadataFilter);
+      std::shared_ptr<velox::common::MetadataFilter> metadataFilter);
 
   void addDynamicFilter(
       column_index_t outputChannel,
-      const std::shared_ptr<common::Filter>& filter) override;
+      const std::shared_ptr<velox::common::Filter>& filter) override;
 
-  void addSplit(std::shared_ptr<connector::ConnectorSplit> split) override;
+  void addSplit(std::shared_ptr<connector::common::ConnectorSplit> split) override;
 
   void setFromDataSource(std::shared_ptr<WaveDataSource> dataSource) override;
 
@@ -66,11 +66,11 @@ class WaveHiveDataSource : public WaveDataSource {
 
  private:
   SplitReaderParams params_;
-  std::shared_ptr<connector::ConnectorSplit> split_;
+  std::shared_ptr<connector::common::ConnectorSplit> split_;
   std::shared_ptr<WaveSplitReader> splitReader_;
   std::shared_ptr<exec::Expr> remainingFilter_;
   dwio::common::RuntimeStatistics runtimeStats_;
-  std::shared_ptr<common::MetadataFilter> metadataFilter_;
+  std::shared_ptr<velox::common::MetadataFilter> metadataFilter_;
   int64_t completedRows_{0};
   int64_t completedBytes_{0};
   std::unordered_map<std::string, RuntimeCounter> splitReaderStats_;

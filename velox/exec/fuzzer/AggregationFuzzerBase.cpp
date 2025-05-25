@@ -761,7 +761,7 @@ void persistReproInfo(
 
   // Create a new directory
   const auto dirPathOptional =
-      common::generateTempFolderPath(basePath.c_str(), "aggregationVerifier");
+      velox::common::generateTempFolderPath(basePath.c_str(), "aggregationVerifier");
   if (!dirPathOptional.has_value()) {
     LOG(ERROR)
         << "Failed to create directory for persisting plans using base path: "

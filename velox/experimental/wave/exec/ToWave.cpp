@@ -60,7 +60,7 @@ common::Subfield* CompileState::toSubfield(const std::string& name) {
   VELOX_CHECK(!namesResolved_);
   auto it = subfields_.find(name);
   if (it == subfields_.end()) {
-    auto field = std::make_unique<common::Subfield>(name);
+    auto field = std::make_unique<velox::common::Subfield>(name);
     auto result = field.get();
     subfields_[name] = std::move(field);
     return result;

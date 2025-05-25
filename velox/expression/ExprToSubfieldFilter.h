@@ -208,10 +208,10 @@ inline std::unique_ptr<common::BigintMultiRange> bigintOr(
       std::move(filters), nullAllowed);
 }
 
-inline std::unique_ptr<common::BytesValues> equal(
+inline std::unique_ptr<velox::common::BytesValues> equal(
     const std::string& value,
     bool nullAllowed = false) {
-  return std::make_unique<common::BytesValues>(
+  return std::make_unique<velox::common::BytesValues>(
       std::vector<std::string>{value}, nullAllowed);
 }
 
@@ -281,22 +281,22 @@ inline std::unique_ptr<common::BytesRange> greaterThan(
       min, false, true, "", true, false, nullAllowed);
 }
 
-inline std::unique_ptr<common::Filter> in(
+inline std::unique_ptr<velox::common::Filter> in(
     const std::vector<int64_t>& values,
     bool nullAllowed = false) {
-  return common::createBigintValues(values, nullAllowed);
+  return velox::common::createBigintValues(values, nullAllowed);
 }
 
-inline std::unique_ptr<common::Filter> notIn(
+inline std::unique_ptr<velox::common::Filter> notIn(
     const std::vector<int64_t>& values,
     bool nullAllowed = false) {
-  return common::createNegatedBigintValues(values, nullAllowed);
+  return velox::common::createNegatedBigintValues(values, nullAllowed);
 }
 
-inline std::unique_ptr<common::BytesValues> in(
+inline std::unique_ptr<velox::common::BytesValues> in(
     const std::vector<std::string>& values,
     bool nullAllowed = false) {
-  return std::make_unique<common::BytesValues>(values, nullAllowed);
+  return std::make_unique<velox::common::BytesValues>(values, nullAllowed);
 }
 
 inline std::unique_ptr<common::NegatedBytesValues> notIn(
@@ -320,12 +320,12 @@ inline std::unique_ptr<common::IsNotNull> isNotNull() {
 }
 
 template <typename T>
-std::unique_ptr<common::MultiRange>
+std::unique_ptr<velox::common::MultiRange>
 orFilter(std::unique_ptr<T> a, std::unique_ptr<T> b, bool nullAllowed = false) {
-  std::vector<std::unique_ptr<common::Filter>> filters;
+  std::vector<std::unique_ptr<velox::common::Filter>> filters;
   filters.emplace_back(std::move(a));
   filters.emplace_back(std::move(b));
-  return std::make_unique<common::MultiRange>(std::move(filters), nullAllowed);
+  return std::make_unique<velox::common::MultiRange>(std::move(filters), nullAllowed);
 }
 
 inline std::unique_ptr<common::HugeintRange> lessThanHugeint(
@@ -367,7 +367,7 @@ betweenHugeint(int128_t min, int128_t max, bool nullAllowed = false) {
   return std::make_unique<common::HugeintRange>(min, max, nullAllowed);
 }
 
-std::pair<common::Subfield, std::unique_ptr<common::Filter>> toSubfieldFilter(
+std::pair<velox::common::Subfield, std::unique_ptr<velox::common::Filter>> toSubfieldFilter(
     const core::TypedExprPtr& expr,
     core::ExpressionEvaluator*);
 
@@ -435,56 +435,56 @@ class ExprToSubfieldFilterParser {
   /// because this conversion is frequently applied when extracting filters from
   /// remaining filter in readers. Frequent throw clutters logs and slows down
   /// execution.
-  virtual std::unique_ptr<common::Filter> leafCallToSubfieldFilter(
+  virtual std::unique_ptr<velox::common::Filter> leafCallToSubfieldFilter(
       const core::CallTypedExpr& call,
-      common::Subfield& subfield,
+      velox::common::Subfield& subfield,
       core::ExpressionEvaluator* evaluator,
       bool negated = false) = 0;
 
  protected:
   // Converts an expression into a subfield. Returns false if the expression is
   // not a valid field expression.
-  bool toSubfield(const core::ITypedExpr* field, common::Subfield& subfield);
+  bool toSubfield(const core::ITypedExpr* field, velox::common::Subfield& subfield);
 
   // Creates a non-equal subfield filter against the given constant.
-  std::unique_ptr<common::Filter> makeNotEqualFilter(
+  std::unique_ptr<velox::common::Filter> makeNotEqualFilter(
       const core::TypedExprPtr& valueExpr,
       core::ExpressionEvaluator* evaluator);
 
   // Creates an equal subfield filter against the given constant.
-  std::unique_ptr<common::Filter> makeEqualFilter(
+  std::unique_ptr<velox::common::Filter> makeEqualFilter(
       const core::TypedExprPtr& valueExpr,
       core::ExpressionEvaluator* evaluator);
 
   // Creates a greater-than subfield filter against the given constant.
-  std::unique_ptr<common::Filter> makeGreaterThanFilter(
+  std::unique_ptr<velox::common::Filter> makeGreaterThanFilter(
       const core::TypedExprPtr& lowerExpr,
       core::ExpressionEvaluator* evaluator);
 
   // Creates a less-than subfield filter against the given constant.
-  std::unique_ptr<common::Filter> makeLessThanFilter(
+  std::unique_ptr<velox::common::Filter> makeLessThanFilter(
       const core::TypedExprPtr& upperExpr,
       core::ExpressionEvaluator* evaluator);
 
   // Creates a less-than-or-equal subfield filter against the given constant.
-  std::unique_ptr<common::Filter> makeLessThanOrEqualFilter(
+  std::unique_ptr<velox::common::Filter> makeLessThanOrEqualFilter(
       const core::TypedExprPtr& upperExpr,
       core::ExpressionEvaluator* evaluator);
 
   // Creates a greater-than-or-equal subfield filter against the given constant.
-  std::unique_ptr<common::Filter> makeGreaterThanOrEqualFilter(
+  std::unique_ptr<velox::common::Filter> makeGreaterThanOrEqualFilter(
       const core::TypedExprPtr& lowerExpr,
       core::ExpressionEvaluator* evaluator);
 
   // Creates an in subfield filter against the given vector.
-  std::unique_ptr<common::Filter> makeInFilter(
+  std::unique_ptr<velox::common::Filter> makeInFilter(
       const core::TypedExprPtr& expr,
       core::ExpressionEvaluator* evaluator,
       bool negated);
 
   // Creates a between subfield filter against the given lower and upper
   // bounds.
-  std::unique_ptr<common::Filter> makeBetweenFilter(
+  std::unique_ptr<velox::common::Filter> makeBetweenFilter(
       const core::TypedExprPtr& lowerExpr,
       const core::TypedExprPtr& upperExpr,
       core::ExpressionEvaluator* evaluator,
@@ -499,9 +499,9 @@ class ExprToSubfieldFilterParser {
 // Parser for Presto expressions.
 class PrestoExprToSubfieldFilterParser : public ExprToSubfieldFilterParser {
  public:
-  std::unique_ptr<common::Filter> leafCallToSubfieldFilter(
+  std::unique_ptr<velox::common::Filter> leafCallToSubfieldFilter(
       const core::CallTypedExpr& call,
-      common::Subfield& subfield,
+      velox::common::Subfield& subfield,
       core::ExpressionEvaluator* evaluator,
       bool negated = false) override;
 };

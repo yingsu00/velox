@@ -97,7 +97,7 @@ class AbfsReadFile::Impl {
   }
 
   uint64_t preadv(
-      folly::Range<const common::Region*> regions,
+      folly::Range<const velox::common::Region*> regions,
       folly::Range<folly::IOBuf*> iobufs,
       File::IoStats* stats) const {
     size_t length = 0;
@@ -186,7 +186,7 @@ uint64_t AbfsReadFile::preadv(
 }
 
 uint64_t AbfsReadFile::preadv(
-    folly::Range<const common::Region*> regions,
+    folly::Range<const velox::common::Region*> regions,
     folly::Range<folly::IOBuf*> iobufs,
     File::IoStats* stats) const {
   return impl_->preadv(regions, iobufs, stats);

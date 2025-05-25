@@ -113,7 +113,7 @@ struct SpillStats {
 
 FOLLY_ALWAYS_INLINE std::ostream& operator<<(
     std::ostream& o,
-    const common::SpillStats& stats) {
+    const velox::common::SpillStats& stats) {
   return o << stats.toString();
 }
 

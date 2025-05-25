@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "velox/connectors/Connector.h"
+#include "../common/Connector.h"
 #include "velox/common/base/tests/GTestUtils.h"
 #include "velox/common/config/Config.h"
 
@@ -22,42 +22,42 @@
 
 namespace facebook::velox::connector {
 
-class ConnectorTest : public testing::Test {};
+class connector::common::ConnectorTest : public testing::Test {};
 
 namespace {
 
-class TestConnector : public connector::Connector {
+class TestConnector : public connector::common::Connector {
  public:
-  TestConnector(const std::string& id) : connector::Connector(id) {}
+  TestConnector(const std::string& id) : connector::common::Connector(id) {}
 
-  std::unique_ptr<connector::DataSource> createDataSource(
+  std::unique_ptr<connector::common::DataSource> createDataSource(
       const RowTypePtr& /* outputType */,
-      const std::shared_ptr<ConnectorTableHandle>& /* tableHandle */,
+      const std::shared_ptr<connector::common::ConnectorTableHandle>& /* tableHandle */,
       const std::unordered_map<
           std::string,
           std::shared_ptr<
-              connector::ConnectorColumnHandle>>& /* columnHandles */,
-      connector::ConnectorQueryCtx* connectorQueryCtx) override {
+              connector::common::ConnectorColumnHandle>>& /* columnHandles */,
+      connector::common::ConnectorQueryCtx* connectorQueryCtx) override {
     VELOX_NYI();
   }
 
-  std::unique_ptr<connector::DataSink> createDataSink(
+  std::unique_ptr<connector::common::DataSink> createDataSink(
       RowTypePtr /*inputType*/,
       std::shared_ptr<
-          ConnectorInsertTableHandle> /*connectorInsertTableHandle*/,
-      ConnectorQueryCtx* /*connectorQueryCtx*/,
+          connector::common::ConnectorInsertTableHandle> /*connectorInsertTableHandle*/,
+      connector::common::ConnectorQueryCtx* /*connectorQueryCtx*/,
       CommitStrategy /*commitStrategy*/) override final {
     VELOX_NYI();
   }
 };
 
-class TestConnectorFactory : public connector::ConnectorFactory {
+class TestConnectorFactory : public connector::common::ConnectorFactory {
  public:
   static constexpr const char* kConnectorFactoryName = "test-factory";
 
-  TestConnectorFactory() : ConnectorFactory(kConnectorFactoryName) {}
+  TestConnectorFactory() : connector::common::ConnectorFactory(kConnectorFactoryName) {}
 
-  std::shared_ptr<Connector> newConnector(
+  std::shared_ptr<connector::common::Connector> newConnector(
       const std::string& id,
       std::shared_ptr<const config::ConfigBase> /*config*/,
       folly::Executor* /*ioExecutor*/ = nullptr,
@@ -100,7 +100,7 @@ TEST_F(ConnectorTest, getAllConnectors) {
 
 TEST_F(ConnectorTest, connectorSplit) {
   {
-    const ConnectorSplit split("test", 100, true);
+    const connector::common::ConnectorSplit split("test", 100, true);
     ASSERT_EQ(split.connectorId, "test");
     ASSERT_EQ(split.splitWeight, 100);
     ASSERT_EQ(split.cacheable, true);
@@ -109,7 +109,7 @@ TEST_F(ConnectorTest, connectorSplit) {
         "[split: connector id test, weight 100, cacheable true]");
   }
   {
-    const ConnectorSplit split("test", 50, false);
+    const connector::common::ConnectorSplit split("test", 50, false);
     ASSERT_EQ(split.connectorId, "test");
     ASSERT_EQ(split.splitWeight, 50);
     ASSERT_EQ(split.cacheable, false);

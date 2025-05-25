@@ -130,7 +130,7 @@ TEST_F(ByteRleEncoderTest, random_chars) {
 
   char* data = new char[102400];
   generateData(102400, data);
-  encoder->add(data, common::Ranges::of(0, 102400), nullptr);
+  encoder->add(data, velox::common::Ranges::of(0, 102400), nullptr);
   encoder->flush();
 
   decodeAndVerify(memSink, data, 102400, nullptr);
@@ -151,7 +151,7 @@ TEST_F(ByteRleEncoderTest, random_chars_with_null) {
   uint64_t* nulls = new uint64_t[1600];
   char* data = new char[102400];
   generateData(102400, data, 377, nulls);
-  encoder->add(data, common::Ranges::of(0, 102400), nulls);
+  encoder->add(data, velox::common::Ranges::of(0, 102400), nulls);
   encoder->flush();
 
   decodeAndVerify(memSink, data, 102400, nulls);
@@ -179,7 +179,7 @@ TEST_F(BooleanRleEncoderTest, random_bits_not_aligned) {
 
   char* data = new char[1779];
   generateBoolData(1779, data);
-  encoder->add(data, common::Ranges::of(0, 1779), nullptr);
+  encoder->add(data, velox::common::Ranges::of(0, 1779), nullptr);
   encoder->flush();
 
   decodeAndVerifyBoolean(memSink, data, 1779, nullptr);
@@ -199,7 +199,7 @@ TEST_F(BooleanRleEncoderTest, random_bits_aligned) {
 
   char* data = new char[8000];
   generateBoolData(8000, data);
-  encoder->add(data, common::Ranges::of(0, 8000), nullptr);
+  encoder->add(data, velox::common::Ranges::of(0, 8000), nullptr);
   encoder->flush();
 
   decodeAndVerifyBoolean(memSink, data, 8000, nullptr);
@@ -220,7 +220,7 @@ TEST_F(BooleanRleEncoderTest, random_bits_aligned_with_null) {
   uint64_t* nulls = new uint64_t[125];
   char* data = new char[8000];
   generateBoolData(8000, data, 515, nulls);
-  encoder->add(data, common::Ranges::of(0, 8000), nulls);
+  encoder->add(data, velox::common::Ranges::of(0, 8000), nulls);
   encoder->flush();
 
   decodeAndVerifyBoolean(memSink, data, 8000, nulls);

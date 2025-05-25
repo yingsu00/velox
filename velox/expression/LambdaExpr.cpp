@@ -288,7 +288,7 @@ void LambdaExpr::makeTypeWithCapture(EvalCtx& context) {
 
 void LambdaExpr::extractSubfieldsImpl(
     folly::F14FastMap<std::string, int32_t>* shadowedNames,
-    std::vector<common::Subfield>* subfields) const {
+    std::vector<velox::common::Subfield>* subfields) const {
   for (auto& name : signature_->names()) {
     (*shadowedNames)[name]++;
   }

@@ -98,7 +98,7 @@ class PostScript {
                                         : orcPtr()->has_compression();
   }
 
-  common::CompressionKind compression() const;
+  velox::common::CompressionKind compression() const;
 
   bool hasCompressionBlockSize() const {
     return format_ == DwrfFormat::kDwrf ? dwrfPtr()->has_compressionblocksize()

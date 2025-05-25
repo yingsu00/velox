@@ -26,7 +26,7 @@
 
 namespace facebook::velox {
 
-using namespace common::testutil;
+using namespace velox::common::testutil;
 using namespace facebook::velox::test;
 
 class TryExprTest : public functions::test::FunctionBaseTest {

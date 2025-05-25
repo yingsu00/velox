@@ -43,7 +43,7 @@ HiveConnector::HiveConnector(
     const std::string& id,
     std::shared_ptr<const config::ConfigBase> config,
     folly::Executor* executor)
-    : Connector(id),
+    : connector::common::Connector(id),
       hiveConfig_(std::make_shared<HiveConfig>(config)),
       fileHandleFactory_(
           hiveConfig_->isFileHandleCacheEnabled()
@@ -70,13 +70,13 @@ HiveConnector::HiveConnector(
   }
 }
 
-std::unique_ptr<DataSource> HiveConnector::createDataSource(
+std::unique_ptr<connector::common::DataSource> HiveConnector::createDataSource(
     const RowTypePtr& outputType,
-    const std::shared_ptr<ConnectorTableHandle>& tableHandle,
+    const std::shared_ptr<connector::common::ConnectorTableHandle>& tableHandle,
     const std::unordered_map<
         std::string,
-        std::shared_ptr<connector::ConnectorColumnHandle>>& columnHandles,
-    ConnectorQueryCtx* connectorQueryCtx) {
+        std::shared_ptr<connector::common::ConnectorColumnHandle>>& columnHandles,
+    connector::common::ConnectorQueryCtx* connectorQueryCtx) {
   return std::make_unique<HiveDataSource>(
       outputType,
       tableHandle,
@@ -87,11 +87,11 @@ std::unique_ptr<DataSource> HiveConnector::createDataSource(
       hiveConfig_);
 }
 
-std::unique_ptr<DataSink> HiveConnector::createDataSink(
+std::unique_ptr<connector::common::DataSink> HiveConnector::createDataSink(
     RowTypePtr inputType,
-    std::shared_ptr<ConnectorInsertTableHandle> connectorInsertTableHandle,
-    ConnectorQueryCtx* connectorQueryCtx,
-    CommitStrategy commitStrategy) {
+    std::shared_ptr<connector::common::ConnectorInsertTableHandle> connectorInsertTableHandle,
+    connector::common::ConnectorQueryCtx* connectorQueryCtx,
+    connector::common::CommitStrategy commitStrategy) {
   auto hiveInsertHandle = std::dynamic_pointer_cast<HiveInsertTableHandle>(
       connectorInsertTableHandle);
   VELOX_CHECK_NOT_NULL(

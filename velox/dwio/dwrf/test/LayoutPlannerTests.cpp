@@ -99,7 +99,7 @@ TEST_F(LayoutPlannerTest, CreateNodeToColumnIdMapping) {
 TEST_F(LayoutPlannerTest, Basic) {
   auto config = std::make_shared<Config>();
   config->set(
-      Config::COMPRESSION, common::CompressionKind::CompressionKind_NONE);
+      Config::COMPRESSION, velox::common::CompressionKind::CompressionKind_NONE);
   WriterContext context{
       config,
       facebook::velox::memory::memoryManager()->addRootPool(

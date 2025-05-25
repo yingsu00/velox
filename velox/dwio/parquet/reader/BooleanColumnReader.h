@@ -28,7 +28,7 @@ class BooleanColumnReader : public dwio::common::SelectiveByteRleColumnReader {
       const TypePtr& requestedType,
       std::shared_ptr<const dwio::common::TypeWithId> fileType,
       ParquetParams& params,
-      common::ScanSpec& scanSpec)
+      velox::common::ScanSpec& scanSpec)
       : SelectiveByteRleColumnReader(
             requestedType,
             std::move(fileType),

@@ -25,7 +25,7 @@ PrestoIterativeVectorSerializer::PrestoIterativeVectorSerializer(
     const PrestoVectorSerde::PrestoOptions& opts)
     : opts_(opts),
       streamArena_(streamArena),
-      codec_(common::compressionKindToCodec(opts.compressionKind)),
+      codec_(velox::common::compressionKindToCodec(opts.compressionKind)),
       streams_(memory::StlAllocator<VectorStream>(*streamArena->pool())) {
   const auto types = rowType->children();
   const auto numTypes = types.size();
@@ -92,8 +92,8 @@ void PrestoIterativeVectorSerializer::flush(OutputStream* out) {
         out);
   } else {
     if (numCompressionToSkip_ > 0) {
-      const auto noCompressionCodec = common::compressionKindToCodec(
-          common::CompressionKind::CompressionKind_NONE);
+      const auto noCompressionCodec = velox::common::compressionKindToCodec(
+          velox::common::CompressionKind::CompressionKind_NONE);
       auto [size, ignore] = flushStreams(
           streams_, numRows_, *streamArena_, *noCompressionCodec, 1, out);
       stats_.compressionSkippedBytes += size;

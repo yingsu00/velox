@@ -62,7 +62,7 @@ class ColumnChunkMetaDataPtr {
   int64_t dictionaryPageOffset() const;
 
   /// The compression.
-  common::CompressionKind compression() const;
+  velox::common::CompressionKind compression() const;
 
   /// Total byte size of all the compressed (and potentially encrypted)
   /// column data in this row group.

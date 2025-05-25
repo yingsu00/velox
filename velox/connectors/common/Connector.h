@@ -51,7 +51,7 @@ namespace facebook::velox::core {
 struct IndexLookupCondition;
 }
 
-namespace facebook::velox::connector {
+namespace facebook::velox::connector::common {
 
 class DataSource;
 
@@ -155,10 +155,29 @@ class ConnectorInsertTableHandle : public ISerializable {
 
   virtual std::string toString() const = 0;
 
-  folly::dynamic serialize() const override {
-    VELOX_NYI();
-  }
+  folly::dynamic serialize() const override;
 };
+
+/// An opaque handle describing where a connector should write its output.
+class LocationHandle : public ISerializable {
+ public:
+  enum class TableType { kNew, kExisting };
+
+  virtual ~LocationHandle() = default;
+
+  /// The target directory or base URI for the write.
+  virtual const std::string& targetDirectory() const = 0;
+
+  /// Optionally a subdirectory for intermediate or final files.
+  virtual const std::string& writeDirectory() const = 0;
+
+  /// Is this a brand‐new table or an existing one to append to?
+  virtual TableType tableType() const = 0;
+
+  virtual folly::dynamic serialize() const override;
+};
+
+using LocationHandlePtr = std::shared_ptr<connector::common::LocationHandle>;
 
 /// Represents the commit strategy for writing to connector.
 enum class CommitStrategy {
@@ -194,7 +213,7 @@ class DataSink {
     uint64_t recodeTimeNs{0};
     uint64_t compressionTimeNs{0};
 
-    common::SpillStats spillStats;
+    velox::common::SpillStats spillStats;
 
     bool empty() const;
 
@@ -253,7 +272,7 @@ class DataSource {
   /// applies to.
   virtual void addDynamicFilter(
       column_index_t outputChannel,
-      const std::shared_ptr<common::Filter>& filter) = 0;
+      const std::shared_ptr<velox::common::Filter>& filter) = 0;
 
   /// Returns the number of input bytes processed so far.
   virtual uint64_t getCompletedBytes() = 0;
@@ -389,8 +408,8 @@ class ConnectorQueryCtx {
       memory::MemoryPool* operatorPool,
       memory::MemoryPool* connectorPool,
       const config::ConfigBase* sessionProperties,
-      const common::SpillConfig* spillConfig,
-      common::PrefixSortConfig prefixSortConfig,
+      const velox::common::SpillConfig* spillConfig,
+      velox::common::PrefixSortConfig prefixSortConfig,
       std::unique_ptr<core::ExpressionEvaluator> expressionEvaluator,
       cache::AsyncDataCache* cache,
       const std::string& queryId,
@@ -435,11 +454,11 @@ class ConnectorQueryCtx {
     return sessionProperties_;
   }
 
-  const common::SpillConfig* spillConfig() const {
+  const velox::common::SpillConfig* spillConfig() const {
     return spillConfig_;
   }
 
-  const common::PrefixSortConfig& prefixSortConfig() const {
+  const velox::common::PrefixSortConfig& prefixSortConfig() const {
     return prefixSortConfig_;
   }
 
@@ -506,8 +525,8 @@ class ConnectorQueryCtx {
   memory::MemoryPool* const operatorPool_;
   memory::MemoryPool* const connectorPool_;
   const config::ConfigBase* const sessionProperties_;
-  const common::SpillConfig* const spillConfig_;
-  const common::PrefixSortConfig prefixSortConfig_;
+  const velox::common::SpillConfig* const spillConfig_;
+  const velox::common::PrefixSortConfig prefixSortConfig_;
   const std::unique_ptr<core::ExpressionEvaluator> expressionEvaluator_;
   cache::AsyncDataCache* cache_;
   const std::string scanId_;
@@ -555,7 +574,7 @@ class Connector {
       const std::shared_ptr<ConnectorTableHandle>& tableHandle,
       const std::unordered_map<
           std::string,
-          std::shared_ptr<connector::ConnectorColumnHandle>>& columnHandles,
+          std::shared_ptr<ConnectorColumnHandle>>& columnHandles,
       ConnectorQueryCtx* connectorQueryCtx) = 0;
 
   /// Returns true if addSplit of DataSource can use 'dataSource' from
@@ -616,7 +635,7 @@ class Connector {
       const std::shared_ptr<ConnectorTableHandle>& tableHandle,
       const std::unordered_map<
           std::string,
-          std::shared_ptr<connector::ConnectorColumnHandle>>& columnHandles,
+          std::shared_ptr<ConnectorColumnHandle>>& columnHandles,
       ConnectorQueryCtx* connectorQueryCtx) {
     VELOX_UNSUPPORTED(
         "Connector {} does not support index source", connectorId());
@@ -708,4 +727,15 @@ std::shared_ptr<Connector> getConnector(const std::string& connectorId);
 const std::unordered_map<std::string, std::shared_ptr<Connector>>&
 getAllConnectors();
 
-} // namespace facebook::velox::connector
+} // namespace facebook::velox::connector::common
+
+template <>
+struct fmt::formatter<
+    facebook::velox::connector::common::LocationHandle::TableType>
+    : formatter<int> {
+  auto format(
+      facebook::velox::connector::common::LocationHandle::TableType s,
+      format_context& ctx) const {
+    return formatter<int>::format(static_cast<int>(s), ctx);
+  }
+};

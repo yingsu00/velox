@@ -108,16 +108,16 @@ struct ArrowContext {
 };
 
 Compression::type getArrowParquetCompression(
-    common::CompressionKind compression) {
-  if (compression == common::CompressionKind_SNAPPY) {
+    velox::common::CompressionKind compression) {
+  if (compression == velox::common::CompressionKind_SNAPPY) {
     return Compression::SNAPPY;
-  } else if (compression == common::CompressionKind_GZIP) {
+  } else if (compression == velox::common::CompressionKind_GZIP) {
     return Compression::GZIP;
-  } else if (compression == common::CompressionKind_ZSTD) {
+  } else if (compression == velox::common::CompressionKind_ZSTD) {
     return Compression::ZSTD;
-  } else if (compression == common::CompressionKind_NONE) {
+  } else if (compression == velox::common::CompressionKind_NONE) {
     return Compression::UNCOMPRESSED;
-  } else if (compression == common::CompressionKind_LZ4) {
+  } else if (compression == velox::common::CompressionKind_LZ4) {
     return Compression::LZ4_HADOOP;
   } else {
     VELOX_FAIL("Unsupported compression {}", compression);
@@ -142,7 +142,7 @@ std::shared_ptr<WriterProperties> getArrowParquetWriterOptions(
     properties = properties->disable_dictionary();
   }
   properties = properties->compression(getArrowParquetCompression(
-      options.compressionKind.value_or(common::CompressionKind_NONE)));
+      options.compressionKind.value_or(velox::common::CompressionKind_NONE)));
   for (const auto& columnCompressionValues : options.columnCompressionsMap) {
     properties->compression(
         columnCompressionValues.first,
@@ -332,7 +332,7 @@ Writer::Writer(
       static_cast<TimestampUnit>(options.parquetWriteTimestampUnit.value_or(
           TimestampPrecision::kNanoseconds));
   options_.timestampTimeZone = options.parquetWriteTimestampTimeZone;
-  common::testutil::TestValue::adjust(
+  velox::common::testutil::TestValue::adjust(
       "facebook::velox::parquet::Writer::Writer", &options_);
   arrowContext_->properties =
       getArrowParquetWriterOptions(options, flushPolicy_);
@@ -423,7 +423,7 @@ void Writer::write(const VectorPtr& data) {
   // Convert the arrow schema to Schema and then update the column names based
   // on schema_.
   auto arrowSchema = ::arrow::ImportSchema(&schema).ValueOrDie();
-  common::testutil::TestValue::adjust(
+  velox::common::testutil::TestValue::adjust(
       "facebook::velox::parquet::Writer::write", arrowSchema.get());
   std::vector<std::shared_ptr<::arrow::Field>> newFields;
   auto childSize = schema_->size();
@@ -459,7 +459,7 @@ void Writer::write(const VectorPtr& data) {
   arrowContext_->stagingBytes += bytes;
 }
 
-bool Writer::isCodecAvailable(common::CompressionKind compression) {
+bool Writer::isCodecAvailable(velox::common::CompressionKind compression) {
   return arrow::util::Codec::IsAvailable(
       getArrowParquetCompression(compression));
 }

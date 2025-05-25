@@ -628,7 +628,7 @@ Advance WaveDriver::advance(int pipelineIdx) {
       blockingReason_ = exec::BlockingReason::kYield;
       blockingFuture_ = ContinueFuture{folly::Unit{}};
       // A point for test code injection.
-      common::testutil::TestValue::adjust(
+      velox::common::testutil::TestValue::adjust(
           "facebook::velox::wave::WaveDriver::getOutput::yield", this);
       totalWaitLoops += waitLoops;
       waveStats_.waitTime.micros += waitUs;

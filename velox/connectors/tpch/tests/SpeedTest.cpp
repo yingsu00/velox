@@ -27,7 +27,7 @@
 namespace {
 
 /// This a utility binary that helps measure and evaluate how fast we can
-/// generate TPC-H datasets using the TPC-H Connector. You can control the
+/// generate TPC-H datasets using the TPC-H connector::common::Connector. You can control the
 /// generated table, scale factor, number of splits, and number of threads
 /// (drivers) using the flags defined below.
 
@@ -56,21 +56,21 @@ using std::chrono::system_clock;
 class TpchSpeedTest {
  public:
   TpchSpeedTest() {
-    connector::registerConnectorFactory(
+    connector::common::registerConnectorFactory(
         std::make_shared<connector::tpch::TpchConnectorFactory>());
     auto tpchConnector =
-        connector::getConnectorFactory(
+        connector::common::getConnectorFactory(
             connector::tpch::TpchConnectorFactory::kTpchConnectorName)
             ->newConnector(
                 kTpchConnectorId_,
                 std::make_shared<config::ConfigBase>(
                     std::unordered_map<std::string, std::string>()));
-    connector::registerConnector(tpchConnector);
+    connector::common::registerConnector(tpchConnector);
   }
 
   ~TpchSpeedTest() {
-    connector::unregisterConnector(kTpchConnectorId_);
-    connector::unregisterConnectorFactory(
+    connector::common::unregisterConnector(kTpchConnectorId_);
+    connector::common::unregisterConnectorFactory(
         connector::tpch::TpchConnectorFactory::kTpchConnectorName);
   }
 

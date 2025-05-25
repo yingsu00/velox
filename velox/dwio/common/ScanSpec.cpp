@@ -204,7 +204,7 @@ void ScanSpec::moveAdaptationFrom(ScanSpec& other) {
 
 namespace {
 bool testIntFilter(
-    common::Filter* filter,
+    velox::common::Filter* filter,
     dwio::common::IntegerColumnStatistics* intStats,
     bool mayHaveNull) {
   if (!intStats) {
@@ -239,7 +239,7 @@ bool testIntFilter(
 }
 
 bool testDoubleFilter(
-    common::Filter* filter,
+    velox::common::Filter* filter,
     dwio::common::DoubleColumnStatistics* doubleStats,
     bool mayHaveNull) {
   if (!doubleStats) {
@@ -274,7 +274,7 @@ bool testDoubleFilter(
 }
 
 bool testStringFilter(
-    common::Filter* filter,
+    velox::common::Filter* filter,
     dwio::common::StringColumnStatistics* stringStats,
     bool mayHaveNull) {
   if (!stringStats) {
@@ -304,7 +304,7 @@ bool testStringFilter(
 }
 
 bool testBoolFilter(
-    common::Filter* filter,
+    velox::common::Filter* filter,
     dwio::common::BooleanColumnStatistics* boolStats) {
   const auto trueCount = boolStats->getTrueCount();
   const auto falseCount = boolStats->getFalseCount();
@@ -325,7 +325,7 @@ bool testBoolFilter(
 } // namespace
 
 bool testFilter(
-    common::Filter* filter,
+    velox::common::Filter* filter,
     dwio::common::ColumnStatistics* stats,
     uint64_t totalRows,
     const TypePtr& type) {
@@ -343,7 +343,7 @@ bool testFilter(
     mayHaveNull = stats->getNumberOfValues().value() < totalRows;
   }
 
-  if (!mayHaveNull && filter->kind() == common::FilterKind::kIsNull) {
+  if (!mayHaveNull && filter->kind() == velox::common::FilterKind::kIsNull) {
     // IS NULL filter cannot pass.
     return false;
   }

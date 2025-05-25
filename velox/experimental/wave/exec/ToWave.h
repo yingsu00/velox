@@ -26,7 +26,7 @@
 namespace facebook::velox::wave {
 
 using SubfieldMap =
-    folly::F14FastMap<std::string, std::unique_ptr<common::Subfield>>;
+    folly::F14FastMap<std::string, std::unique_ptr<velox::common::Subfield>>;
 
 /// Branch targets when generating device code.
 struct Branches {
@@ -835,7 +835,7 @@ struct Segment {
 
   // If this projects out columns, these are the column names, 1:1 to
   // topLevelDefined.
-  std::vector<common::Subfield*> projectedName;
+  std::vector<velox::common::Subfield*> projectedName;
 
   // intermediates that are unconditionally computed and could be referenced
   // from subsequent places for optimization, e.g. dedupping. Does not include
@@ -867,9 +867,9 @@ class CompileState {
   // Wave equivalents. Returns true if the Driver was changed.
   bool compile();
 
-  common::Subfield* toSubfield(const exec::Expr& expr);
+  velox::common::Subfield* toSubfield(const exec::Expr& expr);
 
-  common::Subfield* toSubfield(const std::string& name);
+  velox::common::Subfield* toSubfield(const std::string& name);
 
   AbstractOperand* newOperand(AbstractOperand& other);
 
@@ -968,7 +968,7 @@ class CompileState {
     return &topScope_;
   }
 
-  AbstractOperand* fieldToOperand(common::Subfield& field, Scope* scope);
+  AbstractOperand* fieldToOperand(velox::common::Subfield& field, Scope* scope);
 
   FunctionMetadata functionReferenced(const AbstractOperand* op);
 

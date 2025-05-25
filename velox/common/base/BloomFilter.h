@@ -62,7 +62,7 @@ class BloomFilter {
   }
 
   void merge(const char* serialized) {
-    common::InputByteStream stream(serialized);
+    velox::common::InputByteStream stream(serialized);
     auto version = stream.read<int8_t>();
     VELOX_USER_CHECK_EQ(kBloomFilterV1, version);
     auto size = stream.read<int32_t>();
@@ -88,7 +88,7 @@ class BloomFilter {
   }
 
   void serialize(char* output) const {
-    common::OutputByteStream stream(output);
+    velox::common::OutputByteStream stream(output);
     stream.appendOne(kBloomFilterV1);
     stream.appendOne((int32_t)bits_.size());
     for (auto bit : bits_) {

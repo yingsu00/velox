@@ -49,7 +49,7 @@ class TableScan : public WaveSourceOperator {
                            ->queryConfig()
                            .preferredOutputBatchRows()) {
     defines_ = std::move(defines);
-    connector_ = connector::getConnector(tableHandle_->connectorId());
+    connector_ = connector::common::getConnector(tableHandle_->connectorId());
   }
 
   std::vector<AdvanceResult> canAdvance(WaveStream& stream) override;
@@ -72,7 +72,7 @@ class TableScan : public WaveSourceOperator {
   void addDynamicFilter(
       const core::PlanNodeId& producer,
       column_index_t outputChannel,
-      const std::shared_ptr<common::Filter>& filter) override;
+      const std::shared_ptr<velox::common::Filter>& filter) override;
 
   static uint64_t ioWaitNanos() {
     return ioWaitNanos_;
@@ -95,7 +95,7 @@ class TableScan : public WaveSourceOperator {
   // DataSource to read 'split'. This source will be prepared in the
   // background on the executor of the connector. If the DataSource is
   // needed before prepare is done, it will be made when needed.
-  void preload(std::shared_ptr<connector::ConnectorSplit> split);
+  void preload(std::shared_ptr<connector::common::ConnectorSplit> split);
 
   // Adds 'stats' to operator stats of the containing WaveDriver. Some
   // stats come from DataSource, others from SplitReader. If
@@ -109,24 +109,24 @@ class TableScan : public WaveSourceOperator {
   // Process-wide IO wait time.
   static std::atomic<uint64_t> ioWaitNanos_;
 
-  const std::shared_ptr<connector::ConnectorTableHandle> tableHandle_;
+  const std::shared_ptr<connector::common::ConnectorTableHandle> tableHandle_;
   const std::unordered_map<
       std::string,
-      std::shared_ptr<connector::ConnectorColumnHandle>>
+      std::shared_ptr<connector::common::ConnectorColumnHandle>>
       columnHandles_;
   exec::DriverCtx* const driverCtx_;
   memory::MemoryPool* const connectorPool_;
   ContinueFuture blockingFuture_{ContinueFuture::makeEmpty()};
   exec::BlockingReason blockingReason_;
   bool needNewSplit_ = true;
-  std::shared_ptr<connector::Connector> connector_;
-  std::shared_ptr<connector::ConnectorQueryCtx> connectorQueryCtx_;
+  std::shared_ptr<connector::common::Connector> connector_;
+  std::shared_ptr<connector::common::ConnectorQueryCtx> connectorQueryCtx_;
   bool noMoreSplits_ = false;
   // Dynamic filters to add to the data source when it gets created.
-  std::unordered_map<column_index_t, std::shared_ptr<common::Filter>>
+  std::unordered_map<column_index_t, std::shared_ptr<velox::common::Filter>>
       pendingDynamicFilters_;
 
-  std::shared_ptr<connector::DataSource> dataSource_;
+  std::shared_ptr<connector::common::DataSource> dataSource_;
 
   std::shared_ptr<WaveDataSource> waveDataSource_;
 
@@ -139,7 +139,7 @@ class TableScan : public WaveSourceOperator {
   // callback can schedule preloads on an executor. These preloads may
   // outlive the Task and therefore need to capture a shared_ptr to
   // it.
-  std::function<void(const std::shared_ptr<connector::ConnectorSplit>&)>
+  std::function<void(const std::shared_ptr<connector::common::ConnectorSplit>&)>
       splitPreloader_{nullptr};
 
   // Count of splits that started background preload.

@@ -232,7 +232,7 @@ class DwrfReader : public dwio::common::Reader {
 
   ~DwrfReader() override = default;
 
-  common::CompressionKind getCompression() const {
+  velox::common::CompressionKind getCompression() const {
     return readerBase_->compressionKind();
   }
 

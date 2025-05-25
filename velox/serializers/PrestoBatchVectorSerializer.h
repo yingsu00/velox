@@ -26,7 +26,7 @@ class PrestoBatchVectorSerializer : public BatchVectorSerializer {
       memory::MemoryPool* pool,
       const PrestoVectorSerde::PrestoOptions& opts)
       : pool_(pool),
-        codec_(common::compressionKindToCodec(opts.compressionKind)),
+        codec_(velox::common::compressionKindToCodec(opts.compressionKind)),
         opts_(opts) {}
 
   void serialize(

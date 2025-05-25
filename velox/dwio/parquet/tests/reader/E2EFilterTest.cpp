@@ -152,10 +152,10 @@ TEST_F(E2EFilterTest, integerDeltaBinaryPack) {
 TEST_F(E2EFilterTest, compression) {
   for (const auto compression :
        {common::CompressionKind_SNAPPY,
-        common::CompressionKind_ZSTD,
-        common::CompressionKind_GZIP,
-        common::CompressionKind_NONE,
-        common::CompressionKind_LZ4}) {
+        velox::common::CompressionKind_ZSTD,
+        velox::common::CompressionKind_GZIP,
+        velox::common::CompressionKind_NONE,
+        velox::common::CompressionKind_LZ4}) {
     if (!facebook::velox::parquet::Writer::isCodecAvailable(compression)) {
       continue;
     }

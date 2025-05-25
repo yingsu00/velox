@@ -98,23 +98,23 @@ class AssertQueryBuilder {
   /// Add a single connector split to the only leaf plan node. Throws if there
   /// are multiple leaf nodes.
   AssertQueryBuilder& split(
-      const std::shared_ptr<connector::ConnectorSplit>& connectorSplit);
+      const std::shared_ptr<connector::common::ConnectorSplit>& connectorSplit);
 
   /// Add a single connector split for the specified plan node.
   AssertQueryBuilder& split(
       const core::PlanNodeId& planNodeId,
-      const std::shared_ptr<connector::ConnectorSplit>& connectorSplit);
+      const std::shared_ptr<connector::common::ConnectorSplit>& connectorSplit);
 
   /// Add multiple connector splits for the specified plan node.
   AssertQueryBuilder& splits(
       const core::PlanNodeId& planNodeId,
-      const std::vector<std::shared_ptr<connector::ConnectorSplit>>&
+      const std::vector<std::shared_ptr<connector::common::ConnectorSplit>>&
           connectorSplits);
 
   /// Add multiple connector splits to the only leaf plan node. Throws if there
   /// are multiple leaf nodes.
   AssertQueryBuilder& splits(
-      const std::vector<std::shared_ptr<connector::ConnectorSplit>>&
+      const std::vector<std::shared_ptr<connector::common::ConnectorSplit>>&
           connectorSplits);
 
   /// Sets the QueryCtx.

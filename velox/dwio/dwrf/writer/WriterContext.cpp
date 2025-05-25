@@ -69,7 +69,7 @@ WriterContext::WriterContext(
   }
   validateConfigs();
   VLOG(2) << fmt::format(
-      "Compression config: {}", common::compressionKindToString(compression_));
+      "Compression config: {}", velox::common::compressionKindToString(compression_));
 }
 
 WriterContext::~WriterContext() {
@@ -96,7 +96,7 @@ void WriterContext::validateConfigs() const {
 
 void WriterContext::initBuffer() {
   VELOX_CHECK_NULL(compressionBuffer_);
-  if (compression_ != common::CompressionKind_NONE) {
+  if (compression_ != velox::common::CompressionKind_NONE) {
     compressionBuffer_ = std::make_unique<dwio::common::DataBuffer<char>>(
         *generalPool_, compressionBlockSize_ + PAGE_HEADER_SIZE);
   }

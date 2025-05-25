@@ -326,7 +326,7 @@ TEST_F(ContainerRowSerdeTest, nested) {
 
   auto nestedArray = makeNullableNestedArrayVector<std::string>(
       {{{{{"1", "2"}}, {{"3", "4"}}}},
-       common::testutil::optionalEmpty,
+       velox::common::testutil::optionalEmpty,
        {{std::nullopt, {}}}});
 
   testRoundTrip(nestedArray);

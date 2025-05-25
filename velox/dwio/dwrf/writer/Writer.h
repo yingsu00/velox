@@ -210,7 +210,7 @@ class Writer : public dwio::common::Writer {
   }
 
   const std::shared_ptr<const dwio::common::TypeWithId> schema_;
-  const common::SpillConfig* const spillConfig_;
+  const velox::common::SpillConfig* const spillConfig_;
   // If not null, used by memory arbitration to track if this file writer is
   // under memory reclaimable section or not.
   tsan_atomic<bool>* const nonReclaimableSection_{nullptr};

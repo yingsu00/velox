@@ -155,25 +155,25 @@ common::CompressionKind thriftCodecToCompressionKind(
     thrift::CompressionCodec::type codec) {
   switch (codec) {
     case thrift::CompressionCodec::UNCOMPRESSED:
-      return common::CompressionKind::CompressionKind_NONE;
+      return velox::common::CompressionKind::CompressionKind_NONE;
       break;
     case thrift::CompressionCodec::SNAPPY:
-      return common::CompressionKind::CompressionKind_SNAPPY;
+      return velox::common::CompressionKind::CompressionKind_SNAPPY;
       break;
     case thrift::CompressionCodec::GZIP:
-      return common::CompressionKind::CompressionKind_GZIP;
+      return velox::common::CompressionKind::CompressionKind_GZIP;
       break;
     case thrift::CompressionCodec::LZO:
-      return common::CompressionKind::CompressionKind_LZO;
+      return velox::common::CompressionKind::CompressionKind_LZO;
       break;
     case thrift::CompressionCodec::LZ4:
-      return common::CompressionKind::CompressionKind_LZ4;
+      return velox::common::CompressionKind::CompressionKind_LZ4;
       break;
     case thrift::CompressionCodec::ZSTD:
-      return common::CompressionKind::CompressionKind_ZSTD;
+      return velox::common::CompressionKind::CompressionKind_ZSTD;
       break;
     case thrift::CompressionCodec::LZ4_RAW:
-      return common::CompressionKind::CompressionKind_LZ4;
+      return velox::common::CompressionKind::CompressionKind_LZ4;
     default:
       VELOX_UNSUPPORTED(
           "Unsupported compression type: " +

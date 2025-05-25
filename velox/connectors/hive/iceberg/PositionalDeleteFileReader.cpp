@@ -28,7 +28,7 @@ PositionalDeleteFileReader::PositionalDeleteFileReader(
     const IcebergDeleteFile& deleteFile,
     const std::string& baseFilePath,
     FileHandleFactory* fileHandleFactory,
-    const ConnectorQueryCtx* connectorQueryCtx,
+    const connector::common::ConnectorQueryCtx* connectorQueryCtx,
     folly::Executor* executor,
     const std::shared_ptr<const HiveConfig>& hiveConfig,
     const std::shared_ptr<io::IoStatistics>& ioStats,
@@ -60,10 +60,10 @@ PositionalDeleteFileReader::PositionalDeleteFileReader(
   //  this batch. If not, no need to proceed.
 
   // Create the ScanSpec for this delete file
-  auto scanSpec = std::make_shared<common::ScanSpec>("<root>");
+  auto scanSpec = std::make_shared<velox::common::ScanSpec>("<root>");
   scanSpec->addField(posColumn_->name, 0);
   auto* pathSpec = scanSpec->getOrCreateChild(filePathColumn_->name);
-  pathSpec->setFilter(std::make_unique<common::BytesValues>(
+  pathSpec->setFilter(std::make_unique<velox::common::BytesValues>(
       std::vector<std::string>({baseFilePath_}), false));
 
   // Create the file schema (in RowType) and split that will be used by readers

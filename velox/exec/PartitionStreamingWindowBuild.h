@@ -29,7 +29,7 @@ class PartitionStreamingWindowBuild : public WindowBuild {
   PartitionStreamingWindowBuild(
       const std::shared_ptr<const core::WindowNode>& windowNode,
       velox::memory::MemoryPool* pool,
-      const common::SpillConfig* spillConfig,
+      const velox::common::SpillConfig* spillConfig,
       tsan_atomic<bool>* nonReclaimableSection);
 
   void addInput(RowVectorPtr input) override;
@@ -38,7 +38,7 @@ class PartitionStreamingWindowBuild : public WindowBuild {
     VELOX_UNREACHABLE();
   }
 
-  std::optional<common::SpillStats> spilledStats() const override {
+  std::optional<velox::common::SpillStats> spilledStats() const override {
     return std::nullopt;
   }
 

@@ -301,7 +301,7 @@ bool checkUtcToEpoch(int year, int mon, int mday, int hour, int min, int sec) {
 } // namespace
 
 TEST(TimestampTest, compareWithToStringAlt) {
-  std::default_random_engine gen(common::testutil::getRandomSeed(42));
+  std::default_random_engine gen(velox::common::testutil::getRandomSeed(42));
   std::uniform_int_distribution<int64_t> distSec(
       Timestamp::kMinSeconds, Timestamp::kMaxSeconds);
   std::uniform_int_distribution<uint64_t> distNano(0, Timestamp::kMaxNanos);
@@ -342,7 +342,7 @@ TEST(TimestampTest, utcToEpoch) {
 }
 
 TEST(TimestampTest, utcToEpochRandomInputs) {
-  std::default_random_engine gen(common::testutil::getRandomSeed(42));
+  std::default_random_engine gen(velox::common::testutil::getRandomSeed(42));
   std::uniform_int_distribution<int32_t> dist(INT32_MIN, INT32_MAX);
   for (int i = 0; i < 10'000; ++i) {
     checkUtcToEpoch(

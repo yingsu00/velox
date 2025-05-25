@@ -46,12 +46,12 @@ class ByteRleEncoder {
    */
   virtual uint64_t add(
       const char* data,
-      const common::Ranges& ranges,
+      const velox::common::Ranges& ranges,
       const uint64_t* nulls) = 0;
 
   virtual uint64_t add(
       const std::function<char(vector_size_t)>& valueAt,
-      const common::Ranges& ranges,
+      const velox::common::Ranges& ranges,
       const std::function<bool(vector_size_t)>& isNullAt) = 0;
 
   /**
@@ -64,13 +64,13 @@ class ByteRleEncoder {
    */
   virtual uint64_t addBits(
       const uint64_t* data,
-      const common::Ranges& ranges,
+      const velox::common::Ranges& ranges,
       const uint64_t* nulls,
       bool invert) = 0;
 
   virtual uint64_t addBits(
       const std::function<bool(vector_size_t)>& valueAt,
-      const common::Ranges& ranges,
+      const velox::common::Ranges& ranges,
       const std::function<bool(vector_size_t)>& isNullAt,
       bool invert) = 0;
 

@@ -22,7 +22,7 @@ template <typename DataT>
 SelectiveDecimalColumnReader<DataT>::SelectiveDecimalColumnReader(
     const std::shared_ptr<const TypeWithId>& fileType,
     DwrfParams& params,
-    common::ScanSpec& scanSpec)
+    velox::common::ScanSpec& scanSpec)
     : SelectiveColumnReader(fileType->type(), fileType, params, scanSpec) {
   EncodingKey encodingKey{fileType_->id(), params.flatMapContext().sequence};
   auto& stripe = params.stripeStreams();
@@ -76,13 +76,13 @@ void SelectiveDecimalColumnReader<DataT>::seekToRowGroup(int64_t index) {
 template <typename DataT>
 template <bool kDense>
 void SelectiveDecimalColumnReader<DataT>::readHelper(
-    common::Filter* filter,
+    velox::common::Filter* filter,
     RowSet rows) {
   ExtractToReader extractValues(this);
-  common::AlwaysTrue alwaysTrue;
+  velox::common::AlwaysTrue alwaysTrue;
   DirectRleColumnVisitor<
       int64_t,
-      common::AlwaysTrue,
+      velox::common::AlwaysTrue,
       decltype(extractValues),
       kDense>
       visitor(alwaysTrue, this, rows, extractValues);
@@ -110,7 +110,7 @@ void SelectiveDecimalColumnReader<DataT>::readHelper(
 
   // decode value stream
   facebook::velox::dwio::common::
-      ColumnVisitor<DataT, common::AlwaysTrue, decltype(extractValues), kDense>
+      ColumnVisitor<DataT, velox::common::AlwaysTrue, decltype(extractValues), kDense>
           valueVisitor(alwaysTrue, this, rows, extractValues);
   decodeWithVisitor<DirectDecoder<true>>(valueDecoder_.get(), valueVisitor);
   readOffset_ += numRows;
@@ -164,7 +164,7 @@ void SelectiveDecimalColumnReader<DataT>::processNulls(
 
 template <typename DataT>
 void SelectiveDecimalColumnReader<DataT>::processFilter(
-    const common::Filter* filter,
+    const velox::common::Filter* filter,
     const RowSet& rows,
     const uint64_t* rawNulls) {
   VELOX_CHECK_NOT_NULL(filter, "Filter must not be null.");
@@ -205,36 +205,36 @@ void SelectiveDecimalColumnReader<DataT>::processFilter(
 
 template <typename DataT>
 void SelectiveDecimalColumnReader<DataT>::process(
-    const common::Filter* filter,
+    const velox::common::Filter* filter,
     const RowSet& rows,
     const uint64_t* rawNulls) {
   // Treat the filter as kAlwaysTrue if any of the following conditions are met:
   // 1) No filter found;
   // 2) Filter is kIsNotNull but rawNulls == NULL (no elements is null).
   auto filterKind =
-      !filter || (filter->kind() == common::FilterKind::kIsNotNull && !rawNulls)
-      ? common::FilterKind::kAlwaysTrue
+      !filter || (filter->kind() == velox::common::FilterKind::kIsNotNull && !rawNulls)
+      ? velox::common::FilterKind::kAlwaysTrue
       : filter->kind();
   switch (filterKind) {
-    case common::FilterKind::kAlwaysTrue:
+    case velox::common::FilterKind::kAlwaysTrue:
       // Simply add all rows to output.
       for (vector_size_t i = 0; i < numValues_; i++) {
         addOutputRow(rows[i]);
       }
       break;
-    case common::FilterKind::kIsNull:
+    case velox::common::FilterKind::kIsNull:
       processNulls(true, rows, rawNulls);
       break;
-    case common::FilterKind::kIsNotNull:
+    case velox::common::FilterKind::kIsNotNull:
       processNulls(false, rows, rawNulls);
       break;
-    case common::FilterKind::kBigintRange:
-    case common::FilterKind::kBigintValuesUsingHashTable:
-    case common::FilterKind::kBigintValuesUsingBitmask:
-    case common::FilterKind::kNegatedBigintRange:
-    case common::FilterKind::kNegatedBigintValuesUsingHashTable:
-    case common::FilterKind::kNegatedBigintValuesUsingBitmask:
-    case common::FilterKind::kBigintMultiRange: {
+    case velox::common::FilterKind::kBigintRange:
+    case velox::common::FilterKind::kBigintValuesUsingHashTable:
+    case velox::common::FilterKind::kBigintValuesUsingBitmask:
+    case velox::common::FilterKind::kNegatedBigintRange:
+    case velox::common::FilterKind::kNegatedBigintValuesUsingHashTable:
+    case velox::common::FilterKind::kNegatedBigintValuesUsingBitmask:
+    case velox::common::FilterKind::kBigintMultiRange: {
       if constexpr (std::is_same_v<DataT, int64_t>) {
         processFilter(filter, rows, rawNulls);
       } else {
@@ -245,8 +245,8 @@ void SelectiveDecimalColumnReader<DataT>::process(
       }
       break;
     }
-    case common::FilterKind::kHugeintValuesUsingHashTable:
-    case common::FilterKind::kHugeintRange: {
+    case velox::common::FilterKind::kHugeintValuesUsingHashTable:
+    case velox::common::FilterKind::kHugeintRange: {
       if constexpr (std::is_same_v<DataT, int128_t>) {
         processFilter(filter, rows, rawNulls);
       } else {

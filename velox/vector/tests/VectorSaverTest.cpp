@@ -648,7 +648,7 @@ TEST_F(VectorSaverTest, exceptionContext) {
   auto messageFunction = [](VeloxException::Type /*exceptionType*/,
                             auto* arg) -> std::string {
     auto* info = static_cast<VectorSaverInfo*>(arg);
-    auto filePath = common::generateTempFilePath(info->path, "vector");
+    auto filePath = velox::common::generateTempFilePath(info->path, "vector");
     if (!filePath.has_value()) {
       return "Cannot generate file path to store the vector.";
     }

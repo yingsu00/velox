@@ -635,7 +635,7 @@ void ExpressionVerifier::persistReproInfo(
   }
 
   // Create a new directory
-  auto dirPath = common::generateTempFolderPath(basePath, "expressionVerifier");
+  auto dirPath = velox::common::generateTempFolderPath(basePath, "expressionVerifier");
   if (!dirPath.has_value()) {
     LOG(INFO) << "Failed to create directory for persisting repro info.";
     return;

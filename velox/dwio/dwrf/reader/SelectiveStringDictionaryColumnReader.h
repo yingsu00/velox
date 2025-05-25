@@ -30,7 +30,7 @@ class SelectiveStringDictionaryColumnReader
   SelectiveStringDictionaryColumnReader(
       const std::shared_ptr<const dwio::common::TypeWithId>& fileType,
       DwrfParams& params,
-      common::ScanSpec& scanSpec);
+      velox::common::ScanSpec& scanSpec);
 
   bool hasBulkPath() const override {
     // Only ORC uses RLEv2 encoding. Currently, ORC string data does not

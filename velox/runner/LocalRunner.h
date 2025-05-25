@@ -15,7 +15,7 @@
  */
 #pragma once
 
-#include "velox/connectors/Connector.h"
+#include "velox/connectors/common/Connector.h"
 #include "velox/exec/Cursor.h"
 #include "velox/exec/Exchange.h"
 #include "velox/runner/MultiFragmentPlan.h"
@@ -28,13 +28,13 @@ namespace facebook::velox::runner {
 class SimpleSplitSource : public SplitSource {
  public:
   explicit SimpleSplitSource(
-      std::vector<std::shared_ptr<connector::ConnectorSplit>> splits)
+      std::vector<std::shared_ptr<connector::common::ConnectorSplit>> splits)
       : splits_(std::move(splits)) {}
 
   virtual std::vector<SplitAndGroup> getSplits(uint64_t targetBytes) override;
 
  private:
-  std::vector<std::shared_ptr<connector::ConnectorSplit>> splits_;
+  std::vector<std::shared_ptr<connector::common::ConnectorSplit>> splits_;
   int32_t splitIdx_{0};
 };
 
@@ -45,7 +45,7 @@ class SimpleSplitSourceFactory : public SplitSourceFactory {
   explicit SimpleSplitSourceFactory(
       std::unordered_map<
           core::PlanNodeId,
-          std::vector<std::shared_ptr<connector::ConnectorSplit>>> nodeSplitMap)
+          std::vector<std::shared_ptr<connector::common::ConnectorSplit>>> nodeSplitMap)
       : nodeSplitMap_(std::move(nodeSplitMap)) {}
 
   std::shared_ptr<SplitSource> splitSourceForScan(
@@ -54,7 +54,7 @@ class SimpleSplitSourceFactory : public SplitSourceFactory {
  private:
   std::unordered_map<
       core::PlanNodeId,
-      std::vector<std::shared_ptr<connector::ConnectorSplit>>>
+      std::vector<std::shared_ptr<connector::common::ConnectorSplit>>>
       nodeSplitMap_;
 };
 

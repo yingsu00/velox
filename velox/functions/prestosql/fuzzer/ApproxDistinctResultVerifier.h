@@ -228,7 +228,7 @@ class ApproxDistinctResultVerifier : public ResultVerifier {
     // standard error when the numGroups >= 50 and the error bound is smaller
     // than or equan to the default error bound.
     bool checkError =
-        (error_ <= common::hll::kDefaultApproxDistinctStandardError ||
+        (error_ <= velox::common::hll::kDefaultApproxDistinctStandardError ||
          numGroups >= 50);
     for (auto i = 0; i < numGroups; ++i) {
       const auto gap =

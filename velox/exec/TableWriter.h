@@ -160,7 +160,7 @@ class TableWriter : public Operator {
   class ConnectorReclaimer : public exec::ParallelMemoryReclaimer {
    public:
     static std::unique_ptr<memory::MemoryReclaimer> create(
-        const std::optional<common::SpillConfig>& spillConfig,
+        const std::optional<velox::common::SpillConfig>& spillConfig,
         DriverCtx* driverCtx,
         Operator* op);
 
@@ -187,7 +187,7 @@ class TableWriter : public Operator {
 
    private:
     ConnectorReclaimer(
-        const std::optional<common::SpillConfig>& spillConfig,
+        const std::optional<velox::common::SpillConfig>& spillConfig,
         const std::shared_ptr<Driver>& driver,
         Operator* op)
         : ParallelMemoryReclaimer(
@@ -210,7 +210,7 @@ class TableWriter : public Operator {
 
   void abortDataSink();
 
-  void updateStats(const connector::DataSink::Stats& stats);
+  void updateStats(const connector::common::DataSink::Stats& stats);
 
   // Sets type mappings in `inputMapping_`, `mappedInputType_`, and
   // `mappedOutputType_`.
@@ -223,18 +223,18 @@ class TableWriter : public Operator {
 
   const DriverCtx* const driverCtx_;
   memory::MemoryPool* const connectorPool_;
-  const std::shared_ptr<connector::ConnectorInsertTableHandle>
+  const std::shared_ptr<connector::common::ConnectorInsertTableHandle>
       insertTableHandle_;
-  const connector::CommitStrategy commitStrategy_;
+  const connector::common::CommitStrategy commitStrategy_;
   // Records the writer operator creation time in ns. This is used to record
   // the running wall time of a writer operator. This can helps to detect the
   // slow scaled writer scheduling in Prestissimo.
   const uint64_t createTimeUs_{0};
 
   std::unique_ptr<Operator> aggregation_;
-  std::shared_ptr<connector::Connector> connector_;
-  std::shared_ptr<connector::ConnectorQueryCtx> connectorQueryCtx_;
-  std::unique_ptr<connector::DataSink> dataSink_;
+  std::shared_ptr<connector::common::Connector> connector_;
+  std::shared_ptr<connector::common::ConnectorQueryCtx> connectorQueryCtx_;
+  std::unique_ptr<connector::common::DataSink> dataSink_;
 
   // Contains the mappings between input and output columns.
   std::vector<column_index_t> inputMapping_;

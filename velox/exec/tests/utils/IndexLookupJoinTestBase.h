@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "velox/connectors/Connector.h"
+#include "../../../connectors/common/Connector.h"
 #include "velox/core/PlanNode.h"
 #include "velox/exec/tests/utils/AssertQueryBuilder.h"
 #include "velox/exec/tests/utils/HiveConnectorTestBase.h"
@@ -122,12 +122,12 @@ class IndexLookupJoinTestBase
   facebook::velox::core::TableScanNodePtr makeIndexScanNode(
       const std::shared_ptr<facebook::velox::core::PlanNodeIdGenerator>&
           planNodeIdGenerator,
-      const std::shared_ptr<facebook::velox::connector::ConnectorTableHandle>
+      const std::shared_ptr<facebook::velox::connector::common::ConnectorTableHandle>
           indexTableHandle,
       const facebook::velox::RowTypePtr& outputType,
       std::unordered_map<
           std::string,
-          std::shared_ptr<facebook::velox::connector::ConnectorColumnHandle>>&
+          std::shared_ptr<facebook::velox::connector::common::ConnectorColumnHandle>>&
           assignments);
 
   /// Generate sequence storage table which will be persisted by mock zippydb

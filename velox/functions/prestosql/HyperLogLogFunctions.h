@@ -30,8 +30,8 @@ struct CardinalityFunction {
   FOLLY_ALWAYS_INLINE bool call(
       int64_t& result,
       const arg_type<HyperLogLog>& hll) {
-    using common::hll::DenseHll;
-    using common::hll::SparseHll;
+    using velox::common::hll::DenseHll;
+    using velox::common::hll::SparseHll;
 
     if (SparseHll::canDeserialize(hll.data())) {
       result = SparseHll::cardinality(hll.data());
@@ -48,7 +48,7 @@ struct EmptyApproxSetFunction {
 
   FOLLY_ALWAYS_INLINE bool call(out_type<HyperLogLog>& result) {
     static const std::string kEmpty =
-        common::hll::SparseHll::serializeEmpty(12);
+        velox::common::hll::SparseHll::serializeEmpty(12);
 
     result.resize(kEmpty.size());
     memcpy(result.data(), kEmpty.data(), kEmpty.size());
@@ -68,9 +68,9 @@ struct EmptyApproxSetWithMaxErrorFunction {
     VELOX_USER_CHECK_NOT_NULL(
         maxStandardError,
         "empty_approx_set function requires constant value for maxStandardError argument");
-    common::hll::checkMaxStandardError(*maxStandardError);
-    serialized_ = common::hll::SparseHll::serializeEmpty(
-        common::hll::toIndexBitLength(*maxStandardError));
+    velox::common::hll::checkMaxStandardError(*maxStandardError);
+    serialized_ = velox::common::hll::SparseHll::serializeEmpty(
+        velox::common::hll::toIndexBitLength(*maxStandardError));
   }
 
   FOLLY_ALWAYS_INLINE bool call(

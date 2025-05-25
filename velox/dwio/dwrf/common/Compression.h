@@ -60,7 +60,7 @@ inline CompressionOptions getDwrfOrcCompressionOptions(
  * @param config The compression options to use
  */
 inline std::unique_ptr<dwio::common::BufferedOutputStream> createCompressor(
-    common::CompressionKind kind,
+    velox::common::CompressionKind kind,
     CompressionBufferPool& bufferPool,
     dwio::common::DataBufferHolder& bufferHolder,
     const Config& config,
@@ -72,7 +72,7 @@ inline std::unique_ptr<dwio::common::BufferedOutputStream> createCompressor(
       config.get(Config::ZSTD_COMPRESSION_LEVEL));
   auto compressor = createCompressor(kind, dwrfOrcCompressionOptions);
   if (!compressor) {
-    if (!encrypter && kind == common::CompressionKind::CompressionKind_NONE) {
+    if (!encrypter && kind == velox::common::CompressionKind::CompressionKind_NONE) {
       return std::make_unique<dwio::common::BufferedOutputStream>(bufferHolder);
     }
   }
@@ -86,14 +86,14 @@ inline std::unique_ptr<dwio::common::BufferedOutputStream> createCompressor(
 }
 
 inline CompressionOptions getDwrfOrcDecompressionOptions(
-    common::CompressionKind kind) {
+    velox::common::CompressionKind kind) {
   CompressionOptions options{};
-  if (kind == common::CompressionKind_ZLIB ||
-      kind == common::CompressionKind_GZIP) {
+  if (kind == velox::common::CompressionKind_ZLIB ||
+      kind == velox::common::CompressionKind_GZIP) {
     options.format.zlib.windowBits = Compressor::DWRF_ORC_ZLIB_WINDOW_BITS;
   } else if (
-      kind == common::CompressionKind_LZ4 ||
-      kind == common::CompressionKind_LZO) {
+      kind == velox::common::CompressionKind_LZ4 ||
+      kind == velox::common::CompressionKind_LZO) {
     options.format.lz4_lzo.isHadoopFrameFormat = false;
   }
   return options;

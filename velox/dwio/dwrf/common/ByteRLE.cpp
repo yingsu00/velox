@@ -34,17 +34,17 @@ class ByteRleEncoderImpl : public ByteRleEncoder {
 
   uint64_t add(
       const char* data,
-      const common::Ranges& ranges,
+      const velox::common::Ranges& ranges,
       const uint64_t* nulls) override;
 
   uint64_t add(
       const std::function<char(vector_size_t)>& valueAt,
-      const common::Ranges& ranges,
+      const velox::common::Ranges& ranges,
       const std::function<bool(vector_size_t)>& isNullAt) override;
 
   uint64_t addBits(
       const uint64_t* data,
-      const common::Ranges& ranges,
+      const velox::common::Ranges& ranges,
       const uint64_t* nulls,
       bool invert) override {
     throw std::runtime_error("addBits is only for bool stream");
@@ -52,7 +52,7 @@ class ByteRleEncoderImpl : public ByteRleEncoder {
 
   uint64_t addBits(
       const std::function<bool(vector_size_t)>& isNullAt,
-      const common::Ranges& ranges,
+      const velox::common::Ranges& ranges,
       const std::function<bool(vector_size_t)>& valueAt,
       bool invert) override {
     throw std::runtime_error("addBits is only for bool stream");
@@ -96,7 +96,7 @@ void ByteRleEncoderImpl::writeByte(char c) {
 
 uint64_t ByteRleEncoderImpl::add(
     const char* data,
-    const common::Ranges& ranges,
+    const velox::common::Ranges& ranges,
     const uint64_t* nulls) {
   uint64_t count = 0;
   if (nulls) {
@@ -117,7 +117,7 @@ uint64_t ByteRleEncoderImpl::add(
 
 uint64_t ByteRleEncoderImpl::add(
     const std::function<char(vector_size_t)>& valueAt,
-    const common::Ranges& ranges,
+    const velox::common::Ranges& ranges,
     const std::function<bool(vector_size_t)>& isNullAt) {
   uint64_t count = 0;
   if (isNullAt) {
@@ -219,18 +219,18 @@ class BooleanRleEncoderImpl : public ByteRleEncoderImpl {
 
   uint64_t add(
       const char* data,
-      const common::Ranges& ranges,
+      const velox::common::Ranges& ranges,
       const uint64_t* nulls) override;
 
   uint64_t addBits(
       const uint64_t* data,
-      const common::Ranges& ranges,
+      const velox::common::Ranges& ranges,
       const uint64_t* nulls,
       bool invert) override;
 
   uint64_t addBits(
       const std::function<bool(vector_size_t)>& isNullAt,
-      const common::Ranges& ranges,
+      const velox::common::Ranges& ranges,
       const std::function<bool(vector_size_t)>& valueAt,
       bool invert) override;
 
@@ -268,7 +268,7 @@ class BooleanRleEncoderImpl : public ByteRleEncoderImpl {
 
 uint64_t BooleanRleEncoderImpl::add(
     const char* data,
-    const common::Ranges& ranges,
+    const velox::common::Ranges& ranges,
     const uint64_t* nulls) {
   uint64_t count = 0;
   if (nulls) {
@@ -289,7 +289,7 @@ uint64_t BooleanRleEncoderImpl::add(
 
 uint64_t BooleanRleEncoderImpl::addBits(
     const uint64_t* data,
-    const common::Ranges& ranges,
+    const velox::common::Ranges& ranges,
     const uint64_t* nulls,
     bool invert) {
   uint64_t count = 0;
@@ -313,7 +313,7 @@ uint64_t BooleanRleEncoderImpl::addBits(
 
 uint64_t BooleanRleEncoderImpl::addBits(
     const std::function<bool(vector_size_t)>& valueAt,
-    const common::Ranges& ranges,
+    const velox::common::Ranges& ranges,
     const std::function<bool(vector_size_t)>& isNullAt,
     bool invert) {
   uint64_t count = 0;

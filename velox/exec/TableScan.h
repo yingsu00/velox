@@ -53,7 +53,7 @@ class TableScan : public SourceOperator {
   void addDynamicFilter(
       const core::PlanNodeId& producer,
       column_index_t outputChannel,
-      const std::shared_ptr<common::Filter>& filter) override;
+      const std::shared_ptr<velox::common::Filter>& filter) override;
 
   /// The name of runtime stats specific to table scan.
   /// The number of running table scan drivers.
@@ -88,7 +88,7 @@ class TableScan : public SourceOperator {
   // read 'split'. This source will be prepared in the background on the
   // executor of the connector. If the DataSource is needed before prepare is
   // done, it will be made when needed.
-  void preload(const std::shared_ptr<connector::ConnectorSplit>& split);
+  void preload(const std::shared_ptr<connector::common::ConnectorSplit>& split);
 
   // Invoked by scan operator to check if it needs to stop to wait for scale up.
   bool shouldWaitForScaleUp();
@@ -98,16 +98,16 @@ class TableScan : public SourceOperator {
   // processing or not.
   void tryScaleUp();
 
-  const std::shared_ptr<connector::ConnectorTableHandle> tableHandle_;
+  const std::shared_ptr<connector::common::ConnectorTableHandle> tableHandle_;
   const std::unordered_map<
       std::string,
-      std::shared_ptr<connector::ConnectorColumnHandle>>
+      std::shared_ptr<connector::common::ConnectorColumnHandle>>
       columnHandles_;
   DriverCtx* const driverCtx_;
   const int32_t maxSplitPreloadPerDriver_{0};
   const vector_size_t maxReadBatchSize_;
   memory::MemoryPool* const connectorPool_;
-  const std::shared_ptr<connector::Connector> connector_;
+  const std::shared_ptr<connector::common::Connector> connector_;
   // Exits getOutput() method after this many milliseconds. Zero means 'no
   // limit'.
   const size_t getOutputTimeLimitMs_{0};
@@ -122,11 +122,11 @@ class TableScan : public SourceOperator {
   BlockingReason blockingReason_{BlockingReason::kNotBlocked};
   int64_t currentSplitWeight_{0};
   bool needNewSplit_ = true;
-  std::shared_ptr<connector::ConnectorQueryCtx> connectorQueryCtx_;
-  std::unique_ptr<connector::DataSource> dataSource_;
+  std::shared_ptr<connector::common::ConnectorQueryCtx> connectorQueryCtx_;
+  std::unique_ptr<connector::common::DataSource> dataSource_;
   bool noMoreSplits_ = false;
   // Dynamic filters to add to the data source when it gets created.
-  std::unordered_map<column_index_t, std::shared_ptr<common::Filter>>
+  std::unordered_map<column_index_t, std::shared_ptr<velox::common::Filter>>
       dynamicFilters_;
 
   int32_t maxPreloadedSplits_{0};
@@ -135,7 +135,7 @@ class TableScan : public SourceOperator {
   // callback's lifetime is the lifetime of 'this'. This callback can schedule
   // preloads on an executor. These preloads may outlive the Task and therefore
   // need to capture a shared_ptr to it.
-  std::function<void(const std::shared_ptr<connector::ConnectorSplit>&)>
+  std::function<void(const std::shared_ptr<connector::common::ConnectorSplit>&)>
       splitPreloader_{nullptr};
 
   // Count of splits that started background preload.

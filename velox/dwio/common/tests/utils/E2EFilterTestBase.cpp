@@ -281,7 +281,7 @@ bool E2EFilterTestBase::loadWithHook(
 }
 
 void E2EFilterTestBase::testReadWithFilterLazy(
-    const std::shared_ptr<common::ScanSpec>& spec,
+    const std::shared_ptr<velox::common::ScanSpec>& spec,
     const MutationSpec& mutations,
     const std::vector<RowVectorPtr>& batches,
     const std::vector<uint64_t>& hitRows) {
@@ -486,13 +486,13 @@ void E2EFilterTestBase::testRunLengthDictionaryScenario(
 
 void E2EFilterTestBase::testMetadataFilterImpl(
     const std::vector<RowVectorPtr>& batches,
-    common::Subfield filterField,
-    std::unique_ptr<common::Filter> filter,
+    velox::common::Subfield filterField,
+    std::unique_ptr<velox::common::Filter> filter,
     core::ExpressionEvaluator* evaluator,
     const std::string& remainingFilter,
     std::function<bool(int64_t, int64_t)> validationFilter) {
   SCOPED_TRACE(fmt::format("remainingFilter={}", remainingFilter));
-  auto spec = std::make_shared<common::ScanSpec>("<root>");
+  auto spec = std::make_shared<velox::common::ScanSpec>("<root>");
   if (filter) {
     spec->getOrCreateChild(std::move(filterField))
         ->setFilter(std::move(filter));
@@ -502,9 +502,9 @@ void E2EFilterTestBase::testMetadataFilterImpl(
       untypedExpr, batches[0]->type(), leafPool_.get());
   auto metadataFilter =
       std::make_shared<MetadataFilter>(*spec, *typedExpr, evaluator);
-  auto specA = spec->getOrCreateChild(common::Subfield("a"));
-  auto specB = spec->getOrCreateChild(common::Subfield("b"));
-  auto specC = spec->getOrCreateChild(common::Subfield("b.c"));
+  auto specA = spec->getOrCreateChild(velox::common::Subfield("a"));
+  auto specB = spec->getOrCreateChild(velox::common::Subfield("b"));
+  auto specC = spec->getOrCreateChild(velox::common::Subfield("b.c"));
   specA->setProjectOut(true);
   specA->setChannel(0);
   specB->setProjectOut(true);
@@ -591,14 +591,14 @@ void E2EFilterTestBase::testMetadataFilter() {
 
   testMetadataFilterImpl(
       batches,
-      common::Subfield("a"),
+      velox::common::Subfield("a"),
       nullptr,
       &evaluator,
       "a >= 9 or not (a < 4 and b.c >= 2)",
       [](int64_t a, int64_t c) { return a >= 9 || !(a < 4 && c >= 2); });
   testMetadataFilterImpl(
       batches,
-      common::Subfield("a"),
+      velox::common::Subfield("a"),
       exec::greaterThanOrEqual(1),
       &evaluator,
       "a >= 9 or not (a < 4 and b.c >= 2)",
@@ -607,14 +607,14 @@ void E2EFilterTestBase::testMetadataFilter() {
       });
   testMetadataFilterImpl(
       batches,
-      common::Subfield("a"),
+      velox::common::Subfield("a"),
       nullptr,
       &evaluator,
       "a in (1, 3, 8) or a >= 9",
       [](int64_t a, int64_t) { return a == 1 || a == 3 || a == 8 || a >= 9; });
   testMetadataFilterImpl(
       batches,
-      common::Subfield("a"),
+      velox::common::Subfield("a"),
       nullptr,
       &evaluator,
       "not (a not in (2, 3, 5, 7))",
@@ -631,7 +631,7 @@ void E2EFilterTestBase::testMetadataFilter() {
     writeToMemory(batches[0]->type(), batches, false);
     testMetadataFilterImpl(
         batches,
-        common::Subfield("a"),
+        velox::common::Subfield("a"),
         nullptr,
         &evaluator,
         "not (a = 1 and b.c = 2)",
@@ -643,7 +643,7 @@ void E2EFilterTestBase::testMetadataFilter() {
     batches = {
         vectorMaker.rowVector({"a", "b", "c"}, {column, column, column})};
     writeToMemory(batches[0]->type(), batches, false);
-    auto spec = std::make_shared<common::ScanSpec>("<root>");
+    auto spec = std::make_shared<velox::common::ScanSpec>("<root>");
     spec->addAllChildFields(*batches[0]->type());
     auto untypedExpr = parse::parseExpr("a = 1 or b + c = 2", {});
     auto typedExpr = core::Expressions::inferTypes(
@@ -685,7 +685,7 @@ void E2EFilterTestBase::testSubfieldsPruning() {
         vectorMaker.rowVector({"a", "b", "c", "d"}, {a, b, c, d}));
   }
   writeToMemory(batches[0]->type(), batches, false);
-  auto spec = std::make_shared<common::ScanSpec>("<root>");
+  auto spec = std::make_shared<velox::common::ScanSpec>("<root>");
   std::vector<int64_t> requiredA;
   for (int i = 0; i <= batchSize_ + batchCount_ - 2; ++i) {
     if (i % 13 != 0) {
@@ -693,20 +693,20 @@ void E2EFilterTestBase::testSubfieldsPruning() {
     }
   }
   spec->addFieldRecursively("a", *BIGINT(), 0)
-      ->setFilter(common::createBigintValues(requiredA, false));
+      ->setFilter(velox::common::createBigintValues(requiredA, false));
   std::vector<int64_t> requiredB;
   for (int i = 0; i < kMapSize; i += 2) {
     requiredB.push_back(i);
   }
   auto specB = spec->addFieldRecursively("b", *MAP(BIGINT(), BIGINT()), 1);
   specB->setFilter(exec::isNotNull());
-  specB->childByName(common::ScanSpec::kMapKeysFieldName)
-      ->setFilter(common::createBigintValues(requiredB, false));
+  specB->childByName(velox::common::ScanSpec::kMapKeysFieldName)
+      ->setFilter(velox::common::createBigintValues(requiredB, false));
   spec->addFieldRecursively("c", *ARRAY(BIGINT()), 2)
       ->setMaxArrayElementsCount(6);
   auto specD = spec->addFieldRecursively("d", *MAP(BIGINT(), VARCHAR()), 3);
-  specD->childByName(common::ScanSpec::kMapKeysFieldName)
-      ->setFilter(common::createBigintValues({1}, false));
+  specD->childByName(velox::common::ScanSpec::kMapKeysFieldName)
+      ->setFilter(velox::common::createBigintValues({1}, false));
   ReaderOptions readerOpts{leafPool_.get()};
   RowReaderOptions rowReaderOpts;
   auto input = std::make_unique<BufferedInput>(
@@ -780,7 +780,7 @@ void E2EFilterTestBase::testMutationCornerCases() {
   // 1. Interleave batches with and without deletions.
   // 2. Whole batch deletion.
   // 3. Delete last a few rows in a batch.
-  auto spec = std::make_shared<common::ScanSpec>("<root>");
+  auto spec = std::make_shared<velox::common::ScanSpec>("<root>");
   spec->addAllChildFields(*rowType);
   RowReaderOptions rowReaderOpts;
   setUpRowReaderOptions(rowReaderOpts, spec);
@@ -838,7 +838,7 @@ void E2EFilterTestBase::testMutationCornerCases() {
   ASSERT_EQ(totalScanned, 1000);
 
   // No child reader.
-  spec = std::make_shared<common::ScanSpec>("<root>");
+  spec = std::make_shared<velox::common::ScanSpec>("<root>");
   setUpRowReaderOptions(rowReaderOpts, spec);
   rowReader = reader->createRowReader(rowReaderOpts);
   result = BaseVector::create(ROW({}), 0, leafPool_.get());

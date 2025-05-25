@@ -141,7 +141,7 @@ TEST_F(FilterSerDeTest, multiRangeFilter) {
 }
 
 TEST_F(FilterSerDeTest, multiFilter) {
-  std::vector<std::unique_ptr<common::Filter>> filters;
+  std::vector<std::unique_ptr<velox::common::Filter>> filters;
   filters.emplace_back(std::make_unique<AlwaysTrue>());
   filters.emplace_back(std::make_unique<BoolValue>(false, true));
   filters.emplace_back(

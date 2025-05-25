@@ -132,7 +132,7 @@ OperatorTraceSplitReader::getSplitInputStream(
 
 // static
 std::vector<std::string> OperatorTraceSplitReader::deserialize(
-    common::FileInputStream* stream) {
+    velox::common::FileInputStream* stream) {
   std::vector<std::string> splits;
   try {
     while (!stream->atEnd()) {

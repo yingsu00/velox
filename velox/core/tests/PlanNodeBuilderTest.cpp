@@ -42,12 +42,12 @@ class PlanNodeBuilderTest : public testing::Test, public test::VectorTestBase {
           .build();
 };
 
-// A dummy implementation of ConnectorTableHandle that supports index lookup.
+// A dummy implementation of connector::common::ConnectorTableHandle that supports index lookup.
 class TestConnectorTableHandleForLookupJoin
-    : public connector::ConnectorTableHandle {
+    : public connector::common::ConnectorTableHandle {
  public:
   explicit TestConnectorTableHandleForLookupJoin(std::string connectorId)
-      : connector::ConnectorTableHandle(std::move(connectorId)) {}
+      : connector::common::ConnectorTableHandle(std::move(connectorId)) {}
 
   bool supportsIndexLookup() const override {
     return true;
@@ -185,13 +185,13 @@ TEST_F(PlanNodeBuilderTest, TableScanNode) {
   const PlanNodeId id = "table_scan_node_id";
   const RowTypePtr outputType = ROW({"c0", "c1"}, {INTEGER(), VARCHAR()});
   const auto tableHandle =
-      std::make_shared<connector::ConnectorTableHandle>("connector_id");
+      std::make_shared<connector::common::ConnectorTableHandle>("connector_id");
   const std::unordered_map<
       std::string,
-      std::shared_ptr<connector::ConnectorColumnHandle>>
+      std::shared_ptr<connector::common::ConnectorColumnHandle>>
       assignments{
-          {"c0", std::make_shared<connector::ConnectorColumnHandle>()},
-          {"c1", std::make_shared<connector::ConnectorColumnHandle>()}};
+          {"c0", std::make_shared<connector::common::ConnectorColumnHandle>()},
+          {"c1", std::make_shared<connector::common::ConnectorColumnHandle>()}};
 
   const auto verify = [&](const std::shared_ptr<const TableScanNode>& node) {
     EXPECT_EQ(node->id(), id);
@@ -270,7 +270,7 @@ TEST_F(PlanNodeBuilderTest, TableWriteNode) {
   const std::vector<std::string> columnNames{"c0"};
   const RowTypePtr outputType = ROW({"c1"}, {BIGINT()});
   const bool hasPartitioningScheme = true;
-  const auto commitStrategy = connector::CommitStrategy::kNoCommit;
+  const auto commitStrategy = connector::common::CommitStrategy::kNoCommit;
 
   const auto aggregationNode = AggregationNode::Builder()
                                    .id("aggregation_node_id")
@@ -690,7 +690,7 @@ TEST_F(PlanNodeBuilderTest, IndexLookupJoinNode) {
           .tableHandle(std::make_shared<TestConnectorTableHandleForLookupJoin>(
               "connector_id"))
           .assignments(
-              {{"c1", std::make_shared<connector::ConnectorColumnHandle>()}})
+              {{"c1", std::make_shared<connector::common::ConnectorColumnHandle>()}})
           .build();
   const auto outputType = ROW({"c0"}, {BIGINT()});
 

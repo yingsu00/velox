@@ -1183,8 +1183,8 @@ HashBuildSpiller::HashBuildSpiller(
     RowContainer* container,
     RowTypePtr rowType,
     HashBitRange bits,
-    const common::SpillConfig* spillConfig,
-    folly::Synchronized<common::SpillStats>* spillStats)
+    const velox::common::SpillConfig* spillConfig,
+    folly::Synchronized<velox::common::SpillStats>* spillStats)
     : SpillerBase(
           container,
           std::move(rowType),

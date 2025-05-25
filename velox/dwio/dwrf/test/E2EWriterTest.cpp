@@ -241,12 +241,12 @@ class E2EWriterTest : public testing::Test {
     }
   }
 
-  static common::SpillConfig getSpillConfig(
+  static velox::common::SpillConfig getSpillConfig(
       int32_t minSpillableReservationPct,
       int32_t spillableReservationGrowthPct,
       uint64_t writerFlushThresholdSize = 0) {
     static const std::string emptySpillFolder = "";
-    return common::SpillConfig(
+    return velox::common::SpillConfig(
         [&]() -> const std::string& { return emptySpillFolder; },
         [&](uint64_t) {},
         "fakeSpillConfig",
@@ -1642,7 +1642,7 @@ TEST_F(E2EWriterTest, memoryConfigError) {
 
   dwrf::WriterOptions options;
   options.schema = type;
-  const common::SpillConfig spillConfig = getSpillConfig(10, 20);
+  const velox::common::SpillConfig spillConfig = getSpillConfig(10, 20);
   options.spillConfig = &spillConfig;
   auto writerPool = memory::memoryManager()->addRootPool(
       "memoryReclaim", 1L << 30, exec::MemoryReclaimer::create());
@@ -1674,7 +1674,7 @@ DEBUG_ONLY_TEST_F(E2EWriterTest, memoryReclaimOnWrite) {
   for (int i = 0; i < 10; ++i) {
     vectors.push_back(fuzzer.fuzzInputRow(type));
   }
-  const common::SpillConfig spillConfig = getSpillConfig(10, 20);
+  const velox::common::SpillConfig spillConfig = getSpillConfig(10, 20);
   for (bool enableReclaim : {false, true}) {
     SCOPED_TRACE(fmt::format("enableReclaim {}", enableReclaim));
 
@@ -1801,7 +1801,7 @@ DEBUG_ONLY_TEST_F(E2EWriterTest, memoryReclaimOnFlush) {
   for (int i = 0; i < 10; ++i) {
     vectors.push_back(fuzzer.fuzzInputRow(type));
   }
-  const common::SpillConfig spillConfig = getSpillConfig(10, 20);
+  const velox::common::SpillConfig spillConfig = getSpillConfig(10, 20);
   for (bool enableReclaim : {false, true}) {
     SCOPED_TRACE(fmt::format("enableReclaim {}", enableReclaim));
 
@@ -1887,7 +1887,7 @@ TEST_F(E2EWriterTest, memoryReclaimAfterClose) {
     vectors.push_back(fuzzer.fuzzInputRow(type));
   }
 
-  const common::SpillConfig spillConfig = getSpillConfig(10, 20);
+  const velox::common::SpillConfig spillConfig = getSpillConfig(10, 20);
   struct {
     bool canReclaim;
     bool abort;
@@ -1984,7 +1984,7 @@ DEBUG_ONLY_TEST_F(E2EWriterTest, memoryReclaimDuringInit) {
       },
       leafPool_.get());
 
-  const common::SpillConfig spillConfig = getSpillConfig(10, 20);
+  const velox::common::SpillConfig spillConfig = getSpillConfig(10, 20);
   for (const auto& reclaimable : {false, true}) {
     SCOPED_TRACE(fmt::format("reclaimable {}", reclaimable));
 
@@ -2074,7 +2074,7 @@ DEBUG_ONLY_TEST_F(E2EWriterTest, memoryReclaimThreshold) {
         "writerFlushThresholdSize {}",
         succinctBytes(writerFlushThresholdSize)));
 
-    const common::SpillConfig spillConfig =
+    const velox::common::SpillConfig spillConfig =
         getSpillConfig(10, 20, writerFlushThresholdSize);
     auto config = std::make_shared<dwrf::Config>();
     config->set<uint64_t>(dwrf::Config::STRIPE_SIZE, 1L << 30);

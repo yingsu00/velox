@@ -31,7 +31,7 @@ class SelectiveDecimalColumnReader : public SelectiveColumnReader {
   SelectiveDecimalColumnReader(
       const std::shared_ptr<const TypeWithId>& fileType,
       DwrfParams& params,
-      common::ScanSpec& scanSpec);
+      velox::common::ScanSpec& scanSpec);
 
   bool hasBulkPath() const override {
     // Only ORC uses RLEv2 encoding. Currently, ORC decimal data does not
@@ -49,20 +49,20 @@ class SelectiveDecimalColumnReader : public SelectiveColumnReader {
 
  private:
   template <bool kDense>
-  void readHelper(common::Filter* filter, RowSet rows);
+  void readHelper(velox::common::Filter* filter, RowSet rows);
 
   // Process IsNull and IsNotNull filters.
   void processNulls(bool isNull, const RowSet& rows, const uint64_t* rawNulls);
 
   // Process filters on decimal values.
   void processFilter(
-      const common::Filter* filter,
+      const velox::common::Filter* filter,
       const RowSet& rows,
       const uint64_t* rawNulls);
 
   // Dispatch to the respective filter processing based on the filter type.
   void process(
-      const common::Filter* filter,
+      const velox::common::Filter* filter,
       const RowSet& rows,
       const uint64_t* rawNulls);
 

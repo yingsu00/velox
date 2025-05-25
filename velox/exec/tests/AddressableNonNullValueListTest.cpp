@@ -129,7 +129,7 @@ class AddressableNonNullValueListTest : public testing::Test,
     // Deserialize entries from the stream.
     AddressableNonNullValueList deserialized;
     std::vector<T> deserializedEntries;
-    common::InputByteStream stream(rawBuffer);
+    velox::common::InputByteStream stream(rawBuffer);
     while (stream.offset() < totalSize) {
       auto length = stream.read<vector_size_t>();
       auto hash = stream.read<uint64_t>();

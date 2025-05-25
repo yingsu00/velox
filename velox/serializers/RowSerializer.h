@@ -47,7 +47,7 @@ class RowSerializer : public IterativeVectorSerializer {
   RowSerializer(memory::MemoryPool* pool, const VectorSerde::Options* options)
       : pool_(pool),
         options_(options == nullptr ? VectorSerde::Options() : *options),
-        codec_(common::compressionKindToCodec(options_.compressionKind)) {}
+        codec_(velox::common::compressionKindToCodec(options_.compressionKind)) {}
 
   void append(
       const RowVectorPtr& vector,
@@ -394,13 +394,13 @@ class RowDeserializer {
         ? VectorSerde::Options().compressionKind
         : options->compressionKind;
     VELOX_DCHECK_NE(
-        compressionKind, common::CompressionKind::CompressionKind_NONE);
+        compressionKind, velox::common::CompressionKind::CompressionKind_NONE);
     auto compressBuf = folly::IOBuf::create(header.compressedSize);
     source->readBytes(compressBuf->writableData(), header.compressedSize);
     compressBuf->append(header.compressedSize);
 
     // Process chained uncompressed results IOBufs.
-    const auto codec = common::compressionKindToCodec(compressionKind);
+    const auto codec = velox::common::compressionKindToCodec(compressionKind);
     auto uncompressedBuf =
         codec->uncompress(compressBuf.get(), header.uncompressedSize);
 

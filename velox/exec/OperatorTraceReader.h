@@ -42,7 +42,7 @@ class OperatorTraceInputReader {
   const std::string traceDir_;
   const serializer::presto::PrestoVectorSerde::PrestoOptions readOptions_{
       true,
-      common::CompressionKind_ZSTD, // TODO: Use trace config.
+      velox::common::CompressionKind_ZSTD, // TODO: Use trace config.
       0.8,
       /*_nullsFirst=*/true};
   const std::shared_ptr<filesystems::FileSystem> fs_;
@@ -86,7 +86,7 @@ class OperatorTraceSplitReader {
   std::vector<std::string> read() const;
 
  private:
-  static std::vector<std::string> deserialize(common::FileInputStream* stream);
+  static std::vector<std::string> deserialize(velox::common::FileInputStream* stream);
 
   std::unique_ptr<common::FileInputStream> getSplitInputStream(
       const std::string& traceDir) const;

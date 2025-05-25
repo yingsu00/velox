@@ -74,7 +74,7 @@ PlanBuilder& PlanBuilder::tableScan(
     const RowTypePtr& dataColumns,
     const std::unordered_map<
         std::string,
-        std::shared_ptr<connector::ConnectorColumnHandle>>& assignments) {
+        std::shared_ptr<connector::common::ConnectorColumnHandle>>& assignments) {
   return TableScanBuilder(*this)
       .filtersAsNode(filtersAsNode_ ? planNodeIdGenerator_ : nullptr)
       .outputType(outputType)
@@ -94,7 +94,7 @@ PlanBuilder& PlanBuilder::tableScan(
     const RowTypePtr& dataColumns,
     const std::unordered_map<
         std::string,
-        std::shared_ptr<connector::ConnectorColumnHandle>>& assignments) {
+        std::shared_ptr<connector::common::ConnectorColumnHandle>>& assignments) {
   return TableScanBuilder(*this)
       .filtersAsNode(filtersAsNode_ ? planNodeIdGenerator_ : nullptr)
       .tableName(tableName)
@@ -114,7 +114,7 @@ PlanBuilder& PlanBuilder::tpchTableScan(
     std::string_view connectorId) {
   std::unordered_map<
       std::string,
-      std::shared_ptr<connector::ConnectorColumnHandle>>
+      std::shared_ptr<connector::common::ConnectorColumnHandle>>
       assignmentsMap;
   std::vector<TypePtr> outputTypes;
 
@@ -203,7 +203,7 @@ core::PlanNodePtr PlanBuilder::TableScanBuilder::build(core::PlanNodeId id) {
   const RowTypePtr& parseType = dataColumns_ ? dataColumns_ : outputType_;
 
   core::TypedExprPtr filterNodeExpr;
-  common::SubfieldFilters filters;
+  velox::common::SubfieldFilters filters;
   filters.reserve(subfieldFilters_.size());
   auto queryCtx = core::QueryCtx::create();
   exec::SimpleExpressionEvaluator evaluator(queryCtx.get(), planBuilder_.pool_);
@@ -219,7 +219,7 @@ core::PlanNodePtr PlanBuilder::TableScanBuilder::build(core::PlanNodeId id) {
 
       auto it = columnAliases_.find(subfield.toString());
       if (it != columnAliases_.end()) {
-        subfield = common::Subfield(it->second);
+        subfield = velox::common::Subfield(it->second);
       }
       VELOX_CHECK_EQ(
           filters.count(subfield),
@@ -290,10 +290,10 @@ core::PlanNodePtr PlanBuilder::TableWriterBuilder::build(core::PlanNodeId id) {
               outputType->childAt(i)));
     }
 
-    auto locationHandle = std::make_shared<connector::hive::LocationHandle>(
+    auto locationHandle = std::make_shared<connector::hive::HiveLocationHandle>(
         outputDirectoryPath_,
         outputDirectoryPath_,
-        connector::hive::LocationHandle::TableType::kNew,
+        connector::common::LocationHandle::TableType::kNew,
         outputFileName_);
 
     std::shared_ptr<HiveBucketProperty> bucketProperty;
@@ -341,7 +341,7 @@ core::PlanNodePtr PlanBuilder::TableWriterBuilder::build(core::PlanNodeId id) {
       insertHandle_,
       false,
       TableWriteTraits::outputType(aggregationNode),
-      connector::CommitStrategy::kNoCommit,
+      connector::common::CommitStrategy::kNoCommit,
       upstreamNode);
   VELOX_CHECK(!writeNode->supportsBarrier());
   return writeNode;
@@ -579,7 +579,7 @@ PlanBuilder& PlanBuilder::tableWrite(
     const std::unordered_map<std::string, std::string>& serdeParameters,
     const std::shared_ptr<dwio::common::WriterOptions>& options,
     const std::string& outputFileName,
-    const common::CompressionKind compressionKind,
+    const velox::common::CompressionKind compressionKind,
     const RowTypePtr& schema,
     const bool ensureFiles) {
   return TableWriterBuilder(*this)

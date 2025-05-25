@@ -268,7 +268,7 @@ void TraceReplayRunner::init() {
 
   core::PlanNode::registerSerDe();
   core::ITypedExpr::registerSerDe();
-  common::Filter::registerSerDe();
+  velox::common::Filter::registerSerDe();
   Type::registerSerDe();
   exec::registerPartitionFunctionSerDe();
   if (!isRegisteredVectorSerde()) {
@@ -284,7 +284,7 @@ void TraceReplayRunner::init() {
     serializer::spark::UnsafeRowVectorSerde::registerNamedVectorSerde();
   }
   connector::hive::HiveTableHandle::registerSerDe();
-  connector::hive::LocationHandle::registerSerDe();
+  connector::hive::HiveLocationHandle::registerSerDe();
   connector::hive::HiveColumnHandle::registerSerDe();
   connector::hive::HiveInsertTableHandle::registerSerDe();
   connector::hive::HiveInsertFileNameGenerator::registerSerDe();
@@ -297,7 +297,7 @@ void TraceReplayRunner::init() {
   parse::registerTypeResolver();
 
   if (!facebook::velox::connector::hasConnectorFactory("hive")) {
-    connector::registerConnectorFactory(
+    connector::common::registerConnectorFactory(
         std::make_shared<connector::hive::HiveConnectorFactory>());
   }
 
@@ -354,15 +354,15 @@ TraceReplayRunner::createReplayer() const {
   } else if (traceNodeName == "TableScan") {
     const auto connectorId =
         taskTraceMetadataReader_->connectorId(FLAGS_node_id);
-    if (const auto& collectors = connector::getAllConnectors();
+    if (const auto& collectors = connector::common::getAllConnectors();
         collectors.find(connectorId) == collectors.end()) {
       const auto hiveConnector =
-          connector::getConnectorFactory("hive")->newConnector(
+          connector::common::getConnectorFactory("hive")->newConnector(
               connectorId,
               std::make_shared<config::ConfigBase>(
                   std::unordered_map<std::string, std::string>()),
               ioExecutor_.get());
-      connector::registerConnector(hiveConnector);
+      connector::common::registerConnector(hiveConnector);
     }
     replayer = std::make_unique<tool::trace::TableScanReplayer>(
         FLAGS_root_dir,

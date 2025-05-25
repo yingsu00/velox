@@ -52,7 +52,7 @@ SpillConfig::SpillConfig(
       maxSpillLevel(_maxSpillLevel),
       maxSpillRunRows(_maxSpillRunRows),
       writerFlushThresholdSize(_writerFlushThresholdSize),
-      compressionKind(common::stringToCompressionKind(_compressionKind)),
+      compressionKind(velox::common::stringToCompressionKind(_compressionKind)),
       prefixSortConfig(_prefixSortConfig),
       fileCreateConfig(_fileCreateConfig) {
   VELOX_USER_CHECK_GE(

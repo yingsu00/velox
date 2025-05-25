@@ -106,12 +106,12 @@ class LocalExchangeSource : public exec::ExchangeSource {
       numPages_ += pages.size();
       totalBytes_ += totalBytes;
       if (data.empty()) {
-        common::testutil::TestValue::adjust(
+        velox::common::testutil::TestValue::adjust(
             "facebook::velox::exec::test::LocalExchangeSource::timeout", this);
       }
 
       try {
-        common::testutil::TestValue::adjust(
+        velox::common::testutil::TestValue::adjust(
             "facebook::velox::exec::test::LocalExchangeSource", this);
       } catch (const std::exception& e) {
         queue_->setError(e.what());
@@ -165,7 +165,7 @@ class LocalExchangeSource : public exec::ExchangeSource {
   }
 
   void pause() override {
-    common::testutil::TestValue::adjust(
+    velox::common::testutil::TestValue::adjust(
         "facebook::velox::exec::test::LocalExchangeSource::pause", nullptr);
     auto buffers = OutputBufferManager::getInstanceRef();
     VELOX_CHECK_NOT_NULL(buffers, "invalid OutputBufferManager");

@@ -29,10 +29,10 @@ class SortWindowBuild : public WindowBuild {
   SortWindowBuild(
       const std::shared_ptr<const core::WindowNode>& node,
       velox::memory::MemoryPool* pool,
-      common::PrefixSortConfig&& prefixSortConfig,
-      const common::SpillConfig* spillConfig,
+      velox::common::PrefixSortConfig&& prefixSortConfig,
+      const velox::common::SpillConfig* spillConfig,
       tsan_atomic<bool>* nonReclaimableSection,
-      folly::Synchronized<common::SpillStats>* spillStats);
+      folly::Synchronized<velox::common::SpillStats>* spillStats);
 
   ~SortWindowBuild() override {
     pool_->release();
@@ -47,7 +47,7 @@ class SortWindowBuild : public WindowBuild {
 
   void spill() override;
 
-  std::optional<common::SpillStats> spilledStats() const override;
+  std::optional<velox::common::SpillStats> spilledStats() const override;
 
   void noMoreInput() override;
 
@@ -90,9 +90,9 @@ class SortWindowBuild : public WindowBuild {
   memory::MemoryPool* const pool_;
 
   // Config for Prefix-sort.
-  const common::PrefixSortConfig prefixSortConfig_;
+  const velox::common::PrefixSortConfig prefixSortConfig_;
 
-  folly::Synchronized<common::SpillStats>* const spillStats_;
+  folly::Synchronized<velox::common::SpillStats>* const spillStats_;
 
   // allKeyInfo_ is a combination of (partitionKeyInfo_ and sortKeyInfo_).
   // It is used to perform a full sorting of the input rows to be able to

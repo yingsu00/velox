@@ -69,23 +69,23 @@ std::vector<RowVectorPtr> AggregationTestBase::makeVectors(
 void AggregationTestBase::SetUp() {
   OperatorTestBase::SetUp();
   filesystems::registerLocalFileSystem();
-  connector::registerConnectorFactory(
+  connector::common::registerConnectorFactory(
       std::make_shared<connector::hive::HiveConnectorFactory>());
   auto hiveConnector =
-      connector::getConnectorFactory(
+      connector::common::getConnectorFactory(
           connector::hive::HiveConnectorFactory::kHiveConnectorName)
           ->newConnector(
               kHiveConnectorId,
               std::make_shared<config::ConfigBase>(
                   std::unordered_map<std::string, std::string>()));
-  connector::registerConnector(hiveConnector);
+  connector::common::registerConnector(hiveConnector);
   dwrf::registerDwrfReaderFactory();
 }
 
 void AggregationTestBase::TearDown() {
   dwrf::unregisterDwrfReaderFactory();
-  connector::unregisterConnector(kHiveConnectorId);
-  connector::unregisterConnectorFactory(
+  connector::common::unregisterConnector(kHiveConnectorId);
+  connector::common::unregisterConnectorFactory(
       connector::hive::HiveConnectorFactory::kHiveConnectorName);
   OperatorTestBase::TearDown();
 }

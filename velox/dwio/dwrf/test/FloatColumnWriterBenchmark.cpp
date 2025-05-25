@@ -80,7 +80,7 @@ void runBenchmark(int nullEvery) {
         config,
         memory::memoryManager()->addRootPool("FloatColumnWriterBenchmark")};
     auto writer = BaseColumnWriter::create(context, *typeWithId, 0);
-    writer->write(vector, common::Ranges::of(0, kVectorSize));
+    writer->write(vector, velox::common::Ranges::of(0, kVectorSize));
   }
 }
 

@@ -39,21 +39,21 @@ class TpchConnectorTest : public exec::test::OperatorTestBase {
   void SetUp() override {
     FLAGS_velox_tpch_text_pool_size_mb = 10;
     OperatorTestBase::SetUp();
-    connector::registerConnectorFactory(
+    connector::common::registerConnectorFactory(
         std::make_shared<connector::tpch::TpchConnectorFactory>());
     auto tpchConnector =
-        connector::getConnectorFactory(
+        connector::common::getConnectorFactory(
             connector::tpch::TpchConnectorFactory::kTpchConnectorName)
             ->newConnector(
                 kTpchConnectorId,
                 std::make_shared<config::ConfigBase>(
                     std::unordered_map<std::string, std::string>()));
-    connector::registerConnector(tpchConnector);
+    connector::common::registerConnector(tpchConnector);
   }
 
   void TearDown() override {
-    connector::unregisterConnector(kTpchConnectorId);
-    connector::unregisterConnectorFactory(
+    connector::common::unregisterConnector(kTpchConnectorId);
+    connector::common::unregisterConnectorFactory(
         connector::tpch::TpchConnectorFactory::kTpchConnectorName);
     OperatorTestBase::TearDown();
   }

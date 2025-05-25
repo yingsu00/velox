@@ -29,7 +29,7 @@ using namespace std::chrono;
 DEBUG_ONLY_TEST(TimeZoneMapExternalInvalidTest, externalInvalid) {
   const int16_t testZoneId = 1681;
   const std::string testZone = "Africa/Abidjan";
-  common::testutil::TestValue::enable();
+  velox::common::testutil::TestValue::enable();
   SCOPED_TESTVALUE_SET(
       "facebook::velox::tz::locateZoneImpl",
       std::function<void(std::string_view * tz_name)>(

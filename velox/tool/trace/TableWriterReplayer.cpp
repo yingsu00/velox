@@ -37,16 +37,16 @@ makeHiveInsertTableHandle(
           node->insertTableHandle()->connectorInsertTableHandle());
   const auto inputColumns = tracedHandle->inputColumns();
   const auto compressionKind =
-      tracedHandle->compressionKind().value_or(common::CompressionKind_NONE);
+      tracedHandle->compressionKind().value_or(velox::common::CompressionKind_NONE);
   const auto storageFormat = tracedHandle->storageFormat();
   const auto serdeParameters = tracedHandle->serdeParameters();
   const auto writerOptions = tracedHandle->writerOptions();
   return std::make_shared<connector::hive::HiveInsertTableHandle>(
       inputColumns,
-      std::make_shared<connector::hive::LocationHandle>(
+      std::make_shared<connector::hive::HiveLocationHandle>(
           targetDir,
           targetDir,
-          connector::hive::LocationHandle::TableType::kNew),
+          connector::common::LocationHandle::TableType::kNew),
       storageFormat,
       tracedHandle->bucketProperty() == nullptr
           ? nullptr

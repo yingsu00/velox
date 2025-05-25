@@ -412,11 +412,11 @@ core::PlanNodePtr SubstraitVeloxPlanConverter::toVeloxPlan(
         kHiveConnectorId,
         "hive_table",
         filterPushdownEnabled,
-        common::SubfieldFilters{},
+        velox::common::SubfieldFilters{},
         nullptr,
         nullptr);
   } else {
-    common::SubfieldFilters filters =
+    velox::common::SubfieldFilters filters =
         toVeloxFilter(colNameList, veloxTypeList, readRel.filter());
     tableHandle = std::make_shared<connector::hive::HiveTableHandle>(
         kHiveConnectorId,
@@ -432,7 +432,7 @@ core::PlanNodePtr SubstraitVeloxPlanConverter::toVeloxPlan(
   outNames.reserve(colNameList.size());
   std::unordered_map<
       std::string,
-      std::shared_ptr<connector::ConnectorColumnHandle>>
+      std::shared_ptr<connector::common::ConnectorColumnHandle>>
       assignments;
   for (int idx = 0; idx < colNameList.size(); idx++) {
     auto outName = substraitParser_->makeNodeName(planNodeId_, idx);
@@ -639,7 +639,7 @@ common::SubfieldFilters SubstraitVeloxPlanConverter::toVeloxFilter(
     const std::vector<std::string>& inputNameList,
     const std::vector<TypePtr>& inputTypeList,
     const ::substrait::Expression& substraitFilter) {
-  common::SubfieldFilters filters;
+  velox::common::SubfieldFilters filters;
   // A map betweesn the column index and the FilterInfo for that column.
   std::unordered_map<int, std::shared_ptr<FilterInfo>> colInfoMap;
   for (int idx = 0; idx < inputNameList.size(); idx++) {
@@ -716,7 +716,7 @@ common::SubfieldFilters SubstraitVeloxPlanConverter::toVeloxFilter(
         rightExclusive = filterInfo->rightExclusive_;
       }
       bool nullAllowed = filterInfo->nullAllowed_;
-      filters[common::Subfield(inputNameList[idx])] =
+      filters[velox::common::Subfield(inputNameList[idx])] =
           std::make_unique<common::DoubleRange>(
               leftBound,
               leftUnbounded,

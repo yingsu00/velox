@@ -34,7 +34,7 @@ struct LongDecimalWithOverflowState {
   void mergeWith(const StringView& serializedData) {
     VELOX_CHECK_EQ(serializedData.size(), serializedSize());
     auto serialized = serializedData.data();
-    common::InputByteStream stream(serialized);
+    velox::common::InputByteStream stream(serialized);
     count += stream.read<int64_t>();
     overflow += stream.read<int64_t>();
     uint64_t lowerSum = stream.read<uint64_t>();
@@ -46,7 +46,7 @@ struct LongDecimalWithOverflowState {
   void serialize(StringView& serialized) {
     VELOX_CHECK_EQ(serialized.size(), serializedSize());
     char* outputBuffer = const_cast<char*>(serialized.data());
-    common::OutputByteStream outStream(outputBuffer);
+    velox::common::OutputByteStream outStream(outputBuffer);
     outStream.append((char*)&count, sizeof(int64_t));
     outStream.append((char*)&overflow, sizeof(int64_t));
     uint64_t lower = HugeInt::lower(sum);

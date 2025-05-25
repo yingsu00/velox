@@ -270,7 +270,7 @@ TEST_F(MapFilterTest, try) {
       {{{{1, 2}, {2, 3}}},
        std::nullopt,
        {{{7, 8}}},
-       common::testutil::optionalEmpty});
+       velox::common::testutil::optionalEmpty});
   assertEqualVectors(expected, result);
 }
 

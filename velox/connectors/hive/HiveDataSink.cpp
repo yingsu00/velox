@@ -123,10 +123,10 @@ std::string makeUuid() {
   return boost::lexical_cast<std::string>(boost::uuids::random_generator()());
 }
 
-std::unordered_map<LocationHandle::TableType, std::string> tableTypeNames() {
+std::unordered_map<connector::common::LocationHandle::TableType, std::string> tableTypeNames() {
   return {
-      {LocationHandle::TableType::kNew, "kNew"},
-      {LocationHandle::TableType::kExisting, "kExisting"},
+      {connector::common::LocationHandle::TableType::kNew, "kNew"},
+      {connector::common::LocationHandle::TableType::kExisting, "kExisting"},
   };
 }
 
@@ -226,13 +226,13 @@ std::string HiveWriterId::toString() const {
   return "unpart";
 }
 
-const std::string LocationHandle::tableTypeName(
-    LocationHandle::TableType type) {
+const std::string HiveLocationHandle::tableTypeName(
+    connector::common::LocationHandle::TableType type) {
   static const auto tableTypes = tableTypeNames();
   return tableTypes.at(type);
 }
 
-LocationHandle::TableType LocationHandle::tableTypeFromName(
+LocationHandle::TableType HiveLocationHandle::tableTypeFromName(
     const std::string& name) {
   static const auto nameTableTypes = invertMap(tableTypeNames());
   return nameTableTypes.at(name);
@@ -368,8 +368,8 @@ std::string HiveBucketProperty::toString() const {
 HiveDataSink::HiveDataSink(
     RowTypePtr inputType,
     std::shared_ptr<const HiveInsertTableHandle> insertTableHandle,
-    const ConnectorQueryCtx* connectorQueryCtx,
-    CommitStrategy commitStrategy,
+    const connector::common::ConnectorQueryCtx* connectorQueryCtx,
+    connector::common::CommitStrategy commitStrategy,
     const std::shared_ptr<const HiveConfig>& hiveConfig)
     : HiveDataSink(
           inputType,
@@ -387,8 +387,8 @@ HiveDataSink::HiveDataSink(
 HiveDataSink::HiveDataSink(
     RowTypePtr inputType,
     std::shared_ptr<const HiveInsertTableHandle> insertTableHandle,
-    const ConnectorQueryCtx* connectorQueryCtx,
-    CommitStrategy commitStrategy,
+    const connector::common::ConnectorQueryCtx* connectorQueryCtx,
+    connector::common::CommitStrategy commitStrategy,
     const std::shared_ptr<const HiveConfig>& hiveConfig,
     uint32_t bucketCount,
     std::unique_ptr<core::PartitionFunction> bucketFunction)
@@ -427,8 +427,8 @@ HiveDataSink::HiveDataSink(
         bucketCount_, maxBucketCount(), "bucketCount exceeds the limit");
   }
   VELOX_USER_CHECK(
-      (commitStrategy_ == CommitStrategy::kNoCommit) ||
-          (commitStrategy_ == CommitStrategy::kTaskCommit),
+      (commitStrategy_ == connector::common::CommitStrategy::kNoCommit) ||
+          (commitStrategy_ == connector::common::CommitStrategy::kTaskCommit),
       "Unsupported commit strategy: {}",
       commitStrategyToString(commitStrategy_));
 
@@ -754,11 +754,12 @@ uint32_t HiveDataSink::appendWriter(const HiveWriterId& id) {
   if (sortWrite()) {
     sortPool = createSortPool(writerPool);
   }
-  writerInfo_.emplace_back(std::make_shared<HiveWriterInfo>(
-      std::move(writerParameters),
-      std::move(writerPool),
-      std::move(sinkPool),
-      std::move(sortPool)));
+  writerInfo_.emplace_back(
+      std::make_shared<HiveWriterInfo>(
+          std::move(writerParameters),
+          std::move(writerPool),
+          std::move(sinkPool),
+          std::move(sortPool)));
   ioStats_.emplace_back(std::make_shared<io::IoStatistics>());
   setMemoryReclaimers(writerInfo_.back().get(), ioStats_.back().get());
 
@@ -939,7 +940,7 @@ std::pair<std::string, std::string> HiveDataSink::getWriterFileNames(
 std::pair<std::string, std::string> HiveInsertFileNameGenerator::gen(
     std::optional<uint32_t> bucketId,
     const std::shared_ptr<const HiveInsertTableHandle> insertTableHandle,
-    const ConnectorQueryCtx& connectorQueryCtx,
+    const connector::common::ConnectorQueryCtx& connectorQueryCtx,
     bool commitRequired) const {
   auto targetFileName = insertTableHandle->locationHandle()->targetFileName();
   const bool generateFileName = targetFileName.empty();
@@ -1041,7 +1042,7 @@ bool HiveInsertTableHandle::isBucketed() const {
 }
 
 bool HiveInsertTableHandle::isExistingTable() const {
-  return locationHandle_->tableType() == LocationHandle::TableType::kExisting;
+  return locationHandle_->tableType() == connector::common::LocationHandle::TableType::kExisting;
 }
 
 folly::dynamic HiveInsertTableHandle::serialize() const {
@@ -1061,7 +1062,7 @@ folly::dynamic HiveInsertTableHandle::serialize() const {
   }
 
   if (compressionKind_.has_value()) {
-    obj["compressionKind"] = common::compressionKindToString(*compressionKind_);
+    obj["compressionKind"] = velox::common::compressionKindToString(*compressionKind_);
   }
 
   folly::dynamic params = folly::dynamic::object;
@@ -1079,14 +1080,14 @@ HiveInsertTableHandlePtr HiveInsertTableHandle::create(
   auto inputColumns = ISerializable::deserialize<std::vector<HiveColumnHandle>>(
       obj["inputColumns"]);
   auto locationHandle =
-      ISerializable::deserialize<LocationHandle>(obj["locationHandle"]);
+      ISerializable::deserialize<connector::common::LocationHandle>(obj["locationHandle"]);
   auto storageFormat =
       dwio::common::toFileFormat(obj["tableStorageFormat"].asString());
 
-  std::optional<common::CompressionKind> compressionKind = std::nullopt;
+  std::optional<velox::common::CompressionKind> compressionKind = std::nullopt;
   if (obj.count("compressionKind") > 0) {
     compressionKind =
-        common::stringToCompressionKind(obj["compressionKind"].asString());
+        velox::common::stringToCompressionKind(obj["compressionKind"].asString());
   }
 
   std::shared_ptr<const HiveBucketProperty> bucketProperty;
@@ -1125,7 +1126,7 @@ std::string HiveInsertTableHandle::toString() const {
   std::ostringstream out;
   out << "HiveInsertTableHandle [" << dwio::common::toString(storageFormat_);
   if (compressionKind_.has_value()) {
-    out << " " << common::compressionKindToString(compressionKind_.value());
+    out << " " << velox::common::compressionKindToString(compressionKind_.value());
   } else {
     out << " none";
   }
@@ -1151,7 +1152,7 @@ std::string HiveInsertTableHandle::toString() const {
   return out.str();
 }
 
-std::string LocationHandle::toString() const {
+std::string HiveLocationHandle::toString() const {
   return fmt::format(
       "LocationHandle [targetPath: {}, writePath: {}, tableType: {}, tableFileName: {}]",
       targetPath_,
@@ -1160,12 +1161,12 @@ std::string LocationHandle::toString() const {
       targetFileName_);
 }
 
-void LocationHandle::registerSerDe() {
+void HiveLocationHandle::registerSerDe() {
   auto& registry = DeserializationRegistryForSharedPtr();
-  registry.Register("LocationHandle", LocationHandle::create);
+  registry.Register("LocationHandle", HiveLocationHandle::create);
 }
 
-folly::dynamic LocationHandle::serialize() const {
+folly::dynamic HiveLocationHandle::serialize() const {
   folly::dynamic obj = folly::dynamic::object;
   obj["name"] = "LocationHandle";
   obj["targetPath"] = targetPath_;
@@ -1175,12 +1176,12 @@ folly::dynamic LocationHandle::serialize() const {
   return obj;
 }
 
-LocationHandlePtr LocationHandle::create(const folly::dynamic& obj) {
+LocationHandlePtr HiveLocationHandle::create(const folly::dynamic& obj) {
   auto targetPath = obj["targetPath"].asString();
   auto writePath = obj["writePath"].asString();
   auto tableType = tableTypeFromName(obj["tableType"].asString());
   auto targetFileName = obj["targetFileName"].asString();
-  return std::make_shared<LocationHandle>(
+  return std::make_shared<HiveLocationHandle>(
       targetPath, writePath, tableType, targetFileName);
 }
 

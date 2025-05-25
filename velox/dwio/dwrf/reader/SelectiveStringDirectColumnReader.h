@@ -28,7 +28,7 @@ class SelectiveStringDirectColumnReader
   SelectiveStringDirectColumnReader(
       const std::shared_ptr<const dwio::common::TypeWithId>& fileType,
       DwrfParams& params,
-      common::ScanSpec& scanSpec);
+      velox::common::ScanSpec& scanSpec);
 
   void seekToRowGroup(int64_t index) override {
     SelectiveColumnReader::seekToRowGroup(index);

@@ -205,15 +205,15 @@ JoinFuzzer::JoinFuzzer(
   // Make sure not to run out of open file descriptors.
   std::unordered_map<std::string, std::string> hiveConfig = {
       {connector::hive::HiveConfig::kNumCacheFileHandles, "1000"}};
-  connector::registerConnectorFactory(
+  connector::common::registerConnectorFactory(
       std::make_shared<connector::hive::HiveConnectorFactory>());
   auto hiveConnector =
-      connector::getConnectorFactory(
+      connector::common::getConnectorFactory(
           connector::hive::HiveConnectorFactory::kHiveConnectorName)
           ->newConnector(
               test::kHiveConnectorId,
               std::make_shared<config::ConfigBase>(std::move(hiveConfig)));
-  connector::registerConnector(hiveConnector);
+  connector::common::registerConnector(hiveConnector);
   dwrf::registerDwrfReaderFactory();
   dwrf::registerDwrfWriterFactory();
 

@@ -31,7 +31,7 @@ DEFINE_int32(st_cost, 40, "Cost of store to memory");
 
 namespace facebook::velox::wave {
 
-using common::Subfield;
+using velox::common::Subfield;
 using exec::Expr;
 
 std::string CodePosition::toString() const {
@@ -135,7 +135,7 @@ AbstractOperand* CompileState::fieldToOperand(Subfield& field, Scope* scope) {
     return markUse(op);
   }
   auto* name =
-      &reinterpret_cast<common::Subfield::NestedField*>(field.path()[0].get())
+      &reinterpret_cast<velox::common::Subfield::NestedField*>(field.path()[0].get())
            ->name();
   VELOX_CHECK_EQ(topScopes_.size(), renames_.size());
   for (int32_t i = renames_.size() - 1; i >= 0; --i) {

@@ -480,13 +480,13 @@ TEST_F(VectorMakerTest, nestedArrayVectorFromJson) {
       {{2, 3, 4}},
       {{std::nullopt, 7}},
       {{1, 3, 7, 9}},
-      common::testutil::optionalEmpty,
+      velox::common::testutil::optionalEmpty,
       {{std::nullopt}},
       {{1, 2, std::nullopt}},
-      common::testutil::optionalEmpty,
+      velox::common::testutil::optionalEmpty,
       std::nullopt,
       {{1, 2, 3}},
-      common::testutil::optionalEmpty,
+      velox::common::testutil::optionalEmpty,
       {{4, 5}},
   });
 

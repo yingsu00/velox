@@ -90,7 +90,7 @@ uint64_t ReadFile::preadv(
 }
 
 uint64_t ReadFile::preadv(
-    folly::Range<const common::Region*> regions,
+    folly::Range<const velox::common::Region*> regions,
     folly::Range<folly::IOBuf*> iobufs,
     filesystems::File::IoStats* stats) const {
   VELOX_CHECK_EQ(regions.size(), iobufs.size());
@@ -309,7 +309,7 @@ LocalWriteFile::LocalWriteFile(
   const auto dir = fs::path(path_).parent_path();
   if (shouldCreateParentDirectories && !fs::exists(dir)) {
     VELOX_CHECK(
-        common::generateFileDirectory(dir.c_str()),
+        velox::common::generateFileDirectory(dir.c_str()),
         "Failed to generate file directory");
   }
 

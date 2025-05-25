@@ -232,7 +232,7 @@ int64_t cardinalityImpl(const DenseHllView& hll) {
 }
 
 DenseHllView deserialize(const char* serialized) {
-  common::InputByteStream stream(serialized);
+  velox::common::InputByteStream stream(serialized);
 
   auto version = stream.read<int8_t>();
   VELOX_CHECK_EQ(kPrestoDenseV2, version);
@@ -407,7 +407,7 @@ bool DenseHll::canDeserialize(const char* input, int size) {
     return false;
   }
 
-  common::InputByteStream stream(input);
+  velox::common::InputByteStream stream(input);
   auto version = stream.read<int8_t>();
   if (kPrestoDenseV2 != version) {
     return false;
@@ -461,7 +461,7 @@ bool DenseHll::canDeserialize(const char* input, int size) {
 
 // static
 int8_t DenseHll::deserializeIndexBitLength(const char* input) {
-  common::InputByteStream stream(input);
+  velox::common::InputByteStream stream(input);
   stream.read<int8_t>();
   return stream.read<int8_t>();
 }
@@ -478,7 +478,7 @@ void DenseHll::serialize(char* output) {
   // sort overflow arrays to get consistent serialization for equivalent HLLs
   sortOverflows();
 
-  common::OutputByteStream stream(output);
+  velox::common::OutputByteStream stream(output);
   stream.appendOne(kPrestoDenseV2);
   stream.appendOne(indexBitLength_);
   stream.appendOne(baseline_);
@@ -540,7 +540,7 @@ void DenseHll::mergeWith(const DenseHll& other) {
 }
 
 void DenseHll::mergeWith(const char* serialized) {
-  common::InputByteStream stream(serialized);
+  velox::common::InputByteStream stream(serialized);
 
   auto version = stream.read<int8_t>();
   VELOX_CHECK_EQ(kPrestoDenseV2, version);

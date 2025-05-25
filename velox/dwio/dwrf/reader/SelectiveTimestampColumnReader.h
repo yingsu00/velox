@@ -30,7 +30,7 @@ class SelectiveTimestampColumnReader
   SelectiveTimestampColumnReader(
       const std::shared_ptr<const dwio::common::TypeWithId>& fileType,
       DwrfParams& params,
-      common::ScanSpec& scanSpec);
+      velox::common::ScanSpec& scanSpec);
 
   void seekToRowGroup(int64_t index) override;
   uint64_t skip(uint64_t numValues) override;
@@ -42,12 +42,12 @@ class SelectiveTimestampColumnReader
 
  private:
   template <bool isDense>
-  void readHelper(common::Filter* filter, const RowSet& rows);
+  void readHelper(velox::common::Filter* filter, const RowSet& rows);
 
   void
   processNulls(const bool isNull, const RowSet& rows, const uint64_t* rawNulls);
   void processFilter(
-      const common::Filter* filter,
+      const velox::common::Filter* filter,
       const RowSet& rows,
       const uint64_t* rawNulls);
 

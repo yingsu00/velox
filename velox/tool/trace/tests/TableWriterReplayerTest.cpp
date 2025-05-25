@@ -59,9 +59,9 @@ class TableWriterReplayerTest : public HiveConnectorTestBase {
       serializer::presto::PrestoVectorSerde::registerVectorSerde();
     }
     Type::registerSerDe();
-    common::Filter::registerSerDe();
+    velox::common::Filter::registerSerDe();
     connector::hive::HiveTableHandle::registerSerDe();
-    connector::hive::LocationHandle::registerSerDe();
+    connector::hive::HiveLocationHandle::registerSerDe();
     connector::hive::HiveColumnHandle::registerSerDe();
     connector::hive::HiveInsertTableHandle::registerSerDe();
     connector::hive::HiveInsertFileNameGenerator::registerSerDe();
@@ -95,7 +95,7 @@ class TableWriterReplayerTest : public HiveConnectorTestBase {
   // Helper method to return InsertTableHandle.
   std::shared_ptr<core::InsertTableHandle> createInsertTableHandle(
       const RowTypePtr& outputRowType,
-      const connector::hive::LocationHandle::TableType& outputTableType,
+      const connector::common::LocationHandle::TableType& outputTableType,
       const std::string& outputDirectoryPath,
       const std::vector<std::string>& partitionedBy,
       const std::shared_ptr<HiveBucketProperty> bucketProperty,
@@ -106,11 +106,8 @@ class TableWriterReplayerTest : public HiveConnectorTestBase {
             outputRowType->names(),
             outputRowType->children(),
             partitionedBy,
-            bucketProperty,
             makeLocationHandle(
-                outputDirectoryPath, std::nullopt, outputTableType),
-            fileFormat_,
-            compressionKind));
+                outputDirectoryPath, std::nullopt, outputTableType),);
   }
 
   // Returns a table insert plan node.
@@ -122,9 +119,9 @@ class TableWriterReplayerTest : public HiveConnectorTestBase {
       const std::vector<std::string>& partitionedBy = {},
       std::shared_ptr<HiveBucketProperty> bucketProperty = nullptr,
       const std::optional<CompressionKind> compressionKind = {},
-      const connector::hive::LocationHandle::TableType& outputTableType =
-          connector::hive::LocationHandle::TableType::kNew,
-      const CommitStrategy& outputCommitStrategy = CommitStrategy::kNoCommit,
+      const connector::common::LocationHandle::TableType& outputTableType =
+          connector::common::LocationHandle::TableType::kNew,
+      const connector::common::CommitStrategy& outputCommitStrategy = connector::common::CommitStrategy::kNoCommit,
       bool aggregateResult = true,
       std::shared_ptr<core::AggregationNode> aggregationNode = nullptr) {
     auto insertPlan = inputPlan
@@ -157,8 +154,8 @@ class TableWriterReplayerTest : public HiveConnectorTestBase {
       const std::shared_ptr<core::AggregationNode>& aggregationNode,
       const std::shared_ptr<core::InsertTableHandle>& insertHandle,
       bool hasPartitioningScheme,
-      connector::CommitStrategy commitStrategy =
-          connector::CommitStrategy::kNoCommit) {
+      connector::common::CommitStrategy commitStrategy =
+          connector::common::CommitStrategy::kNoCommit) {
     return [=](core::PlanNodeId nodeId,
                core::PlanNodePtr source) -> core::PlanNodePtr {
       std::shared_ptr<core::AggregationNode> aggNode = nullptr;
@@ -199,9 +196,9 @@ class TableWriterReplayerTest : public HiveConnectorTestBase {
     return ROW(std::move(dataColumnNames), std::move(dataColumnTypes));
   }
 
-  std::vector<std::shared_ptr<connector::ConnectorSplit>>
+  std::vector<std::shared_ptr<connector::common::ConnectorSplit>>
   makeHiveSplitsFromDirectory(const std::string& directoryPath) {
-    std::vector<std::shared_ptr<connector::ConnectorSplit>> splits;
+    std::vector<std::shared_ptr<connector::common::ConnectorSplit>> splits;
 
     for (auto& path : fs::recursive_directory_iterator(directoryPath)) {
       if (path.is_regular_file()) {

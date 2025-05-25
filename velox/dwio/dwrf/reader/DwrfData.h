@@ -51,7 +51,7 @@ class DwrfData : public dwio::common::FormatData {
   }
 
   void filterRowGroups(
-      const common::ScanSpec& scanSpec,
+      const velox::common::ScanSpec& scanSpec,
       uint64_t rowsPerRowGroup,
       const dwio::common::StatsContext& writerContext,
       FilterRowGroupsResult& result) override;
@@ -132,7 +132,7 @@ class DwrfParams : public dwio::common::FormatParams {
 
   std::unique_ptr<dwio::common::FormatData> toFormatData(
       const std::shared_ptr<const dwio::common::TypeWithId>& type,
-      const common::ScanSpec& /*scanSpec*/) override {
+      const velox::common::ScanSpec& /*scanSpec*/) override {
     return std::make_unique<DwrfData>(
         type, stripeStreams_, streamLabels_, flatMapContext_);
   }

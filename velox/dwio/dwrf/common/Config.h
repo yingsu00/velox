@@ -30,7 +30,7 @@ class Config : public config::ConfigBase {
   using Entry = config::ConfigBase::Entry<T>;
 
   static Entry<WriterVersion> WRITER_VERSION;
-  static Entry<common::CompressionKind> COMPRESSION;
+  static Entry<velox::common::CompressionKind> COMPRESSION;
   static Entry<int32_t> ZLIB_COMPRESSION_LEVEL;
   static Entry<int32_t> ZSTD_COMPRESSION_LEVEL;
   static Entry<uint64_t> COMPRESSION_BLOCK_SIZE;

@@ -150,7 +150,7 @@ void DwrfData::readNulls(
 }
 
 void DwrfData::filterRowGroups(
-    const common::ScanSpec& scanSpec,
+    const velox::common::ScanSpec& scanSpec,
     uint64_t rowGroupSize,
     const dwio::common::StatsContext& writerContext,
     FilterRowGroupsResult& result) {

@@ -46,13 +46,13 @@ struct NoisyCountAccumulator {
   }
 
   void serialize(char* output) {
-    common::OutputByteStream stream(output);
+    velox::common::OutputByteStream stream(output);
     stream.appendOne(count);
     stream.appendOne(noiseScale);
   }
 
   static NoisyCountAccumulator deserialize(const char* serialized) {
-    common::InputByteStream stream(serialized);
+    velox::common::InputByteStream stream(serialized);
 
     auto count = stream.read<uint64_t>();
     auto noiseScale = stream.read<double>();

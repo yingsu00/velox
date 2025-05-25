@@ -103,7 +103,7 @@ class WriterBase {
   }
 
   template <typename T>
-  void writeProto(const T& t, common::CompressionKind kind) {
+  void writeProto(const T& t, velox::common::CompressionKind kind) {
     auto holder = context_->newDataBufferHolder();
     auto stream = context_->newStream(kind, *holder);
 

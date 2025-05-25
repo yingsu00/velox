@@ -254,7 +254,7 @@ TEST_F(OrcReaderTest, testOrcRlev2) {
   const std::string dateOrc(getExamplesFilePath("rlev2.orc"));
   auto schema =
       ROW({"id", "price", "name"}, {BIGINT(), DECIMAL(7, 2), VARCHAR()});
-  auto spec = std::make_shared<common::ScanSpec>("<root>");
+  auto spec = std::make_shared<velox::common::ScanSpec>("<root>");
   spec->addAllChildFields(*schema);
 
   dwio::common::ReaderOptions readerOpts{pool()};
@@ -297,7 +297,7 @@ class OrcFileDescription {
   uint64_t rowCount;
   uint64_t contentLength;
   uint64_t stripeCount;
-  common::CompressionKind compression;
+  velox::common::CompressionKind compression;
   size_t compressionSize;
   uint64_t rowIndexStride;
   std::map<std::string, std::string> userMeta;
@@ -311,7 +311,7 @@ class OrcFileDescription {
       uint64_t _rowCount,
       uint64_t _contentLength,
       uint64_t _stripeCount,
-      common::CompressionKind _compression,
+      velox::common::CompressionKind _compression,
       size_t _compressionSize,
       uint64_t _rowIndexStride,
       const std::map<std::string, std::string>& _meta)
@@ -406,7 +406,7 @@ TEST_P(OrcReaderTestP, DwrfRowReader_ReadAllColumnTypes_ExpectedRowDataRead) {
   std::string schemaString = GetParam().typeString;
   auto type = HiveTypeParser().parse(schemaString);
   auto schema = std::dynamic_pointer_cast<const RowType>(type);
-  auto scanSpec = std::make_shared<common::ScanSpec>("<root>");
+  auto scanSpec = std::make_shared<velox::common::ScanSpec>("<root>");
   scanSpec->addAllChildFields(*schema);
 
   const std::string dateOrc(getFilename());
@@ -448,7 +448,7 @@ INSTANTIATE_TEST_SUITE_P(
             21000,
             428406,
             5,
-            common::CompressionKind::CompressionKind_NONE,
+            velox::common::CompressionKind::CompressionKind_NONE,
             262144,
             1000,
             std::map<std::string, std::string>()),
@@ -461,7 +461,7 @@ INSTANTIATE_TEST_SUITE_P(
             50000,
             214643,
             10,
-            common::CompressionKind::CompressionKind_SNAPPY,
+            velox::common::CompressionKind::CompressionKind_SNAPPY,
             1000,
             0,
             std::map<std::string, std::string>())),

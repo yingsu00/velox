@@ -664,7 +664,7 @@ void VectorHasher::setRangeOverflow() {
   hasRange_ = false;
 }
 
-std::unique_ptr<common::Filter> VectorHasher::getFilter(
+std::unique_ptr<velox::common::Filter> VectorHasher::getFilter(
     bool nullAllowed) const {
   switch (typeKind_) {
     case TypeKind::TINYINT:
@@ -681,7 +681,7 @@ std::unique_ptr<common::Filter> VectorHasher::getFilter(
           values.emplace_back(value.data());
         }
 
-        return common::createBigintValues(values, nullAllowed);
+        return velox::common::createBigintValues(values, nullAllowed);
       }
       [[fallthrough]];
     default:

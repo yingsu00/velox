@@ -49,9 +49,9 @@ class OperatorTraceTest : public HiveConnectorTestBase {
       serializer::presto::PrestoVectorSerde::registerVectorSerde();
     }
     Type::registerSerDe();
-    common::Filter::registerSerDe();
+    velox::common::Filter::registerSerDe();
     connector::hive::HiveTableHandle::registerSerDe();
-    connector::hive::LocationHandle::registerSerDe();
+    connector::hive::HiveLocationHandle::registerSerDe();
     connector::hive::HiveColumnHandle::registerSerDe();
     connector::hive::HiveInsertTableHandle::registerSerDe();
     connector::hive::HiveConnectorSplit::registerSerDe();

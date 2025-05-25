@@ -87,11 +87,11 @@ class OperatorCtx {
   /// is the id of the calling TableScan. This and the task id identify the scan
   /// for column access tracking. 'connectorPool' is an aggregate memory pool
   /// for connector use.
-  std::shared_ptr<connector::ConnectorQueryCtx> createConnectorQueryCtx(
+  std::shared_ptr<connector::common::ConnectorQueryCtx> createConnectorQueryCtx(
       const std::string& connectorId,
       const std::string& planNodeId,
       memory::MemoryPool* connectorPool,
-      const common::SpillConfig* spillConfig = nullptr) const;
+      const velox::common::SpillConfig* spillConfig = nullptr) const;
 
  private:
   DriverCtx* const driverCtx_;
@@ -204,7 +204,7 @@ class Operator : public BaseRuntimeStatWriter {
       int32_t operatorId,
       std::string planNodeId,
       std::string operatorType,
-      std::optional<common::SpillConfig> spillConfig = std::nullopt);
+      std::optional<velox::common::SpillConfig> spillConfig = std::nullopt);
 
   virtual ~Operator() = default;
 
@@ -294,7 +294,7 @@ class Operator : public BaseRuntimeStatWriter {
   /// hash join into probe-side table scan. Can also be used to push down TopN
   /// cutoff.
   virtual const std::
-      unordered_map<column_index_t, std::shared_ptr<common::Filter>>&
+      unordered_map<column_index_t, std::shared_ptr<velox::common::Filter>>&
       getDynamicFilters() const {
     return dynamicFilters_;
   }
@@ -316,7 +316,7 @@ class Operator : public BaseRuntimeStatWriter {
   virtual void addDynamicFilter(
       const core::PlanNodeId& /*producer*/,
       column_index_t /*outputChannel*/,
-      const std::shared_ptr<common::Filter>& /*filter*/) {
+      const std::shared_ptr<velox::common::Filter>& /*filter*/) {
     VELOX_UNSUPPORTED(
         "This operator doesn't support dynamic filter pushdown: {}",
         toString());
@@ -579,7 +579,7 @@ class Operator : public BaseRuntimeStatWriter {
     return spillConfig_.has_value();
   }
 
-  const common::SpillConfig* spillConfig() const {
+  const velox::common::SpillConfig* spillConfig() const {
     return spillConfig_.has_value() ? &spillConfig_.value() : nullptr;
   }
 
@@ -630,12 +630,12 @@ class Operator : public BaseRuntimeStatWriter {
   const RowTypePtr outputType_;
   /// Contains the disk spilling related configs if spilling is enabled (e.g.
   /// the fs dir path to store spill files), otherwise null.
-  const std::optional<common::SpillConfig> spillConfig_;
+  const std::optional<velox::common::SpillConfig> spillConfig_;
 
   bool initialized_{false};
 
   folly::Synchronized<OperatorStats> stats_;
-  folly::Synchronized<common::SpillStats> spillStats_;
+  folly::Synchronized<velox::common::SpillStats> spillStats_;
 
   /// NOTE: only one of the two could be set for an operator for tracing .
   /// 'splitTracer_' is only set for table scan to record the processed split
@@ -664,7 +664,7 @@ class Operator : public BaseRuntimeStatWriter {
   /// could copy directly from input to output if no cardinality change.
   bool isIdentityProjection_ = false;
 
-  std::unordered_map<column_index_t, std::shared_ptr<common::Filter>>
+  std::unordered_map<column_index_t, std::shared_ptr<velox::common::Filter>>
       dynamicFilters_;
 
  private:

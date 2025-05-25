@@ -87,7 +87,7 @@ struct SpillFileInfo {
   /// The file size in bytes.
   uint64_t size;
   std::vector<SpillSortKey> sortingKeys;
-  common::CompressionKind compressionKind;
+  velox::common::CompressionKind compressionKind;
 };
 
 using SpillFiles = std::vector<SpillFileInfo>;
@@ -106,9 +106,9 @@ class SpillWriterBase {
       uint64_t targetFileSize,
       const std::string& pathPrefix,
       const std::string& fileCreateConfig,
-      common::UpdateAndCheckSpillLimitCB& updateAndCheckSpillLimitCb,
+      velox::common::UpdateAndCheckSpillLimitCB& updateAndCheckSpillLimitCb,
       memory::MemoryPool* pool,
-      folly::Synchronized<common::SpillStats>* stats);
+      folly::Synchronized<velox::common::SpillStats>* stats);
 
   virtual ~SpillWriterBase() = default;
 
@@ -151,7 +151,7 @@ class SpillWriterBase {
 
   memory::MemoryPool* const pool_;
 
-  folly::Synchronized<common::SpillStats>* const stats_;
+  folly::Synchronized<velox::common::SpillStats>* const stats_;
 
   std::unique_ptr<SpillWriteFile> currentFile_;
 
@@ -181,7 +181,7 @@ class SpillWriterBase {
 
   // Updates the aggregated spill bytes of this query, and throws if exceeds
   // the max spill bytes limit.
-  const common::UpdateAndCheckSpillLimitCB updateAndCheckSpillLimitCb_;
+  const velox::common::UpdateAndCheckSpillLimitCB updateAndCheckSpillLimitCb_;
 
   const std::string fileCreateConfig_;
 
@@ -214,14 +214,14 @@ class SpillWriter : public SpillWriterBase {
   SpillWriter(
       const RowTypePtr& type,
       const std::vector<SpillSortKey>& sortingKeys,
-      common::CompressionKind compressionKind,
+      velox::common::CompressionKind compressionKind,
       const std::string& pathPrefix,
       uint64_t targetFileSize,
       uint64_t writeBufferSize,
       const std::string& fileCreateConfig,
-      common::UpdateAndCheckSpillLimitCB& updateAndCheckSpillLimitCb,
+      velox::common::UpdateAndCheckSpillLimitCB& updateAndCheckSpillLimitCb,
       memory::MemoryPool* pool,
-      folly::Synchronized<common::SpillStats>* stats);
+      folly::Synchronized<velox::common::SpillStats>* stats);
 
   /// Adds 'rows' for the positions in 'indices' into 'this'. The indices
   /// must produce a view where the rows are sorted if sorting is desired.
@@ -257,7 +257,7 @@ class SpillWriter : public SpillWriterBase {
 
   const std::vector<SpillSortKey> sortingKeys_;
 
-  const common::CompressionKind compressionKind_;
+  const velox::common::CompressionKind compressionKind_;
 
   VectorSerde* const serde_;
 
@@ -277,7 +277,7 @@ class SpillReadFile {
       const SpillFileInfo& fileInfo,
       uint64_t bufferSize,
       memory::MemoryPool* pool,
-      folly::Synchronized<common::SpillStats>* stats);
+      folly::Synchronized<velox::common::SpillStats>* stats);
 
   uint32_t id() const {
     return id_;
@@ -306,9 +306,9 @@ class SpillReadFile {
       uint64_t bufferSize,
       const RowTypePtr& type,
       const std::vector<SpillSortKey>& sortingKeys,
-      common::CompressionKind compressionKind,
+      velox::common::CompressionKind compressionKind,
       memory::MemoryPool* pool,
-      folly::Synchronized<common::SpillStats>* stats);
+      folly::Synchronized<velox::common::SpillStats>* stats);
 
   // Invoked to record spill read stats at the end of read input.
   void recordSpillStats();
@@ -322,11 +322,11 @@ class SpillReadFile {
   // The data type of spilled data.
   const RowTypePtr type_;
   const std::vector<SpillSortKey> sortingKeys_;
-  const common::CompressionKind compressionKind_;
+  const velox::common::CompressionKind compressionKind_;
   const serializer::presto::PrestoVectorSerde::PrestoOptions readOptions_;
   memory::MemoryPool* const pool_;
   VectorSerde* const serde_;
-  folly::Synchronized<common::SpillStats>* const stats_;
+  folly::Synchronized<velox::common::SpillStats>* const stats_;
 
   std::unique_ptr<common::FileInputStream> input_;
 };

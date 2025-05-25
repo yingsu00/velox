@@ -25,12 +25,12 @@ namespace facebook::velox::serializer {
 namespace {
 
 struct TestParam {
-  common::CompressionKind compressionKind;
+  velox::common::CompressionKind compressionKind;
   bool appendRow;
   bool microBatchDeserialize;
 
   TestParam(
-      common::CompressionKind _compressionKind,
+      velox::common::CompressionKind _compressionKind,
       bool _appendRow,
       bool _microBatchDeserialize)
       : compressionKind(_compressionKind),
@@ -272,10 +272,10 @@ class CompactRowSerializerTest : public ::testing::Test,
 
  private:
   bool needCompression() {
-    return compressionKind_ != common::CompressionKind::CompressionKind_NONE;
+    return compressionKind_ != velox::common::CompressionKind::CompressionKind_NONE;
   }
 
-  common::CompressionKind compressionKind_;
+  velox::common::CompressionKind compressionKind_;
   std::unique_ptr<VectorSerde::Options> options_;
   bool appendRow_;
   bool microBatchDeserialize_;

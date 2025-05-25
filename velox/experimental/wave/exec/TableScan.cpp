@@ -157,13 +157,13 @@ BlockingReason TableScan::nextSplit(ContinueFuture* future) {
   return BlockingReason::kNotBlocked;
 }
 
-void TableScan::preload(std::shared_ptr<connector::ConnectorSplit> split) {
+void TableScan::preload(std::shared_ptr<connector::common::ConnectorSplit> split) {
   // The AsyncSource returns a unique_ptr to the shared_ptr of the
   // DataSource. The callback may outlive the Task, hence it captures
   // a shared_ptr to it. This is required to keep memory pools live
   // for the duration. The callback checks for task cancellation to
   // avoid needless work.
-  split->dataSource = std::make_unique<AsyncSource<connector::DataSource>>(
+  split->dataSource = std::make_unique<AsyncSource<connector::common::DataSource>>(
       [type = outputType_,
        source = waveDataSource_,
        table = tableHandle_,
@@ -174,7 +174,7 @@ void TableScan::preload(std::shared_ptr<connector::ConnectorSplit> split) {
        ctx = driver_->operatorCtx()->createConnectorQueryCtx(
            split->connectorId, planNodeId_, connectorPool_),
        task = driver_->operatorCtx()->task(),
-       split]() -> std::unique_ptr<connector::DataSource> {
+       split]() -> std::unique_ptr<connector::common::DataSource> {
         if (task->isCancelled()) {
           return nullptr;
         }
@@ -209,7 +209,7 @@ void TableScan::checkPreload() {
         maxSplitPreloadPerDriver_;
     if (!splitPreloader_) {
       splitPreloader_ =
-          [executor, this](std::shared_ptr<connector::ConnectorSplit> split) {
+          [executor, this](std::shared_ptr<connector::common::ConnectorSplit> split) {
             preload(split);
 
             executor->add(
@@ -229,7 +229,7 @@ bool TableScan::isFinished() const {
 void TableScan::addDynamicFilter(
     const core::PlanNodeId& producer,
     column_index_t outputChannel,
-    const std::shared_ptr<common::Filter>& filter) {
+    const std::shared_ptr<velox::common::Filter>& filter) {
   if (dataSource_) {
     dataSource_->addDynamicFilter(outputChannel, filter);
   } else {

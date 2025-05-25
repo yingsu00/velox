@@ -93,7 +93,7 @@ TEST_F(AssertQueryBuilderTest, hiveSplits) {
       .assertResults("VALUES (1), (2), (3)");
 
   // Split with partition key.
-  ConnectorColumnHandleMap assignments = {
+  connector::common::ConnectorColumnHandleMap assignments = {
       {"ds", partitionKey("ds", VARCHAR())},
       {"c0", regularColumn("c0", BIGINT())}};
 
@@ -106,9 +106,17 @@ TEST_F(AssertQueryBuilderTest, hiveSplits) {
           .endTableScan()
           .planNode(),
       duckDbQueryRunner_)
-      .split(HiveConnectorSplitBuilder(file->getPath())
-                 .partitionKey("ds", "2022-05-10")
-                 .build())
+      .split(makeHiveConnectorSplit(file->getPath(), 0,
+          uint64_t start,
+          uint64_t length,
+          int64_t splitWeight = 0,
+          bool cacheable = true,
+          dwio::common::FileFormat fileFormat = dwio::common::FileFormat::DWRF,
+          const std::unordered_map<std::string, std::string>& infoColumns = {},
+          const std::unordered_map<std::string, std::string>& partitionKeys = {}))
+//      .split(HiveConnectorSplitBuilder(file->getPath())
+//                 .partitionKey("ds", "2022-05-10")
+//                 .build())
       .assertResults(
           "VALUES (1, '2022-05-10'), (2, '2022-05-10'), (3, '2022-05-10')");
 

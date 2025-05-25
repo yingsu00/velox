@@ -41,10 +41,10 @@ class GroupingSet {
       bool isRawInput,
       const std::vector<vector_size_t>& globalGroupingSets,
       const std::optional<column_index_t>& groupIdChannel,
-      const common::SpillConfig* spillConfig,
+      const velox::common::SpillConfig* spillConfig,
       tsan_atomic<bool>* nonReclaimableSection,
       OperatorCtx* operatorCtx,
-      folly::Synchronized<common::SpillStats>* spillStats);
+      folly::Synchronized<velox::common::SpillStats>* spillStats);
 
   ~GroupingSet();
 
@@ -117,7 +117,7 @@ class GroupingSet {
   void spill(const RowContainerIterator& rowIterator);
 
   /// Returns the spiller stats including total bytes and rows spilled so far.
-  std::optional<common::SpillStats> spilledStats() const;
+  std::optional<velox::common::SpillStats> spilledStats() const;
 
   /// Returns true if spilling has triggered on this grouping set.
   bool hasSpilled() const;
@@ -318,7 +318,7 @@ class GroupingSet {
   // Column for groupId for a GROUPING SET.
   std::optional<column_index_t> groupIdChannel_;
 
-  const common::SpillConfig* const spillConfig_;
+  const velox::common::SpillConfig* const spillConfig_;
 
   // Indicates if this grouping set and the associated hash aggregation operator
   // is under non-reclaimable execution section or not.
@@ -410,7 +410,7 @@ class GroupingSet {
   // state of aggregate for all rows.
   std::vector<char*> firstGroup_;
 
-  folly::Synchronized<common::SpillStats>* const spillStats_;
+  folly::Synchronized<velox::common::SpillStats>* const spillStats_;
 };
 
 class AggregationInputSpiller : public SpillerBase {
@@ -422,8 +422,8 @@ class AggregationInputSpiller : public SpillerBase {
       RowTypePtr rowType,
       const HashBitRange& hashBitRange,
       const std::vector<SpillSortKey>& sortingKeys,
-      const common::SpillConfig* spillConfig,
-      folly::Synchronized<common::SpillStats>* spillStats);
+      const velox::common::SpillConfig* spillConfig,
+      folly::Synchronized<velox::common::SpillStats>* spillStats);
 
   void spill();
 
@@ -444,8 +444,8 @@ class AggregationOutputSpiller : public SpillerBase {
   AggregationOutputSpiller(
       RowContainer* container,
       RowTypePtr rowType,
-      const common::SpillConfig* spillConfig,
-      folly::Synchronized<common::SpillStats>* spillStats);
+      const velox::common::SpillConfig* spillConfig,
+      folly::Synchronized<velox::common::SpillStats>* spillStats);
 
   void spill(const RowContainerIterator& startRowIter);
 

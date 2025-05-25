@@ -15,7 +15,7 @@
  */
 #pragma once
 
-#include "velox/connectors/Connector.h"
+#include "velox/connectors/common/Connector.h"
 #include "velox/core/ITypedExpr.h"
 #include "velox/type/Filter.h"
 #include "velox/type/Subfield.h"
@@ -23,7 +23,7 @@
 
 namespace facebook::velox::connector::hive {
 
-class HiveColumnHandle : public ConnectorColumnHandle {
+class HiveColumnHandle : public connector::common::ConnectorColumnHandle {
  public:
   enum class ColumnType {
     kPartitionKey,
@@ -52,7 +52,7 @@ class HiveColumnHandle : public ConnectorColumnHandle {
       ColumnType columnType,
       TypePtr dataType,
       TypePtr hiveType,
-      std::vector<common::Subfield> requiredSubfields = {},
+      std::vector<velox::common::Subfield> requiredSubfields = {},
       ColumnParseParameters columnParseParameters = {})
       : name_(name),
         columnType_(columnType),
@@ -97,7 +97,7 @@ class HiveColumnHandle : public ConnectorColumnHandle {
   ///
   /// Pruning arrays means dropping values with indices larger than maximum
   /// required index.
-  const std::vector<common::Subfield>& requiredSubfields() const {
+  const std::vector<velox::common::Subfield>& requiredSubfields() const {
     return requiredSubfields_;
   }
 
@@ -114,7 +114,7 @@ class HiveColumnHandle : public ConnectorColumnHandle {
 
   folly::dynamic serialize() const override;
 
-  static ConnectorColumnHandlePtr create(const folly::dynamic& obj);
+  static connector::common::ConnectorColumnHandlePtr create(const folly::dynamic& obj);
 
   static std::string columnTypeName(HiveColumnHandle::ColumnType columnType);
 
@@ -128,17 +128,17 @@ class HiveColumnHandle : public ConnectorColumnHandle {
   const ColumnType columnType_;
   const TypePtr dataType_;
   const TypePtr hiveType_;
-  const std::vector<common::Subfield> requiredSubfields_;
+  const std::vector<velox::common::Subfield> requiredSubfields_;
   const ColumnParseParameters columnParseParameters_;
 };
 
-class HiveTableHandle : public ConnectorTableHandle {
+class HiveTableHandle : public connector::common::ConnectorTableHandle {
  public:
   HiveTableHandle(
       std::string connectorId,
       const std::string& tableName,
       bool filterPushdownEnabled,
-      common::SubfieldFilters subfieldFilters,
+      velox::common::SubfieldFilters subfieldFilters,
       const core::TypedExprPtr& remainingFilter,
       const RowTypePtr& dataColumns = nullptr,
       const std::unordered_map<std::string, std::string>& tableParameters = {});
@@ -155,7 +155,7 @@ class HiveTableHandle : public ConnectorTableHandle {
     return filterPushdownEnabled_;
   }
 
-  const common::SubfieldFilters& subfieldFilters() const {
+  const velox::common::SubfieldFilters& subfieldFilters() const {
     return subfieldFilters_;
   }
 
@@ -176,7 +176,7 @@ class HiveTableHandle : public ConnectorTableHandle {
 
   folly::dynamic serialize() const override;
 
-  static ConnectorTableHandlePtr create(
+  static connector::common::ConnectorTableHandlePtr create(
       const folly::dynamic& obj,
       void* context);
 
@@ -185,7 +185,7 @@ class HiveTableHandle : public ConnectorTableHandle {
  private:
   const std::string tableName_;
   const bool filterPushdownEnabled_;
-  const common::SubfieldFilters subfieldFilters_;
+  const velox::common::SubfieldFilters subfieldFilters_;
   const core::TypedExprPtr remainingFilter_;
   const RowTypePtr dataColumns_;
   const std::unordered_map<std::string, std::string> tableParameters_;

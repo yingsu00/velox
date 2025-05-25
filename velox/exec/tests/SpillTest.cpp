@@ -55,15 +55,15 @@ class TestRuntimeStatWriter : public BaseRuntimeStatWriter {
 } // namespace
 
 struct TestParam {
-  const common::CompressionKind compressionKind;
+  const velox::common::CompressionKind compressionKind;
   const bool enablePrefixSort;
 
-  TestParam(common::CompressionKind _compressionKind, bool _enablePrefixSort)
+  TestParam(velox::common::CompressionKind _compressionKind, bool _enablePrefixSort)
       : compressionKind(_compressionKind),
         enablePrefixSort(_enablePrefixSort) {}
 
   TestParam(uint32_t value)
-      : compressionKind(static_cast<common::CompressionKind>(value >> 1)),
+      : compressionKind(static_cast<velox::common::CompressionKind>(value >> 1)),
         enablePrefixSort(!!(value & 1)) {}
 
   uint32_t value() const {
@@ -285,7 +285,7 @@ class SpillTest : public ::testing::TestWithParam<uint32_t>,
     spillStats_.wlock()->reset();
     const std::optional<common::PrefixSortConfig> prefixSortConfig =
         enablePrefixSort_
-        ? std::optional<common::PrefixSortConfig>(common::PrefixSortConfig())
+        ? std::optional<common::PrefixSortConfig>(velox::common::PrefixSortConfig())
         : std::nullopt;
     const int32_t numSortKeys = 1;
     const auto sortingKeys = SpillState::makeSortingKeys(
@@ -413,7 +413,7 @@ class SpillTest : public ::testing::TestWithParam<uint32_t>,
         compareFlags.empty() ? true : compareFlags[0].nullsFirst,
         compareFlags.empty() ? true : compareFlags[0].ascending));
 
-    const auto prevGStats = common::globalSpillStats();
+    const auto prevGStats = velox::common::globalSpillStats();
 
     SpillPartitionIdSet partitionIds = genPartitionIdSet(numPartitions);
 
@@ -438,7 +438,7 @@ class SpillTest : public ::testing::TestWithParam<uint32_t>,
     // NOTE: the following stats are not collected by spill state.
     ASSERT_EQ(stats.spillFillTimeNanos, 0);
     ASSERT_EQ(stats.spillSortTimeNanos, 0);
-    const auto newGStats = common::globalSpillStats();
+    const auto newGStats = velox::common::globalSpillStats();
     ASSERT_EQ(
         prevGStats.spilledPartitions + stats.spilledPartitions,
         newGStats.spilledPartitions);
@@ -573,17 +573,17 @@ class SpillTest : public ::testing::TestWithParam<uint32_t>,
   folly::Random::DefaultGenerator rng_;
   std::shared_ptr<TempDirectoryPath> tempDir_;
   memory::MemoryAllocator* allocator_;
-  common::CompressionKind compressionKind_;
+  velox::common::CompressionKind compressionKind_;
   bool enablePrefixSort_;
   std::vector<std::optional<int64_t>> values_;
   folly::F14FastMap<SpillPartitionId, std::vector<RowVectorPtr>>
       batchesByPartition_;
   std::string fileNamePrefix_;
-  folly::Synchronized<common::SpillStats> spillStats_;
+  folly::Synchronized<velox::common::SpillStats> spillStats_;
   std::unique_ptr<SpillState> state_;
   std::unordered_map<std::string, RuntimeMetric> runtimeStats_;
   std::unique_ptr<TestRuntimeStatWriter> statWriter_;
-  common::UpdateAndCheckSpillLimitCB updateSpilledBytesCb_;
+  velox::common::UpdateAndCheckSpillLimitCB updateSpilledBytesCb_;
 };
 
 TEST_P(SpillTest, spillState) {
@@ -621,7 +621,7 @@ TEST_P(SpillTest, spillTimestamp) {
       Timestamp{Timestamp::kMinSeconds, 0}};
   const std::optional<common::PrefixSortConfig> prefixSortConfig =
       enablePrefixSort_
-      ? std::optional<common::PrefixSortConfig>(common::PrefixSortConfig())
+      ? std::optional<common::PrefixSortConfig>(velox::common::PrefixSortConfig())
       : std::nullopt;
   SpillState state(
       [&]() -> const std::string& { return tempDirectory->getPath(); },
@@ -1441,7 +1441,7 @@ SpillFiles makeFakeSpillFiles(int32_t numFiles) {
          tempDir->getPath() + "/Spill_" + std::to_string(fileId),
          1024,
          SpillState::makeSortingKeys(std::vector<CompareFlags>(1)),
-         common::CompressionKind_NONE});
+         velox::common::CompressionKind_NONE});
   }
   return files;
 }

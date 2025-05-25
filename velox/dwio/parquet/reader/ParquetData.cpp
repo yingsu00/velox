@@ -23,13 +23,13 @@ namespace facebook::velox::parquet {
 
 std::unique_ptr<dwio::common::FormatData> ParquetParams::toFormatData(
     const std::shared_ptr<const dwio::common::TypeWithId>& type,
-    const common::ScanSpec& /*scanSpec*/) {
+    const velox::common::ScanSpec& /*scanSpec*/) {
   return std::make_unique<ParquetData>(
       type, metaData_, pool(), sessionTimezone_);
 }
 
 void ParquetData::filterRowGroups(
-    const common::ScanSpec& scanSpec,
+    const velox::common::ScanSpec& scanSpec,
     uint64_t /*rowsPerRowGroup*/,
     const dwio::common::StatsContext& writerContext,
     FilterRowGroupsResult& result) {
@@ -70,7 +70,7 @@ void ParquetData::filterRowGroups(
   }
 }
 
-bool ParquetData::rowGroupMatches(uint32_t rowGroupId, common::Filter* filter) {
+bool ParquetData::rowGroupMatches(uint32_t rowGroupId, velox::common::Filter* filter) {
   auto column = type_->column();
   auto type = type_->type();
   auto rowGroup = fileMetaDataPtr_.rowGroup(rowGroupId);
@@ -107,7 +107,7 @@ void ParquetData::enqueueRowGroup(
   }
 
   uint64_t readSize =
-      (chunk.compression() == common::CompressionKind::CompressionKind_NONE)
+      (chunk.compression() == velox::common::CompressionKind::CompressionKind_NONE)
       ? chunk.totalUncompressedSize()
       : chunk.totalCompressedSize();
 

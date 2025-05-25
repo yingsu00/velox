@@ -191,7 +191,7 @@ TEST_F(CompactRowTest, rowSizeArrayOfBigint) {
       makeNullableArrayVector<int64_t>({
           {{1, 2, std::nullopt, 3}},
           {{4, 5}},
-          common::testutil::optionalEmpty,
+          velox::common::testutil::optionalEmpty,
           std::nullopt,
           {{6}},
       }),
@@ -250,7 +250,7 @@ TEST_F(CompactRowTest, rowSizeArrayOfStrings) {
   data = makeRowVector({
       makeNullableArrayVector<std::string>({
           {{"a", "Abc", std::nullopt}},
-          common::testutil::optionalEmpty,
+          velox::common::testutil::optionalEmpty,
           std::nullopt,
           {{"a", std::nullopt, "Longer string", "abc"}},
       }),
@@ -405,7 +405,7 @@ TEST_F(CompactRowTest, arrayOfBigint) {
           {{std::nullopt, 6}},
           {{std::nullopt}},
           std::nullopt,
-          common::testutil::optionalEmpty,
+          velox::common::testutil::optionalEmpty,
       }),
   });
 
@@ -431,7 +431,7 @@ TEST_F(CompactRowTest, arrayOfTimestamp) {
           {{std::nullopt, ts(6)}},
           {{std::nullopt}},
           std::nullopt,
-          common::testutil::optionalEmpty,
+          velox::common::testutil::optionalEmpty,
       }),
   });
 
@@ -458,7 +458,7 @@ TEST_F(CompactRowTest, arrayOfString) {
             "Abc 12345 ...test",
             std::nullopt,
             "foo"}},
-          common::testutil::optionalEmpty,
+          velox::common::testutil::optionalEmpty,
           {{std::nullopt}},
           std::nullopt,
       }),

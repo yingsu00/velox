@@ -106,7 +106,7 @@ class E2EFilterTestBase : public testing::Test {
   void SetUp() override {
     rootPool_ = memory::memoryManager()->addRootPool("E2EFilterTestBase");
     leafPool_ = rootPool_->addLeafChild("E2EFilterTestBase");
-    seed_ = common::testutil::getRandomSeed(seed_);
+    seed_ = velox::common::testutil::getRandomSeed(seed_);
   }
 
   static bool typeKindSupportsValueHook(TypeKind kind) {
@@ -222,12 +222,12 @@ class E2EFilterTestBase : public testing::Test {
   }
 
   void readWithoutFilter(
-      std::shared_ptr<common::ScanSpec> spec,
+      std::shared_ptr<velox::common::ScanSpec> spec,
       const std::vector<RowVectorPtr>& batches,
       uint64_t& time);
 
   void readWithFilter(
-      std::shared_ptr<common::ScanSpec> spec,
+      std::shared_ptr<velox::common::ScanSpec> spec,
       const MutationSpec&,
       const std::vector<RowVectorPtr>& batches,
       const std::vector<uint64_t>& hitRows,
@@ -261,7 +261,7 @@ class E2EFilterTestBase : public testing::Test {
       auto reference = batches[common::batchNumber(hitRows[row])]
                            ->childAt(columnIndex)
                            ->as<FlatVector<T>>();
-      auto referenceIndex = common::batchRow(hitRows[row]);
+      auto referenceIndex = dwio::common::batchRow(hitRows[row]);
       if (reference->isNullAt(referenceIndex)) {
         continue; // The hook is not called on nulls.
       }
@@ -299,7 +299,7 @@ class E2EFilterTestBase : public testing::Test {
 
  private:
   void testReadWithFilterLazy(
-      const std::shared_ptr<common::ScanSpec>& spec,
+      const std::shared_ptr<velox::common::ScanSpec>& spec,
       const MutationSpec&,
       const std::vector<RowVectorPtr>& batches,
       const std::vector<uint64_t>& hitRows);
@@ -330,8 +330,8 @@ class E2EFilterTestBase : public testing::Test {
  private:
   void testMetadataFilterImpl(
       const std::vector<RowVectorPtr>& batches,
-      common::Subfield filterField,
-      std::unique_ptr<common::Filter> filter,
+      velox::common::Subfield filterField,
+      std::unique_ptr<velox::common::Filter> filter,
       core::ExpressionEvaluator*,
       const std::string& remainingFilter,
       std::function<bool(int64_t a, int64_t c)> validationFilter);
@@ -360,7 +360,7 @@ class E2EFilterTestBase : public testing::Test {
   const size_t kBatchSize = 25'000;
 
   std::unique_ptr<test::DataSetBuilder> dataSetBuilder_;
-  std::unique_ptr<common::FilterGenerator> filterGenerator_;
+  std::unique_ptr<dwio::common::FilterGenerator> filterGenerator_;
   std::shared_ptr<memory::MemoryPool> rootPool_;
   std::shared_ptr<memory::MemoryPool> leafPool_;
   std::shared_ptr<const RowType> rowType_;

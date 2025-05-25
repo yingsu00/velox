@@ -94,7 +94,7 @@ void saveResults(
     const std::string& directoryPath,
     const std::string& fileName) {
   auto path =
-      common::generateTempFilePath(directoryPath.c_str(), fileName.c_str());
+      velox::common::generateTempFilePath(directoryPath.c_str(), fileName.c_str());
   VELOX_CHECK(
       path.has_value(),
       "Failed to create file for saving result vector in {} directory.",

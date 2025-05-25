@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 #include <folly/experimental/FunctionScheduler.h>
-#include "velox/connectors/Connector.h"
+#include "../../connectors/common/Connector.h"
 #include "velox/exec/PlanNodeStats.h"
 #include "velox/exec/tests/utils/OperatorTestBase.h"
 #include "velox/exec/tests/utils/PlanBuilder.h"
@@ -30,19 +30,19 @@ namespace {
 
 const std::string kTestConnectorId = "test";
 
-class TestTableHandle : public connector::ConnectorTableHandle {
+class TestTableHandle : public connector::common::ConnectorTableHandle {
  public:
-  TestTableHandle() : connector::ConnectorTableHandle(kTestConnectorId) {}
+  TestTableHandle() : connector::common::ConnectorTableHandle(kTestConnectorId) {}
 
   std::string toString() const override {
     VELOX_NYI();
   }
 };
 
-class TestSplit : public connector::ConnectorSplit {
+class TestSplit : public connector::common::ConnectorSplit {
  public:
   explicit TestSplit(uint32_t delayMs)
-      : connector::ConnectorSplit(kTestConnectorId), delayMs_{delayMs} {
+      : connector::common::ConnectorSplit(kTestConnectorId), delayMs_{delayMs} {
     scheduler_.start();
   }
 
@@ -70,11 +70,11 @@ class TestSplit : public connector::ConnectorSplit {
   velox::ContinuePromise promise_;
 };
 
-class TestDataSource : public connector::DataSource {
+class TestDataSource : public connector::common::DataSource {
  public:
   explicit TestDataSource(memory::MemoryPool* pool) : pool_{pool} {}
 
-  void addSplit(std::shared_ptr<connector::ConnectorSplit> split) override {
+  void addSplit(std::shared_ptr<connector::common::ConnectorSplit> split) override {
     auto testSplit = std::dynamic_pointer_cast<TestSplit>(split);
     VELOX_CHECK_NOT_NULL(testSplit);
     future_ = testSplit->touch();
@@ -109,7 +109,7 @@ class TestDataSource : public connector::DataSource {
 
   void addDynamicFilter(
       column_index_t /* outputChannel */,
-      const std::shared_ptr<common::Filter>& /* filter */) override {
+      const std::shared_ptr<velox::common::Filter>& /* filter */) override {
     VELOX_NYI();
   }
 
@@ -131,38 +131,38 @@ class TestDataSource : public connector::DataSource {
   ContinueFuture future_{ContinueFuture::makeEmpty()};
 };
 
-class TestConnector : public connector::Connector {
+class TestConnector : public connector::common::Connector {
  public:
-  TestConnector(const std::string& id) : connector::Connector(id) {}
+  TestConnector(const std::string& id) : connector::common::Connector(id) {}
 
-  std::unique_ptr<connector::DataSource> createDataSource(
+  std::unique_ptr<connector::common::DataSource> createDataSource(
       const RowTypePtr& /* outputType */,
-      const std::shared_ptr<ConnectorTableHandle>& /* tableHandle */,
+      const std::shared_ptr<connector::common::ConnectorTableHandle>& /* tableHandle */,
       const std::unordered_map<
           std::string,
           std::shared_ptr<
-              connector::ConnectorColumnHandle>>& /* columnHandles */,
-      connector::ConnectorQueryCtx* connectorQueryCtx) override {
+              connector::common::ConnectorColumnHandle>>& /* columnHandles */,
+      connector::common::ConnectorQueryCtx* connectorQueryCtx) override {
     return std::make_unique<TestDataSource>(connectorQueryCtx->memoryPool());
   }
 
-  std::unique_ptr<connector::DataSink> createDataSink(
+  std::unique_ptr<connector::common::DataSink> createDataSink(
       RowTypePtr /*inputType*/,
       std::shared_ptr<
-          ConnectorInsertTableHandle> /*connectorInsertTableHandle*/,
-      ConnectorQueryCtx* /*connectorQueryCtx*/,
-      CommitStrategy /*commitStrategy*/) override final {
+          connector::common::ConnectorInsertTableHandle> /*connectorInsertTableHandle*/,
+      connector::common::ConnectorQueryCtx* /*connectorQueryCtx*/,
+      connector::common::CommitStrategy /*commitStrategy*/) override final {
     VELOX_NYI();
   }
 };
 
-class TestConnectorFactory : public connector::ConnectorFactory {
+class TestConnectorFactory : public connector::common::ConnectorFactory {
  public:
   static constexpr const char* kTestConnectorName = "test";
 
-  TestConnectorFactory() : connector::ConnectorFactory(kTestConnectorName) {}
+  TestConnectorFactory() : connector::common::ConnectorFactory(kTestConnectorName) {}
 
-  std::shared_ptr<connector::Connector> newConnector(
+  std::shared_ptr<connector::common::Connector> newConnector(
       const std::string& id,
       std::shared_ptr<const config::ConfigBase> config,
       folly::Executor* /* ioExecutor */,
@@ -176,20 +176,20 @@ class AsyncConnectorTest : public OperatorTestBase {
  public:
   void SetUp() override {
     OperatorTestBase::SetUp();
-    connector::registerConnectorFactory(
+    connector::common::registerConnectorFactory(
         std::make_shared<TestConnectorFactory>());
     auto testConnector =
-        connector::getConnectorFactory(TestConnectorFactory::kTestConnectorName)
+        connector::common::getConnectorFactory(TestConnectorFactory::kTestConnectorName)
             ->newConnector(
                 kTestConnectorId,
                 std::make_shared<config::ConfigBase>(
                     std::unordered_map<std::string, std::string>()),
                 nullptr);
-    connector::registerConnector(testConnector);
+    connector::common::registerConnector(testConnector);
   }
 
   void TearDown() override {
-    connector::unregisterConnector(kTestConnectorId);
+    connector::common::unregisterConnector(kTestConnectorId);
     OperatorTestBase::TearDown();
   }
 };

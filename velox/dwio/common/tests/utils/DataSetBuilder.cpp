@@ -113,7 +113,7 @@ DataSetBuilder& DataSetBuilder::withNoNullsAfter(int32_t firstRow) {
 }
 
 DataSetBuilder& DataSetBuilder::withAllNullsForField(
-    const common::Subfield& field) {
+    const velox::common::Subfield& field) {
   for (RowVectorPtr batch : *batches_) {
     auto fieldValues = getChildBySubfield(batch.get(), field);
     SelectivityVector rows(fieldValues->size());
@@ -124,7 +124,7 @@ DataSetBuilder& DataSetBuilder::withAllNullsForField(
 }
 
 DataSetBuilder& DataSetBuilder::withNullsForField(
-    const common::Subfield& field,
+    const velox::common::Subfield& field,
     uint8_t nullsPercent) {
   for (RowVectorPtr batch : *batches_) {
     auto fieldValues = getChildBySubfield(batch.get(), field);
@@ -217,7 +217,7 @@ DataSetBuilder& DataSetBuilder::withUniqueStringsForField(
 }
 
 DataSetBuilder& DataSetBuilder::makeUniformMapKeys(
-    const common::Subfield& field) {
+    const velox::common::Subfield& field) {
   for (auto& batch : *batches_) {
     auto* map = dwio::common::getChildBySubfield(batch.get(), field)
                     ->asUnchecked<MapVector>();
@@ -247,7 +247,7 @@ DataSetBuilder& DataSetBuilder::makeUniformMapKeys(
 }
 
 DataSetBuilder& DataSetBuilder::makeMapStringValues(
-    const common::Subfield& field) {
+    const velox::common::Subfield& field) {
   for (auto& batch : *batches_) {
     auto* map = dwio::common::getChildBySubfield(batch.get(), field)
                     ->asUnchecked<MapVector>();

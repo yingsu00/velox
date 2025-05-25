@@ -16,7 +16,7 @@
 #pragma once
 
 #include "velox/common/config/Config.h"
-#include "velox/connectors/Connector.h"
+#include "velox/connectors/common/Connector.h"
 #include "velox/connectors/fuzzer/FuzzerConnectorSplit.h"
 #include "velox/vector/fuzzer/VectorFuzzer.h"
 
@@ -32,13 +32,13 @@ namespace facebook::velox::connector::fuzzer {
 /// FuzzerConnectorSplit lets clients specify how many rows are expected to be
 /// generated.
 
-class FuzzerTableHandle : public ConnectorTableHandle {
+class FuzzerTableHandle : public connector::common::ConnectorTableHandle {
  public:
   explicit FuzzerTableHandle(
       std::string connectorId,
       VectorFuzzer::Options options,
       size_t fuzzerSeed = 0)
-      : ConnectorTableHandle(std::move(connectorId)),
+      : connector::common::ConnectorTableHandle(std::move(connectorId)),
         fuzzerOptions(options),
         fuzzerSeed(fuzzerSeed) {}
 
@@ -52,18 +52,18 @@ class FuzzerTableHandle : public ConnectorTableHandle {
   size_t fuzzerSeed;
 };
 
-class FuzzerDataSource : public DataSource {
+class FuzzerDataSource : public connector::common::DataSource {
  public:
   FuzzerDataSource(
       const std::shared_ptr<const RowType>& outputType,
-      const std::shared_ptr<connector::ConnectorTableHandle>& tableHandle,
+      const std::shared_ptr<connector::common::ConnectorTableHandle>& tableHandle,
       velox::memory::MemoryPool* pool);
 
-  void addSplit(std::shared_ptr<ConnectorSplit> split) override;
+  void addSplit(std::shared_ptr<connector::common::ConnectorSplit> split) override;
 
   void addDynamicFilter(
       column_index_t /*outputChannel*/,
-      const std::shared_ptr<common::Filter>& /*filter*/) override {
+      const std::shared_ptr<velox::common::Filter>& /*filter*/) override {
     VELOX_NYI("Dynamic filters not supported by FuzzerConnector.");
   }
 
@@ -100,45 +100,45 @@ class FuzzerDataSource : public DataSource {
   memory::MemoryPool* pool_;
 };
 
-class FuzzerConnector final : public Connector {
+class FuzzerConnector final : public connector::common::Connector {
  public:
   FuzzerConnector(
       const std::string& id,
       std::shared_ptr<const config::ConfigBase> config,
       folly::Executor* /*executor*/)
-      : Connector(id) {}
+      : connector::common::Connector(id) {}
 
-  std::unique_ptr<DataSource> createDataSource(
+  std::unique_ptr<connector::common::DataSource> createDataSource(
       const std::shared_ptr<const RowType>& outputType,
-      const std::shared_ptr<ConnectorTableHandle>& tableHandle,
+      const std::shared_ptr<connector::common::ConnectorTableHandle>& tableHandle,
       const std::unordered_map<
           std::string,
-          std::shared_ptr<connector::ConnectorColumnHandle>>& /*columnHandles*/,
-      ConnectorQueryCtx* connectorQueryCtx) override final {
+          std::shared_ptr<connector::common::ConnectorColumnHandle>>& /*columnHandles*/,
+      connector::common::ConnectorQueryCtx* connectorQueryCtx) override final {
     return std::make_unique<FuzzerDataSource>(
         outputType, tableHandle, connectorQueryCtx->memoryPool());
   }
 
-  std::unique_ptr<DataSink> createDataSink(
+  std::unique_ptr<connector::common::DataSink> createDataSink(
       RowTypePtr /*inputType*/,
       std::shared_ptr<
-          ConnectorInsertTableHandle> /*connectorInsertTableHandle*/,
-      ConnectorQueryCtx* /*connectorQueryCtx*/,
-      CommitStrategy /*commitStrategy*/) override final {
+          connector::common::ConnectorInsertTableHandle> /*connectorInsertTableHandle*/,
+      connector::common::ConnectorQueryCtx* /*connectorQueryCtx*/,
+      connector::common::CommitStrategy /*commitStrategy*/) override final {
     VELOX_NYI("FuzzerConnector does not support data sink.");
   }
 };
 
-class FuzzerConnectorFactory : public ConnectorFactory {
+class FuzzerConnectorFactory : public connector::common::ConnectorFactory {
  public:
   static constexpr const char* kFuzzerConnectorName{"fuzzer"};
 
-  FuzzerConnectorFactory() : ConnectorFactory(kFuzzerConnectorName) {}
+  FuzzerConnectorFactory() : connector::common::ConnectorFactory(kFuzzerConnectorName) {}
 
   explicit FuzzerConnectorFactory(const char* connectorName)
-      : ConnectorFactory(connectorName) {}
+      : connector::common::ConnectorFactory(connectorName) {}
 
-  std::shared_ptr<Connector> newConnector(
+  std::shared_ptr<connector::common::Connector> newConnector(
       const std::string& id,
       std::shared_ptr<const config::ConfigBase> config,
       folly::Executor* ioExecutor = nullptr,

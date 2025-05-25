@@ -48,7 +48,7 @@ class AbfsReadFile final : public ReadFile {
       File::IoStats* stats = nullptr) const final;
 
   uint64_t preadv(
-      folly::Range<const common::Region*> regions,
+      folly::Range<const velox::common::Region*> regions,
       folly::Range<folly::IOBuf*> iobufs,
       File::IoStats* stats = nullptr) const final;
 

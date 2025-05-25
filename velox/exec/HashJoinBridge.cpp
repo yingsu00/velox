@@ -98,8 +98,8 @@ std::unique_ptr<HashBuildSpiller> createSpiller(
     core::JoinType joinType,
     const RowTypePtr& tableType,
     const HashBitRange& hashBitRange,
-    const common::SpillConfig* spillConfig,
-    folly::Synchronized<common::SpillStats>* stats) {
+    const velox::common::SpillConfig* spillConfig,
+    folly::Synchronized<velox::common::SpillStats>* stats) {
   return std::make_unique<HashBuildSpiller>(
       joinType,
       parentId,
@@ -113,7 +113,7 @@ std::unique_ptr<HashBuildSpiller> createSpiller(
 
 std::vector<std::unique_ptr<HashJoinTableSpillResult>> spillHashJoinTable(
     const std::vector<HashBuildSpiller*>& spillers,
-    const common::SpillConfig* spillConfig) {
+    const velox::common::SpillConfig* spillConfig) {
   VELOX_CHECK_NOT_NULL(spillConfig);
   auto spillExecutor = spillConfig->executor;
   std::vector<std::shared_ptr<AsyncSource<HashJoinTableSpillResult>>>
@@ -166,8 +166,8 @@ SpillPartitionSet spillHashJoinTable(
     std::optional<SpillPartitionId> parentId,
     const HashBitRange& hashBitRange,
     const std::shared_ptr<const core::HashJoinNode>& joinNode,
-    const common::SpillConfig* spillConfig,
-    folly::Synchronized<common::SpillStats>* stats) {
+    const velox::common::SpillConfig* spillConfig,
+    folly::Synchronized<velox::common::SpillStats>* stats) {
   VELOX_CHECK_NOT_NULL(table);
   VELOX_CHECK_NOT_NULL(spillConfig);
   if (table->numDistinct() == 0) {

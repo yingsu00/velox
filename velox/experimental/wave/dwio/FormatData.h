@@ -38,7 +38,7 @@ using StagingSet = OperandSet;
 // Describes how a column is staged on GPU, for example, copy from host RAM,
 // direct read, already on device etc.
 struct Staging {
-  Staging(const void* hostData, int32_t size, const common::Region& region)
+  Staging(const void* hostData, int32_t size, const velox::common::Region& region)
       : hostData(hostData),
         size(hostData ? size : region.length),
         fileOffset(region.offset) {}

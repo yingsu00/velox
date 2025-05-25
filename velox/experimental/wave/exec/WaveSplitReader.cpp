@@ -18,7 +18,7 @@
 
 namespace facebook::velox::wave {
 std::shared_ptr<WaveSplitReader> WaveSplitReader::create(
-    const std::shared_ptr<velox::connector::ConnectorSplit>& split,
+    const std::shared_ptr<velox::connector::common::ConnectorSplit>& split,
     const SplitReaderParams& params,
     const DefinesMap* defines) {
   for (auto& factory : factories_) {

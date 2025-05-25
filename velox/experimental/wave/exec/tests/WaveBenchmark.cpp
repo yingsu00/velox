@@ -200,7 +200,7 @@ class WaveBenchmark : public QueryBenchmarkBase {
         rootPool_->addAggregateChild("HiveConnectorTestBase.Writer");
     if (FLAGS_data_format == "dwrf") {
       auto config = std::make_shared<dwrf::Config>();
-      config->set(dwrf::Config::COMPRESSION, common::CompressionKind_NONE);
+      config->set(dwrf::Config::COMPRESSION, velox::common::CompressionKind_NONE);
       config->set(
           dwrf::Config::STRIPE_SIZE,
           static_cast<uint64_t>(FLAGS_rows_per_stripe * FLAGS_num_columns * 8));
@@ -225,7 +225,7 @@ class WaveBenchmark : public QueryBenchmarkBase {
         return std::make_unique<facebook::velox::parquet::LambdaFlushPolicy>(
             1000000, 1000000000, [&]() { return (++flushCounter % 1 == 0); });
       };
-      options.compressionKind = common::CompressionKind_NONE;
+      options.compressionKind = velox::common::CompressionKind_NONE;
       auto writer = std::make_unique<facebook::velox::parquet::Writer>(
           std::move(sink), options, asRowType(schema));
       for (auto& batch : vectors) {
@@ -378,7 +378,7 @@ class WaveBenchmark : public QueryBenchmarkBase {
     }
   }
 
-  std::vector<std::shared_ptr<connector::ConnectorSplit>> listSplits(
+  std::vector<std::shared_ptr<connector::common::ConnectorSplit>> listSplits(
       const std::string& path,
       int32_t numSplitsPerFile,
       const TpchPlan& plan) override {

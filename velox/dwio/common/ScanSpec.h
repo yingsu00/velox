@@ -57,7 +57,7 @@ class ScanSpec {
   // Filter to apply. If 'this' corresponds to a struct/list/map, this
   // can only be isNull or isNotNull, other filtering is given by
   // 'children'.
-  common::Filter* filter() const {
+  velox::common::Filter* filter() const {
     return filterDisabled_ ? nullptr : filter_.get();
   }
 
@@ -79,7 +79,7 @@ class ScanSpec {
 
   void addMetadataFilter(
       const MetadataFilter::LeafNode* leaf,
-      common::Filter* filter) {
+      velox::common::Filter* filter) {
     metadataFilters_.emplace_back(leaf, filter);
   }
 
@@ -91,7 +91,7 @@ class ScanSpec {
     return metadataFilters_[i].first;
   }
 
-  common::Filter* metadataFilterAt(int i) const {
+  velox::common::Filter* metadataFilterAt(int i) const {
     return metadataFilters_[i].second;
   }
 
@@ -422,7 +422,7 @@ class ScanSpec {
   // True if a string dictionary or flat map in this field should be
   // returned as flat.
   bool makeFlat_ = false;
-  std::unique_ptr<common::Filter> filter_;
+  std::unique_ptr<velox::common::Filter> filter_;
   bool filterDisabled_ = false;
   dwio::common::DeltaColumnUpdater* deltaUpdate_ = nullptr;
 
@@ -431,7 +431,7 @@ class ScanSpec {
   // the pointers to LeafNodes are stored here.  We need to keep these pointers
   // so that we can match the leaf node filter results and apply logical
   // conjunctions later properly.
-  std::vector<std::pair<const MetadataFilter::LeafNode*, common::Filter*>>
+  std::vector<std::pair<const MetadataFilter::LeafNode*, velox::common::Filter*>>
       metadataFilters_;
 
   SelectivityInfo selectivity_;
@@ -495,7 +495,7 @@ void ScanSpec::visit(const Type& type, F&& f) {
 // Returns false if no value from a range defined by stats can pass the
 // filter. True, otherwise.
 bool testFilter(
-    common::Filter* filter,
+    velox::common::Filter* filter,
     dwio::common::ColumnStatistics* stats,
     uint64_t totalRows,
     const TypePtr& type);

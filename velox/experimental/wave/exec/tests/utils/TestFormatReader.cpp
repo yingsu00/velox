@@ -21,7 +21,7 @@ DECLARE_int32(wave_reader_rows_per_tb);
 
 namespace facebook::velox::wave::test {
 
-using common::Subfield;
+using velox::common::Subfield;
 
 std::unique_ptr<FormatData> TestFormatParams::toFormatData(
     const std::shared_ptr<const dwio::common::TypeWithId>& type,
@@ -262,7 +262,7 @@ class TestStructColumnReader : public StructColumnReader {
       const TypePtr& requestedType,
       const std::shared_ptr<const dwio::common::TypeWithId>& fileType,
       TestFormatParams& params,
-      common::ScanSpec& scanSpec,
+      velox::common::ScanSpec& scanSpec,
       std::vector<std::unique_ptr<Subfield::PathElement>>& path,
       const DefinesMap& defines,
       bool isRoot)
@@ -289,7 +289,7 @@ class TestStructColumnReader : public StructColumnReader {
       auto childParams = TestFormatParams(
           params.pool(), params.runtimeStatistics(), params.stripe());
 
-      path.push_back(std::make_unique<common::Subfield::NestedField>(
+      path.push_back(std::make_unique<velox::common::Subfield::NestedField>(
           childSpec->fieldName()));
       addChild(TestFormatReader::build(
           childRequestedType,
@@ -308,7 +308,7 @@ std::unique_ptr<ColumnReader> buildIntegerReader(
     const TypePtr& requestedType,
     const std::shared_ptr<const dwio::common::TypeWithId>& fileType,
     TestFormatParams& params,
-    common::ScanSpec& scanSpec,
+    velox::common::ScanSpec& scanSpec,
     std::vector<std::unique_ptr<Subfield::PathElement>>& path,
     const DefinesMap& defines) {
   return std::make_unique<ColumnReader>(
@@ -320,7 +320,7 @@ std::unique_ptr<ColumnReader> TestFormatReader::build(
     const TypePtr& requestedType,
     const std::shared_ptr<const dwio::common::TypeWithId>& fileType,
     TestFormatParams& params,
-    common::ScanSpec& scanSpec,
+    velox::common::ScanSpec& scanSpec,
     std::vector<std::unique_ptr<Subfield::PathElement>>& path,
     const DefinesMap& defines,
     bool isRoot) {

@@ -242,7 +242,7 @@ class VectorHasher {
 
   // Returns an instance of the filter corresponding to a set of unique values.
   // Returns null if distinctOverflow_ is true.
-  std::unique_ptr<common::Filter> getFilter(bool nullAllowed) const;
+  std::unique_ptr<velox::common::Filter> getFilter(bool nullAllowed) const;
 
   void resetStats() {
     uniqueValues_.clear();

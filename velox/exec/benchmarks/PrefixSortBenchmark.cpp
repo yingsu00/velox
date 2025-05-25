@@ -102,13 +102,13 @@ class TestCase {
 
 // You could config threshold, e.i. 0, to test prefix-sort for small
 // dateset.
-static const common::PrefixSortConfig kDefaultSortConfig(1024, 100, 50);
+static const velox::common::PrefixSortConfig kDefaultSortConfig(1024, 100, 50);
 
 // For small dataset, in some test environments, if std-sort is defined in the
 // benchmark file, the test results may be strangely regressed. When the
 // threshold is particularly large, PrefixSort is actually std-sort, hence, we
 // can use this as std-sort benchmark base.
-static const common::PrefixSortConfig
+static const velox::common::PrefixSortConfig
     kStdSortConfig(1024, std::numeric_limits<int>::max(), 50);
 
 class PrefixSortBenchmark {

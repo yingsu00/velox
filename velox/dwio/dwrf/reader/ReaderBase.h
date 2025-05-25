@@ -177,13 +177,13 @@ class ReaderBase {
   uint64_t compressionBlockSize() const {
     return postScript_->hasCompressionBlockSize()
         ? postScript_->compressionBlockSize()
-        : common::kDefaultCompressionBlockSize;
+        : velox::common::kDefaultCompressionBlockSize;
   }
 
-  common::CompressionKind compressionKind() const {
+  velox::common::CompressionKind compressionKind() const {
     return postScript_->hasCompressionBlockSize()
         ? postScript_->compression()
-        : common::CompressionKind::CompressionKind_NONE;
+        : velox::common::CompressionKind::CompressionKind_NONE;
   }
 
   WriterVersion writerVersion() const {

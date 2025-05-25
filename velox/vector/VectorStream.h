@@ -218,15 +218,15 @@ class VectorSerde {
     Options() = default;
 
     Options(
-        common::CompressionKind _compressionKind,
+        velox::common::CompressionKind _compressionKind,
         float _minCompressionRatio)
         : compressionKind(_compressionKind),
           minCompressionRatio(_minCompressionRatio) {}
 
     virtual ~Options() = default;
 
-    common::CompressionKind compressionKind{
-        common::CompressionKind::CompressionKind_NONE};
+    velox::common::CompressionKind compressionKind{
+        velox::common::CompressionKind::CompressionKind_NONE};
     /// Minimum achieved compression if compression is enabled. Compressing less
     /// than this causes subsequent compression attempts to be skipped. The more
     /// times compression misses the target the less frequently it is tried.

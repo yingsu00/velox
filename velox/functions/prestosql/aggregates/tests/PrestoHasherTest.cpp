@@ -294,7 +294,7 @@ TEST_F(PrestoHasherTest, arrays) {
        {{10, 11}},
        {{12, std::nullopt}},
        std::nullopt,
-       common::testutil::optionalEmpty});
+       velox::common::testutil::optionalEmpty});
 
   assertHash(
       baseArrayVector,
@@ -321,7 +321,7 @@ TEST_F(PrestoHasherTest, arrays) {
       {{std::nullopt}},
       {{1, 2, 3}},
       {{1024, std::nullopt, -99, -999}},
-      common::testutil::optionalEmpty,
+      velox::common::testutil::optionalEmpty,
       {{std::nullopt, -1}},
   });
 

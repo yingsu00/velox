@@ -46,7 +46,7 @@ class ColumnReader {
 
   virtual ~ColumnReader() = default;
 
-  const common::ScanSpec& scanSpec() const {
+  const velox::common::ScanSpec& scanSpec() const {
     return *scanSpec_;
   }
 

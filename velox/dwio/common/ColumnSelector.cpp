@@ -124,9 +124,9 @@ FilterTypePtr ColumnSelector::buildNode(
 // this copy method only update inContent and data type
 // based on disk data type
 void ColumnSelector::copy(
-    common::FilterTypePtr& node,
+    dwio::common::FilterTypePtr& node,
     const std::shared_ptr<const Type>& diskType,
-    const common::FilterTypePtr& origin) {
+    const dwio::common::FilterTypePtr& origin) {
   auto originIsNull = (origin == nullptr);
   if (!originIsNull) {
     node->setInContent(origin->isInContent());
@@ -147,8 +147,8 @@ void ColumnSelector::copy(
     // update data type during the visit as well as other data fields
     node->setDataType(diskType);
     if (!originIsNull) {
-      const common::FilterNode& f = origin->getNode();
-      auto& fn = const_cast<common::FilterNode&>(node->getNode());
+      const dwio::common::FilterNode& f = origin->getNode();
+      auto& fn = const_cast<dwio::common::FilterNode&>(node->getNode());
       fn.expression = f.expression;
       fn.partitionKey = f.partitionKey;
     }
@@ -156,7 +156,7 @@ void ColumnSelector::copy(
     // visit all children
     for (size_t i = 0; i < node->size(); ++i) {
       copy(
-          const_cast<common::FilterTypePtr&>(node->childAt(i)),
+          const_cast<dwio::common::FilterTypePtr&>(node->childAt(i)),
           i < diskType->size() ? diskType->childAt(i) : nullptr,
           originIsNull ? nullptr : origin->childAt(i));
     }
@@ -189,7 +189,7 @@ ColumnSelector ColumnSelector::apply(
  *
  * @param node the starting id
  */
-void ColumnSelector::setRead(const common::FilterTypePtr& node, bool only) {
+void ColumnSelector::setRead(const dwio::common::FilterTypePtr& node, bool only) {
   if (!node->valid()) {
     return;
   }
@@ -302,7 +302,7 @@ const FilterTypePtr& ColumnSelector::process(const std::string& column, bool) {
 
       // set expression for this node
       auto& nodeValue = node->getNode();
-      const_cast<common::FilterNode&>(nodeValue).expression = expr;
+      const_cast<dwio::common::FilterNode&>(nodeValue).expression = expr;
     }
     return node;
   }

@@ -296,7 +296,7 @@ DEBUG_ONLY_TEST_F(BufferTest, testReallocateFails) {
 
   ::memset(buffer->asMutable<char>(), 'a', bufferSize);
 
-  common::testutil::TestValue::enable();
+  velox::common::testutil::TestValue::enable();
 
   const std::string kErrorMessage = "Expected out of memory exception";
   SCOPED_TESTVALUE_SET(

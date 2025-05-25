@@ -74,7 +74,7 @@ class QuantileDigestTest : public QuantileDigestTestBase {
     constexpr double kAccuracy = 0.8;
     std::vector<double> values;
     QuantileDigest<T> digest{StlAllocator<T>(allocator()), kAccuracy};
-    std::default_random_engine gen(common::testutil::getRandomSeed(42));
+    std::default_random_engine gen(velox::common::testutil::getRandomSeed(42));
     std::uniform_real_distribution<T> dist{-10.0, 10.0};
     for (int i = 0; i < N; ++i) {
       auto v = dist(gen);
@@ -103,7 +103,7 @@ class QuantileDigestTest : public QuantileDigestTestBase {
     QuantileDigest<T> digest1{allocator(), kAccuracy};
     // QuantileDigest<T> digest2{allocator(), kAccuracy};
 
-    std::default_random_engine gen(common::testutil::getRandomSeed(42));
+    std::default_random_engine gen(velox::common::testutil::getRandomSeed(42));
     std::uniform_real_distribution<> dist;
     for (auto i = 0; i < 100; ++i) {
       auto v = T(dist(gen));
@@ -142,7 +142,7 @@ class QuantileDigestTest : public QuantileDigestTestBase {
     QuantileDigest<T> digestEmpty{StlAllocator<T>(allocator()), kAccuracy};
 
     std::vector<double> values;
-    std::default_random_engine gen(common::testutil::getRandomSeed(42));
+    std::default_random_engine gen(velox::common::testutil::getRandomSeed(42));
     std::uniform_real_distribution<> dist;
     for (auto i = 0; i < 100; ++i) {
       auto v = T(dist(gen));
@@ -177,7 +177,7 @@ class QuantileDigestTest : public QuantileDigestTestBase {
 
     std::vector<double> allValues;
     std::vector<double> digest1Values;
-    std::default_random_engine gen(common::testutil::getRandomSeed(42));
+    std::default_random_engine gen(velox::common::testutil::getRandomSeed(42));
     std::uniform_real_distribution<> dist;
     for (auto i = 0; i < 10000; ++i) {
       auto v = T(dist(gen));

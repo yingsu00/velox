@@ -22,17 +22,17 @@ using namespace connector::hive;
 
 WaveHiveDataSource::WaveHiveDataSource(
     const std::shared_ptr<HiveTableHandle>& hiveTableHandle,
-    const std::shared_ptr<common::ScanSpec>& scanSpec,
+    const std::shared_ptr<velox::common::ScanSpec>& scanSpec,
     const RowTypePtr& readerOutputType,
     std::unordered_map<std::string, std::shared_ptr<HiveColumnHandle>>*
         partitionKeys,
     FileHandleFactory* fileHandleFactory,
     folly::Executor* executor,
-    const connector::ConnectorQueryCtx* connectorQueryCtx,
+    const connector::common::ConnectorQueryCtx* connectorQueryCtx,
     const std::shared_ptr<HiveConfig>& hiveConfig,
     const std::shared_ptr<io::IoStatistics>& ioStats,
     const exec::ExprSet* remainingFilter,
-    std::shared_ptr<common::MetadataFilter> metadataFilter) {
+    std::shared_ptr<velox::common::MetadataFilter> metadataFilter) {
   params_.hiveTableHandle = hiveTableHandle;
   params_.scanSpec = scanSpec;
   params_.readerOutputType = readerOutputType;
@@ -48,7 +48,7 @@ WaveHiveDataSource::WaveHiveDataSource(
 
 void WaveHiveDataSource::addDynamicFilter(
     column_index_t outputChannel,
-    const std::shared_ptr<common::Filter>& filter) {
+    const std::shared_ptr<velox::common::Filter>& filter) {
   VELOX_NYI();
 }
 
@@ -74,7 +74,7 @@ void WaveHiveDataSource::setFromDataSource(
 }
 
 void WaveHiveDataSource::addSplit(
-    std::shared_ptr<connector::ConnectorSplit> split) {
+    std::shared_ptr<connector::common::ConnectorSplit> split) {
   VELOX_CHECK(
       split_ == nullptr,
       "Previous split has not been processed yet. Call next to process the split.");
@@ -162,23 +162,23 @@ void WaveHiveDataSource::registerConnector() {
 
   // Create hive connector with config...
   auto hiveConnector =
-      connector::getConnectorFactory(
+      connector::common::getConnectorFactory(
           connector::hive::HiveConnectorFactory::kHiveConnectorName)
           ->newConnector("wavemock", config, nullptr);
-  connector::registerConnector(hiveConnector);
+  connector::common::registerConnector(hiveConnector);
   connector::hive::HiveDataSource::registerWaveDelegateHook(
       [](const std::shared_ptr<HiveTableHandle>& hiveTableHandle,
-         const std::shared_ptr<common::ScanSpec>& scanSpec,
+         const std::shared_ptr<velox::common::ScanSpec>& scanSpec,
          const RowTypePtr& readerOutputType,
          std::unordered_map<std::string, std::shared_ptr<HiveColumnHandle>>*
              partitionKeys,
          FileHandleFactory* fileHandleFactory,
          folly::Executor* executor,
-         const connector::ConnectorQueryCtx* connectorQueryCtx,
+         const connector::common::ConnectorQueryCtx* connectorQueryCtx,
          const std::shared_ptr<HiveConfig>& hiveConfig,
          const std::shared_ptr<io::IoStatistics>& ioStats,
          const exec::ExprSet* remainingFilter,
-         std::shared_ptr<common::MetadataFilter> metadataFilter) {
+         std::shared_ptr<velox::common::MetadataFilter> metadataFilter) {
         return std::make_shared<WaveHiveDataSource>(
             hiveTableHandle,
             scanSpec,

@@ -21,7 +21,7 @@ namespace facebook::velox::connector::fuzzer {
 
 FuzzerDataSource::FuzzerDataSource(
     const std::shared_ptr<const RowType>& outputType,
-    const std::shared_ptr<connector::ConnectorTableHandle>& tableHandle,
+    const std::shared_ptr<connector::common::ConnectorTableHandle>& tableHandle,
     velox::memory::MemoryPool* pool)
     : outputType_(outputType), pool_(pool) {
   auto fuzzerTableHandle =
@@ -34,7 +34,7 @@ FuzzerDataSource::FuzzerDataSource(
       fuzzerTableHandle->fuzzerOptions, pool_, fuzzerTableHandle->fuzzerSeed);
 }
 
-void FuzzerDataSource::addSplit(std::shared_ptr<ConnectorSplit> split) {
+void FuzzerDataSource::addSplit(std::shared_ptr<connector::common::ConnectorSplit> split) {
   VELOX_CHECK_EQ(
       currentSplit_,
       nullptr,

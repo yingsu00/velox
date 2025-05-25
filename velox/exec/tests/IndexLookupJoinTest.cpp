@@ -15,12 +15,12 @@
  */
 
 #include "velox/exec/IndexLookupJoin.h"
+#include "../../connectors/common/Connector.h"
 #include "folly/experimental/EventCount.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest-matchers.h"
 #include "velox/common/base/tests/GTestUtils.h"
 #include "velox/common/testutil/TestValue.h"
-#include "velox/connectors/Connector.h"
 #include "velox/core/PlanNode.h"
 #include "velox/exec/PlanNodeStats.h"
 #include "velox/exec/tests/utils/AssertQueryBuilder.h"
@@ -80,16 +80,16 @@ class IndexLookupJoinTest : public IndexLookupJoinTestBase,
     connector::hive::HiveColumnHandle::registerSerDe();
     Type::registerSerDe();
     core::ITypedExpr::registerSerDe();
-    connector::registerConnectorFactory(
+    connector::common::registerConnectorFactory(
         std::make_shared<TestIndexConnectorFactory>());
-    std::shared_ptr<connector::Connector> connector =
-        connector::getConnectorFactory(kTestIndexConnectorName)
+    std::shared_ptr<connector::common::Connector> connector =
+        connector::common::getConnectorFactory(kTestIndexConnectorName)
             ->newConnector(
                 kTestIndexConnectorName,
                 {},
                 nullptr,
                 connectorCpuExecutor_.get());
-    connector::registerConnector(connector);
+    connector::common::registerConnector(connector);
 
     keyType_ = ROW({"u0", "u1", "u2"}, {BIGINT(), BIGINT(), BIGINT()});
     valueType_ = ROW({"u3", "u4", "u5"}, {BIGINT(), BIGINT(), VARCHAR()});
@@ -102,8 +102,8 @@ class IndexLookupJoinTest : public IndexLookupJoinTestBase,
   }
 
   void TearDown() override {
-    connector::unregisterConnectorFactory(kTestIndexConnectorName);
-    connector::unregisterConnector(kTestIndexConnectorName);
+    connector::common::unregisterConnectorFactory(kTestIndexConnectorName);
+    connector::common::unregisterConnector(kTestIndexConnectorName);
     HiveConnectorTestBase::TearDown();
   }
 
@@ -803,7 +803,7 @@ TEST_P(IndexLookupJoinTest, equalJoin) {
     auto planNodeIdGenerator = std::make_shared<core::PlanNodeIdGenerator>();
     std::unordered_map<
         std::string,
-        std::shared_ptr<connector::ConnectorColumnHandle>>
+        std::shared_ptr<connector::common::ConnectorColumnHandle>>
         columnHandles;
     const auto indexScanNode = makeIndexScanNode(
         planNodeIdGenerator,
@@ -1260,7 +1260,7 @@ TEST_P(IndexLookupJoinTest, betweenJoinCondition) {
     auto planNodeIdGenerator = std::make_shared<core::PlanNodeIdGenerator>();
     std::unordered_map<
         std::string,
-        std::shared_ptr<connector::ConnectorColumnHandle>>
+        std::shared_ptr<connector::common::ConnectorColumnHandle>>
         columnHandles;
     const auto indexScanNode = makeIndexScanNode(
         planNodeIdGenerator,
@@ -1583,7 +1583,7 @@ TEST_P(IndexLookupJoinTest, inJoinCondition) {
     auto planNodeIdGenerator = std::make_shared<core::PlanNodeIdGenerator>();
     std::unordered_map<
         std::string,
-        std::shared_ptr<connector::ConnectorColumnHandle>>
+        std::shared_ptr<connector::common::ConnectorColumnHandle>>
         columnHandles;
     const auto indexScanNode = makeIndexScanNode(
         planNodeIdGenerator,
@@ -1636,7 +1636,7 @@ DEBUG_ONLY_TEST_P(IndexLookupJoinTest, connectorError) {
   auto planNodeIdGenerator = std::make_shared<core::PlanNodeIdGenerator>();
   std::unordered_map<
       std::string,
-      std::shared_ptr<connector::ConnectorColumnHandle>>
+      std::shared_ptr<connector::common::ConnectorColumnHandle>>
       columnHandles;
   const auto indexScanNode = makeIndexScanNode(
       planNodeIdGenerator,
@@ -1707,7 +1707,7 @@ DEBUG_ONLY_TEST_P(IndexLookupJoinTest, prefetch) {
   auto planNodeIdGenerator = std::make_shared<core::PlanNodeIdGenerator>();
   std::unordered_map<
       std::string,
-      std::shared_ptr<connector::ConnectorColumnHandle>>
+      std::shared_ptr<connector::common::ConnectorColumnHandle>>
       columnHandles;
   const auto indexScanNode = makeIndexScanNode(
       planNodeIdGenerator,
@@ -1798,7 +1798,7 @@ TEST_P(IndexLookupJoinTest, outputBatchSize) {
     auto planNodeIdGenerator = std::make_shared<core::PlanNodeIdGenerator>();
     std::unordered_map<
         std::string,
-        std::shared_ptr<connector::ConnectorColumnHandle>>
+        std::shared_ptr<connector::common::ConnectorColumnHandle>>
         columnHandles;
     const auto indexScanNode = makeIndexScanNode(
         planNodeIdGenerator,
@@ -1869,7 +1869,7 @@ DEBUG_ONLY_TEST_P(IndexLookupJoinTest, runtimeStats) {
   auto planNodeIdGenerator = std::make_shared<core::PlanNodeIdGenerator>();
   std::unordered_map<
       std::string,
-      std::shared_ptr<connector::ConnectorColumnHandle>>
+      std::shared_ptr<connector::common::ConnectorColumnHandle>>
       columnHandles;
   const auto indexScanNode = makeIndexScanNode(
       planNodeIdGenerator,
@@ -1958,7 +1958,7 @@ TEST_P(IndexLookupJoinTest, barrier) {
   auto planNodeIdGenerator = std::make_shared<core::PlanNodeIdGenerator>();
   std::unordered_map<
       std::string,
-      std::shared_ptr<connector::ConnectorColumnHandle>>
+      std::shared_ptr<connector::common::ConnectorColumnHandle>>
       columnHandles;
   const auto indexScanNode = makeIndexScanNode(
       planNodeIdGenerator,
@@ -2035,7 +2035,7 @@ TEST_P(IndexLookupJoinTest, joinFuzzer) {
   std::shuffle(scanOutput.begin(), scanOutput.end(), g);
   std::unordered_map<
       std::string,
-      std::shared_ptr<connector::ConnectorColumnHandle>>
+      std::shared_ptr<connector::common::ConnectorColumnHandle>>
       columnHandles;
   const auto indexScanNode = makeIndexScanNode(
       planNodeIdGenerator,

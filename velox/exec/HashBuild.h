@@ -329,8 +329,8 @@ class HashBuildSpiller : public SpillerBase {
       RowContainer* container,
       RowTypePtr rowType,
       HashBitRange bits,
-      const common::SpillConfig* spillConfig,
-      folly::Synchronized<common::SpillStats>* spillStats);
+      const velox::common::SpillConfig* spillConfig,
+      folly::Synchronized<velox::common::SpillStats>* spillStats);
 
   /// Invoked to spill all the rows stored in the row container of the hash
   /// build.

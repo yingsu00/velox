@@ -356,7 +356,7 @@ void testDataTypeWriter(
   for (auto stripeI = 0; stripeI < stripeCount; ++stripeI) {
     proto::StripeFooter sf;
     for (auto strideI = 0; strideI < strideCount; ++strideI) {
-      writer->write(batch, common::Ranges::of(0, size));
+      writer->write(batch, velox::common::Ranges::of(0, size));
       writer->createIndexEntry();
     }
     writer->flush([&sf](uint32_t /* unused */) -> proto::ColumnEncoding& {
@@ -1020,7 +1020,7 @@ void testMapWriter(
           toWrite = wrapInDictionary(toWrite, strideI, pool);
         }
       }
-      writer->write(toWrite, common::Ranges::of(0, toWrite->size()));
+      writer->write(toWrite, velox::common::Ranges::of(0, toWrite->size()));
       writer->createIndexEntry();
       writtenBatches.push_back(toWrite);
     }
@@ -1157,7 +1157,7 @@ void testMapWriterRow(
     if (testEncoded) {
       toWrite = wrapInDictionaryRow(toWrite, pool);
     }
-    writer->write(toWrite, common::Ranges::of(0, toWrite->size()));
+    writer->write(toWrite, velox::common::Ranges::of(0, toWrite->size()));
     writer->createIndexEntry();
     writtenBatches.push_back(toWrite);
 
@@ -2180,7 +2180,7 @@ struct IntegerColumnWriterTypedTestCase {
     for (size_t i = 0; i != flushCount; ++i) {
       proto::StripeFooter stripeFooter;
       for (size_t j = 0; j != repetitionCount; ++j) {
-        columnWriter->write(batch, common::Ranges::of(0, batch->size()));
+        columnWriter->write(batch, velox::common::Ranges::of(0, batch->size()));
         postProcess(*columnWriter, i, j);
         columnWriter->createIndexEntry();
       }
@@ -3416,7 +3416,7 @@ struct StringColumnWriterTestCase {
       // Write Stride
       for (size_t j = 0; j != repetitionCount; ++j) {
         // TODO: break the batch into multiple strides.
-        columnWriter->write(batches[j], common::Ranges::of(0, size));
+        columnWriter->write(batches[j], velox::common::Ranges::of(0, size));
         postProcess(*columnWriter, i, j);
         columnWriter->createIndexEntry();
       }
@@ -4250,7 +4250,7 @@ TEST_F(ColumnWriterTest, IntDictWriterDirectValueOverflow) {
   auto vector = populateBatch<int32_t>(data, pool_.get());
 
   auto writer = BaseColumnWriter::create(context, *typeWithId, 0);
-  writer->write(vector, common::Ranges::of(0, size));
+  writer->write(vector, velox::common::Ranges::of(0, size));
   writer->createIndexEntry();
   proto::StripeFooter sf;
   writer->flush([&sf](auto /* unused */) -> proto::ColumnEncoding& {
@@ -4295,7 +4295,7 @@ TEST_F(ColumnWriterTest, ShortDictWriterDictValueOverflow) {
   auto vector = populateBatch<int16_t>(data, pool_.get());
 
   auto writer = BaseColumnWriter::create(context, *typeWithId, 0);
-  writer->write(vector, common::Ranges::of(0, size));
+  writer->write(vector, velox::common::Ranges::of(0, size));
   writer->createIndexEntry();
   proto::StripeFooter sf;
   writer->flush([&sf](auto /* unused */) -> proto::ColumnEncoding& {
@@ -4336,7 +4336,7 @@ TEST_F(ColumnWriterTest, RemovePresentStream) {
   // write
   auto writer = BaseColumnWriter::create(context, *typeWithId, 0);
 
-  writer->write(vector, common::Ranges::of(0, size));
+  writer->write(vector, velox::common::Ranges::of(0, size));
   writer->createIndexEntry();
   proto::StripeFooter sf;
   writer->flush([&sf](auto /* unused */) -> proto::ColumnEncoding& {
@@ -4374,7 +4374,7 @@ TEST_F(ColumnWriterTest, ColumnIdInStream) {
   // write
   auto writer = BaseColumnWriter::create(context, *typeWithId, 0);
 
-  writer->write(vector, common::Ranges::of(0, size));
+  writer->write(vector, velox::common::Ranges::of(0, size));
   writer->createIndexEntry();
   proto::StripeFooter sf;
   writer->flush([&sf](auto /* unused */) -> proto::ColumnEncoding& {
@@ -4502,7 +4502,7 @@ struct DictColumnWriterTestCase {
     if (writeDirect_) {
       writer->tryAbandonDictionaries(true);
     }
-    writer->write(batch, common::Ranges::of(0, batch->size()));
+    writer->write(batch, velox::common::Ranges::of(0, batch->size()));
     writer->createIndexEntry();
 
     proto::StripeFooter sf;

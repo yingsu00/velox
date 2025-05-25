@@ -119,7 +119,7 @@ TEST_F(ClassificationAggregationTest, basic) {
 
   expected = makeRowVector({makeNullableArrayVector<double>(
       std::vector<std::optional<std::vector<std::optional<double>>>>{
-          common::testutil::optionalEmpty})});
+          velox::common::testutil::optionalEmpty})});
   runTest("classification_fall_out(5, c0, c1)", input, expected);
   runTest("classification_precision(5, c0, c1)", input, expected);
   runTest("classification_recall(5, c0, c1)", input, expected);

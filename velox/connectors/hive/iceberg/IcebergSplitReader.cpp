@@ -29,14 +29,14 @@ IcebergSplitReader::IcebergSplitReader(
     const std::shared_ptr<const HiveTableHandle>& hiveTableHandle,
     const std::unordered_map<std::string, std::shared_ptr<HiveColumnHandle>>*
         partitionKeys,
-    const ConnectorQueryCtx* connectorQueryCtx,
+    const connector::common::ConnectorQueryCtx* connectorQueryCtx,
     const std::shared_ptr<const HiveConfig>& hiveConfig,
     const RowTypePtr& readerOutputType,
     const std::shared_ptr<io::IoStatistics>& ioStats,
     const std::shared_ptr<filesystems::File::IoStats>& fsStats,
     FileHandleFactory* const fileHandleFactory,
     folly::Executor* executor,
-    const std::shared_ptr<common::ScanSpec>& scanSpec)
+    const std::shared_ptr<velox::common::ScanSpec>& scanSpec)
     : SplitReader(
           hiveSplit,
           hiveTableHandle,
@@ -54,7 +54,7 @@ IcebergSplitReader::IcebergSplitReader(
       deleteBitmap_(nullptr) {}
 
 void IcebergSplitReader::prepareSplit(
-    std::shared_ptr<common::MetadataFilter> metadataFilter,
+    std::shared_ptr<velox::common::MetadataFilter> metadataFilter,
     dwio::common::RuntimeStatistics& runtimeStats) {
   createReader();
   if (emptySplit_) {

@@ -50,7 +50,7 @@ class ConcatFilesSpillMergeStreamTest : public OperatorTestBase {
         sortCompareFlags_,
         pool_.get(),
         &nonReclaimableSection_,
-        common::PrefixSortConfig{},
+        velox::common::PrefixSortConfig{},
         nullptr,
         nullptr);
     for (const auto& vector : vectors) {
@@ -173,7 +173,7 @@ class ConcatFilesSpillMergeStreamTest : public OperatorTestBase {
         sortCompareFlags_,
         pool_.get(),
         &nonReclaimableSection_,
-        common::PrefixSortConfig{},
+        velox::common::PrefixSortConfig{},
         nullptr,
         nullptr);
     for (const auto& vector : vectors) {
@@ -205,7 +205,7 @@ class ConcatFilesSpillMergeStreamTest : public OperatorTestBase {
       SpillState::makeSortingKeys(sortColumnIndices_, sortCompareFlags_);
   const std::shared_ptr<TempDirectoryPath> spillDirectory_ =
       exec::test::TempDirectoryPath::create();
-  const common::SpillConfig spillConfig_{
+  const velox::common::SpillConfig spillConfig_{
       [&]() -> const std::string& { return spillDirectory_->getPath(); },
       [&](uint64_t) {},
       "0.0.0",
@@ -223,7 +223,7 @@ class ConcatFilesSpillMergeStreamTest : public OperatorTestBase {
       "none",
       std::nullopt};
 
-  folly::Synchronized<common::SpillStats> spillStats_;
+  folly::Synchronized<velox::common::SpillStats> spillStats_;
   tsan_atomic<bool> nonReclaimableSection_{false};
 };
 } // namespace facebook::velox::exec::test

@@ -23,7 +23,7 @@ namespace facebook::velox::parquet {
 StringColumnReader::StringColumnReader(
     const std::shared_ptr<const dwio::common::TypeWithId>& fileType,
     ParquetParams& params,
-    common::ScanSpec& scanSpec)
+    velox::common::ScanSpec& scanSpec)
     : SelectiveColumnReader(fileType->type(), fileType, params, scanSpec) {}
 
 uint64_t StringColumnReader::skip(uint64_t numValues) {

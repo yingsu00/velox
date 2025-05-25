@@ -40,11 +40,11 @@ TEST_F(ReaderTest, getOrCreateChild) {
           makeFlatVector<int64_t>({2, 4, 6, 7, 8}),
       });
 
-  common::ScanSpec spec("<root>");
+  velox::common::ScanSpec spec("<root>");
   spec.addField("c.0", 0);
   // Create child from name.
   spec.getOrCreateChild("c.1")->setFilter(
-      common::createBigintValues({2, 4, 6}, false));
+      velox::common::createBigintValues({2, 4, 6}, false));
 
   auto actual = RowReader::projectColumns(input, spec, nullptr);
   auto expected = makeRowVector({
@@ -53,8 +53,8 @@ TEST_F(ReaderTest, getOrCreateChild) {
   test::assertEqualVectors(expected, actual);
 
   // Create child from subfield.
-  spec.getOrCreateChild(common::Subfield("c.1"))
-      ->setFilter(common::createBigintValues({2, 4, 6}, false));
+  spec.getOrCreateChild(velox::common::Subfield("c.1"))
+      ->setFilter(velox::common::createBigintValues({2, 4, 6}, false));
   VELOX_ASSERT_USER_THROW(
       RowReader::projectColumns(input, spec, nullptr),
       "Field not found: c. Available fields are: c.0, c.1.");
@@ -68,10 +68,10 @@ TEST_F(ReaderTest, projectColumnsFilterStruct) {
           makeFlatVector<int64_t>(kSize, folly::identity),
       }),
   });
-  common::ScanSpec spec("<root>");
+  velox::common::ScanSpec spec("<root>");
   spec.addField("c0", 0);
-  spec.getOrCreateChild(common::Subfield("c1.c0"))
-      ->setFilter(common::createBigintValues({2, 4, 6}, false));
+  spec.getOrCreateChild(velox::common::Subfield("c1.c0"))
+      ->setFilter(velox::common::createBigintValues({2, 4, 6}, false));
   auto actual = RowReader::projectColumns(input, spec, nullptr);
   auto expected = makeRowVector({
       makeFlatVector<int64_t>({2, 4, 6}),
@@ -89,9 +89,9 @@ TEST_F(ReaderTest, projectColumnsFilterArray) {
           [](auto i) { return i; },
           [](auto i) { return i % 2 != 0; }),
   });
-  common::ScanSpec spec("<root>");
+  velox::common::ScanSpec spec("<root>");
   spec.addField("c0", 0);
-  auto* c1 = spec.getOrCreateChild(common::Subfield("c1"));
+  auto* c1 = spec.getOrCreateChild(velox::common::Subfield("c1"));
   {
     SCOPED_TRACE("IS NULL");
     c1->setFilter(std::make_unique<common::IsNull>());
@@ -115,7 +115,7 @@ TEST_F(ReaderTest, projectColumnsFilterArray) {
 TEST_F(ReaderTest, projectColumnsMutation) {
   constexpr int kSize = 10;
   auto input = makeRowVector({makeFlatVector<int64_t>(kSize, folly::identity)});
-  common::ScanSpec spec("<root>");
+  velox::common::ScanSpec spec("<root>");
   spec.addAllChildFields(*input->type());
   std::vector<uint64_t> deleted(bits::nwords(kSize));
   bits::setBit(deleted.data(), 2);

@@ -90,7 +90,7 @@ struct LocalExchangeState {
   std::shared_ptr<LocalExchangeMemoryManager> memoryManager;
   std::shared_ptr<LocalExchangeVectorPool> vectorPool;
   std::vector<std::shared_ptr<LocalExchangeQueue>> queues;
-  std::shared_ptr<common::SkewedPartitionRebalancer>
+  std::shared_ptr<velox::common::SkewedPartitionRebalancer>
       scaleWriterPartitionBalancer;
 };
 

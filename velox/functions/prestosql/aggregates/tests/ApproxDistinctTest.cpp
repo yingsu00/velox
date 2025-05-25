@@ -279,30 +279,30 @@ TEST_F(ApproxDistinctTest, globalAggVeryLowCardinalityIntegers) {
 
 TEST_F(ApproxDistinctTest, toIndexBitLength) {
   ASSERT_EQ(
-      common::hll::toIndexBitLength(common::hll::kHighestMaxStandardError), 4);
+      velox::common::hll::toIndexBitLength(velox::common::hll::kHighestMaxStandardError), 4);
   ASSERT_EQ(
-      common::hll::toIndexBitLength(
-          common::hll::kDefaultApproxDistinctStandardError),
+      velox::common::hll::toIndexBitLength(
+          velox::common::hll::kDefaultApproxDistinctStandardError),
       11);
   ASSERT_EQ(
-      common::hll::toIndexBitLength(
-          common::hll::kDefaultApproxSetStandardError),
+      velox::common::hll::toIndexBitLength(
+          velox::common::hll::kDefaultApproxSetStandardError),
       12);
   ASSERT_EQ(
-      common::hll::toIndexBitLength(common::hll::kLowestMaxStandardError), 16);
+      velox::common::hll::toIndexBitLength(velox::common::hll::kLowestMaxStandardError), 16);
 
-  ASSERT_EQ(common::hll::toIndexBitLength(0.0325), 10);
-  ASSERT_EQ(common::hll::toIndexBitLength(0.0324), 11);
-  ASSERT_EQ(common::hll::toIndexBitLength(0.0230), 11);
-  ASSERT_EQ(common::hll::toIndexBitLength(0.0229), 12);
-  ASSERT_EQ(common::hll::toIndexBitLength(0.0163), 12);
-  ASSERT_EQ(common::hll::toIndexBitLength(0.0162), 13);
-  ASSERT_EQ(common::hll::toIndexBitLength(0.0115), 13);
-  ASSERT_EQ(common::hll::toIndexBitLength(0.0114), 14);
-  ASSERT_EQ(common::hll::toIndexBitLength(0.008125), 14);
-  ASSERT_EQ(common::hll::toIndexBitLength(0.008124), 15);
-  ASSERT_EQ(common::hll::toIndexBitLength(0.00575), 15);
-  ASSERT_EQ(common::hll::toIndexBitLength(0.00574), 16);
+  ASSERT_EQ(velox::common::hll::toIndexBitLength(0.0325), 10);
+  ASSERT_EQ(velox::common::hll::toIndexBitLength(0.0324), 11);
+  ASSERT_EQ(velox::common::hll::toIndexBitLength(0.0230), 11);
+  ASSERT_EQ(velox::common::hll::toIndexBitLength(0.0229), 12);
+  ASSERT_EQ(velox::common::hll::toIndexBitLength(0.0163), 12);
+  ASSERT_EQ(velox::common::hll::toIndexBitLength(0.0162), 13);
+  ASSERT_EQ(velox::common::hll::toIndexBitLength(0.0115), 13);
+  ASSERT_EQ(velox::common::hll::toIndexBitLength(0.0114), 14);
+  ASSERT_EQ(velox::common::hll::toIndexBitLength(0.008125), 14);
+  ASSERT_EQ(velox::common::hll::toIndexBitLength(0.008124), 15);
+  ASSERT_EQ(velox::common::hll::toIndexBitLength(0.00575), 15);
+  ASSERT_EQ(velox::common::hll::toIndexBitLength(0.00574), 16);
 }
 
 TEST_F(ApproxDistinctTest, globalAggIntegersWithError) {
@@ -312,33 +312,33 @@ TEST_F(ApproxDistinctTest, globalAggIntegersWithError) {
   {
     auto values = makeFlatVector<int32_t>(size, [](auto row) { return row; });
 
-    testGlobalAgg(values, common::hll::kLowestMaxStandardError, 1000);
+    testGlobalAgg(values, velox::common::hll::kLowestMaxStandardError, 1000);
     testGlobalAgg(values, 0.01, 1000);
     testGlobalAgg(values, 0.1, 951);
     testGlobalAgg(values, 0.2, 936);
-    testGlobalAgg(values, common::hll::kHighestMaxStandardError, 929);
+    testGlobalAgg(values, velox::common::hll::kHighestMaxStandardError, 929);
 
     values = makeFlatVector<int32_t>(50'000, folly::identity);
-    testGlobalAgg(values, common::hll::kLowestMaxStandardError, 50043);
-    testGlobalAgg(values, common::hll::kHighestMaxStandardError, 39069);
+    testGlobalAgg(values, velox::common::hll::kLowestMaxStandardError, 50043);
+    testGlobalAgg(values, velox::common::hll::kHighestMaxStandardError, 39069);
   }
 
   // Test approx_set with bigint.
   {
     auto values = makeFlatVector<int64_t>(size, [](auto row) { return row; });
 
-    testGlobalAgg(values, common::hll::kLowestMaxStandardError, 1000, true);
+    testGlobalAgg(values, velox::common::hll::kLowestMaxStandardError, 1000, true);
     testGlobalAgg(values, 0.01, 1000, true);
     testGlobalAgg(values, 0.1, 1080, true, 945);
     testGlobalAgg(values, 0.2, 1340, true, 1028);
     testGlobalAgg(
-        values, common::hll::kHighestMaxStandardError, 1814, true, 1034);
+        values, velox::common::hll::kHighestMaxStandardError, 1814, true, 1034);
 
     values = makeFlatVector<int64_t>(50'000, folly::identity);
     testGlobalAgg(
-        values, common::hll::kLowestMaxStandardError, 50060, true, 50284);
+        values, velox::common::hll::kLowestMaxStandardError, 50060, true, 50284);
     testGlobalAgg(
-        values, common::hll::kHighestMaxStandardError, 45437, true, 40037);
+        values, velox::common::hll::kHighestMaxStandardError, 45437, true, 40037);
   }
 }
 
@@ -410,8 +410,8 @@ TEST_F(ApproxDistinctTest, hugeInt) {
   auto hugeIntValues =
       makeFlatVector<int128_t>(50000, [](auto row) { return row; });
   testGlobalAgg(hugeIntValues, 49669);
-  testGlobalAgg(hugeIntValues, common::hll::kLowestMaxStandardError, 50110);
-  testGlobalAgg(hugeIntValues, common::hll::kHighestMaxStandardError, 41741);
+  testGlobalAgg(hugeIntValues, velox::common::hll::kLowestMaxStandardError, 50110);
+  testGlobalAgg(hugeIntValues, velox::common::hll::kHighestMaxStandardError, 41741);
 }
 
 TEST_F(ApproxDistinctTest, streaming) {

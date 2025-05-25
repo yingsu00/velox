@@ -58,7 +58,7 @@ TableWriter::TableWriter(
         operatorId, driverCtx, tableWriteNode->aggregationNode());
   }
   const auto& connectorId = tableWriteNode->insertTableHandle()->connectorId();
-  connector_ = connector::getConnector(connectorId);
+  connector_ = connector::common::getConnector(connectorId);
   connectorQueryCtx_ = operatorCtx_->createConnectorQueryCtx(
       connectorId,
       planNodeId(),
@@ -276,7 +276,7 @@ std::string TableWriter::createTableCommitContext(bool lastOutput) {
   // clang-format on
 }
 
-void TableWriter::updateStats(const connector::DataSink::Stats& stats) {
+void TableWriter::updateStats(const connector::common::DataSink::Stats& stats) {
   const auto currentTimeNs = getCurrentTimeNano();
   VELOX_CHECK_GE(currentTimeNs, createTimeUs_);
   {
@@ -341,7 +341,7 @@ void TableWriter::setConnectorMemoryReclaimer() {
 
 std::unique_ptr<memory::MemoryReclaimer>
 TableWriter::ConnectorReclaimer::create(
-    const std::optional<common::SpillConfig>& spillConfig,
+    const std::optional<velox::common::SpillConfig>& spillConfig,
     DriverCtx* driverCtx,
     Operator* op) {
   return std::unique_ptr<memory::MemoryReclaimer>(

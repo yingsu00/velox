@@ -64,7 +64,7 @@ class ExchangeClientTest
     }
     bufferManager_ = OutputBufferManager::getInstanceRef();
 
-    common::testutil::TestValue::enable();
+    velox::common::testutil::TestValue::enable();
   }
 
   void TearDown() override {
@@ -506,7 +506,7 @@ TEST_P(ExchangeClientTest, sourceTimeout) {
 
 TEST_P(ExchangeClientTest, callNextAfterClose) {
   constexpr int32_t kNumSources = 3;
-  common::testutil::TestValue::enable();
+  velox::common::testutil::TestValue::enable();
   auto client = std::make_shared<ExchangeClient>(
       "test",
       17,

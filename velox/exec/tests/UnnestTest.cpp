@@ -72,7 +72,7 @@ TEST_P(UnnestTest, arrayWithOrdinality) {
       {{{1, 2, std::nullopt, 4}},
        std::nullopt,
        {{5, 6}},
-       common::testutil::optionalEmpty,
+       velox::common::testutil::optionalEmpty,
        {{{{std::nullopt}}}},
        {{7, 8, 9}}});
   auto vector = makeRowVector(

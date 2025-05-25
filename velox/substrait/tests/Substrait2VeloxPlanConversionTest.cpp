@@ -37,7 +37,7 @@ class Substrait2VeloxPlanConversionTest
     memory::MemoryManager::testingSetInstance(memory::MemoryManager::Options{});
   }
 
-  std::vector<std::shared_ptr<facebook::velox::connector::ConnectorSplit>>
+  std::vector<std::shared_ptr<facebook::velox::connector::common::ConnectorSplit>>
   makeSplits(
       const facebook::velox::substrait::SubstraitVeloxPlanConverter& converter,
       std::shared_ptr<const core::PlanNode> planNode) {
@@ -52,7 +52,7 @@ class Substrait2VeloxPlanConversionTest
     const auto& lengths = splitInfo->lengths;
     const auto fileFormat = splitInfo->format;
 
-    std::vector<std::shared_ptr<facebook::velox::connector::ConnectorSplit>>
+    std::vector<std::shared_ptr<facebook::velox::connector::common::ConnectorSplit>>
         splits;
     splits.reserve(paths.size());
 

@@ -26,8 +26,8 @@ SortBuffer::SortBuffer(
     const std::vector<CompareFlags>& sortCompareFlags,
     velox::memory::MemoryPool* pool,
     tsan_atomic<bool>* nonReclaimableSection,
-    common::PrefixSortConfig prefixSortConfig,
-    const common::SpillConfig* spillConfig,
+    velox::common::PrefixSortConfig prefixSortConfig,
+    const velox::common::SpillConfig* spillConfig,
     folly::Synchronized<velox::common::SpillStats>* spillStats)
     : input_(input),
       sortCompareFlags_(sortCompareFlags),

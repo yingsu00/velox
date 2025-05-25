@@ -46,7 +46,7 @@ TableScan::TableScan(
           driverCtx_->driverId,
           operatorType(),
           tableHandle_->connectorId())),
-      connector_(connector::getConnector(tableHandle_->connectorId())),
+      connector_(connector::common::getConnector(tableHandle_->connectorId())),
       getOutputTimeLimitMs_(
           driverCtx_->queryConfig().tableScanGetOutputTimeLimitMs()),
       scaledController_(driverCtx_->task->getScaledScanControllerLocked(
@@ -128,7 +128,7 @@ RowVectorPtr TableScan::getOutput() {
       }
       const auto estimatedRowSize = dataSource_->estimatedRowSize();
       readBatchSize_ =
-          estimatedRowSize == connector::DataSource::kUnknownRowSize
+          estimatedRowSize == connector::common::DataSource::kUnknownRowSize
           ? outputBatchRows()
           : outputBatchRows(estimatedRowSize);
     }
@@ -355,13 +355,13 @@ void TableScan::tryScaleUp() {
 }
 
 void TableScan::preload(
-    const std::shared_ptr<connector::ConnectorSplit>& split) {
+    const std::shared_ptr<connector::common::ConnectorSplit>& split) {
   // The AsyncSource returns a unique_ptr to the shared_ptr of the
   // DataSource. The callback may outlive the Task, hence it captures
   // a shared_ptr to it. This is required to keep memory pools live
   // for the duration. The callback checks for task cancellation to
   // avoid needless work.
-  split->dataSource = std::make_unique<AsyncSource<connector::DataSource>>(
+  split->dataSource = std::make_unique<AsyncSource<connector::common::DataSource>>(
       [type = outputType_,
        table = tableHandle_,
        columns = columnHandles_,
@@ -370,7 +370,7 @@ void TableScan::preload(
            split->connectorId, planNodeId(), connectorPool_),
        task = operatorCtx_->task(),
        dynamicFilters = dynamicFilters_,
-       split]() -> std::unique_ptr<connector::DataSource> {
+       split]() -> std::unique_ptr<connector::common::DataSource> {
         if (task->isCancelled()) {
           return nullptr;
         }
@@ -407,7 +407,7 @@ void TableScan::checkPreload() {
     if (!splitPreloader_) {
       splitPreloader_ =
           [executor,
-           this](const std::shared_ptr<connector::ConnectorSplit>& split) {
+           this](const std::shared_ptr<connector::common::ConnectorSplit>& split) {
             preload(split);
 
             executor->add([connectorSplit = split]() mutable {
@@ -426,7 +426,7 @@ bool TableScan::isFinished() {
 void TableScan::addDynamicFilter(
     const core::PlanNodeId& producer,
     column_index_t outputChannel,
-    const std::shared_ptr<common::Filter>& filter) {
+    const std::shared_ptr<velox::common::Filter>& filter) {
   if (dataSource_) {
     dataSource_->addDynamicFilter(outputChannel, filter);
   }

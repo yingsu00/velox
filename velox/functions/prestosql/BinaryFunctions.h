@@ -491,7 +491,7 @@ struct Murmur3X64_128Function {
   FOLLY_ALWAYS_INLINE
   void call(out_type<Varbinary>& result, const arg_type<Varbinary>& input) {
     result.resize(16);
-    common::hll::Murmur3Hash128::hash(
+    velox::common::hll::Murmur3Hash128::hash(
         input.data(), input.size(), 0, result.data());
   }
 };

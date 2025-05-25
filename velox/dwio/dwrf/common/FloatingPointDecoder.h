@@ -103,7 +103,7 @@ class FloatingPointDecoder {
   template <bool hasNulls, typename Visitor>
   void fastPath(const uint64_t* nulls, Visitor& visitor) {
     constexpr bool hasFilter =
-        !std::is_same_v<typename Visitor::FilterType, common::AlwaysTrue>;
+        !std::is_same_v<typename Visitor::FilterType, velox::common::AlwaysTrue>;
     constexpr bool filterOnly =
         std::is_same_v<typename Visitor::Extract, DropValues>;
     constexpr bool hasHook =

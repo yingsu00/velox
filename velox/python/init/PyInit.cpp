@@ -46,7 +46,7 @@ void registerAllResourcesOnce() {
   velox::core::PlanNode::registerSerDe();
   velox::Type::registerSerDe();
   velox::common::Filter::registerSerDe();
-  velox::connector::hive::LocationHandle::registerSerDe();
+  velox::connector::hive::HiveLocationHandle::registerSerDe();
   velox::connector::hive::HiveSortingColumn::registerSerDe();
   velox::connector::hive::HiveBucketProperty::registerSerDe();
   velox::connector::hive::HiveTableHandle::registerSerDe();

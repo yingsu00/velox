@@ -58,7 +58,7 @@ Window::Window(
     windowBuild_ = std::make_unique<SortWindowBuild>(
         windowNode,
         pool(),
-        common::PrefixSortConfig{
+        velox::common::PrefixSortConfig{
             driverCtx->queryConfig().prefixSortNormalizedKeyMaxBytes(),
             driverCtx->queryConfig().prefixSortMinRows(),
             driverCtx->queryConfig().prefixSortMaxStringPrefixLength()},

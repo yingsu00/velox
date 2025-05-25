@@ -57,16 +57,16 @@ class DataSetBuilder {
   DataSetBuilder& withNoNullsAfter(int32_t firstRow = 0);
 
   // Make all rows for the specific Subfield field null
-  DataSetBuilder& withAllNullsForField(const common::Subfield& field);
+  DataSetBuilder& withAllNullsForField(const velox::common::Subfield& field);
 
   // Make the data for the specific Subfield field with nulls at
   // nullsPercentX100 %
   DataSetBuilder& withNullsForField(
-      const common::Subfield& field,
+      const velox::common::Subfield& field,
       uint8_t nullsPercentX100);
 
   DataSetBuilder& withStringDistributionForField(
-      const common::Subfield& field,
+      const velox::common::Subfield& field,
       int cardinality,
       bool keepNulls,
       bool addOneOffs);
@@ -78,7 +78,7 @@ class DataSetBuilder {
 
   template <typename T>
   DataSetBuilder& withIntDistributionForField(
-      const common::Subfield& field,
+      const velox::common::Subfield& field,
       int64_t min,
       int64_t max,
       int32_t repeats,
@@ -117,7 +117,7 @@ class DataSetBuilder {
   }
 
   template <typename T>
-  DataSetBuilder& withIntRleForField(const common::Subfield& field) {
+  DataSetBuilder& withIntRleForField(const velox::common::Subfield& field) {
     constexpr int kMinRun = 5;
     constexpr int kMaxRun = 101;
     int remaining = 0;
@@ -143,7 +143,7 @@ class DataSetBuilder {
   }
 
   template <typename T>
-  DataSetBuilder& withIntMainlyConstantForField(const common::Subfield& field) {
+  DataSetBuilder& withIntMainlyConstantForField(const velox::common::Subfield& field) {
     for (auto& batch : *batches_) {
       std::optional<T> value;
       auto* numbers = dwio::common::getChildBySubfield(batch.get(), field)
@@ -166,7 +166,7 @@ class DataSetBuilder {
 
   template <typename T>
   DataSetBuilder& withQuantizedFloatForField(
-      const common::Subfield& field,
+      const velox::common::Subfield& field,
       int64_t buckets,
       bool keepNulls) {
     for (RowVectorPtr batch : *batches_) {
@@ -186,7 +186,7 @@ class DataSetBuilder {
 
   template <typename T>
   DataSetBuilder& withReapeatingValuesForField(
-      const common::Subfield& field,
+      const velox::common::Subfield& field,
       int32_t batchIndex,
       int32_t firstRow,
       int32_t lastRow,
@@ -211,7 +211,7 @@ class DataSetBuilder {
 
   template <typename T>
   void withSuppliedValuesForField(
-      const common::Subfield& field,
+      const velox::common::Subfield& field,
       int32_t batchIndex,
       const std::vector<T>& values) {
     VELOX_CHECK_LT(batchIndex, batches_->size());
@@ -227,11 +227,11 @@ class DataSetBuilder {
     }
   }
 
-  DataSetBuilder& makeUniformMapKeys(const common::Subfield& field);
+  DataSetBuilder& makeUniformMapKeys(const velox::common::Subfield& field);
 
   // Ensures that there are non-inlined various string sizes in map keys/values
   // if either key or value is a string.
-  DataSetBuilder& makeMapStringValues(const common::Subfield& field);
+  DataSetBuilder& makeMapStringValues(const velox::common::Subfield& field);
 
   std::unique_ptr<std::vector<RowVectorPtr>> build();
 

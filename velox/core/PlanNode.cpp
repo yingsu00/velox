@@ -1097,21 +1097,21 @@ folly::dynamic TableScanNode::serialize() const {
 PlanNodePtr TableScanNode::create(const folly::dynamic& obj, void* context) {
   auto planNodeId = obj["id"].asString();
   auto outputType = deserializeRowType(obj["outputType"]);
-  auto tableHandle = std::const_pointer_cast<connector::ConnectorTableHandle>(
-      ISerializable::deserialize<connector::ConnectorTableHandle>(
+  auto tableHandle = std::const_pointer_cast<connector::common::ConnectorTableHandle>(
+      ISerializable::deserialize<connector::common::ConnectorTableHandle>(
           obj["tableHandle"], context));
 
   std::unordered_map<
       std::string,
-      std::shared_ptr<connector::ConnectorColumnHandle>>
+      std::shared_ptr<connector::common::ConnectorColumnHandle>>
       assignments;
   for (const auto& pair : obj["assignments"]) {
     auto assign = pair["assign"].asString();
     auto columnHandle =
-        ISerializable::deserialize<connector::ConnectorColumnHandle>(
+        ISerializable::deserialize<connector::common::ConnectorColumnHandle>(
             pair["columnHandle"]);
     assignments[assign] =
-        std::const_pointer_cast<connector::ConnectorColumnHandle>(columnHandle);
+        std::const_pointer_cast<connector::common::ConnectorColumnHandle>(columnHandle);
   }
 
   return std::make_shared<const TableScanNode>(
@@ -2365,7 +2365,7 @@ folly::dynamic TableWriteNode::serialize() const {
       insertTableHandle_->connectorInsertTableHandle()->serialize();
   obj["hasPartitioningScheme"] = hasPartitioningScheme_;
   obj["outputType"] = outputType_->serialize();
-  obj["commitStrategy"] = connector::commitStrategyToString(commitStrategy_);
+  obj["commitStrategy"] = connector::common::commitStrategyToString(commitStrategy_);
   return obj;
 }
 
@@ -2389,13 +2389,13 @@ PlanNodePtr TableWriteNode::create(const folly::dynamic& obj, void* context) {
   }
   auto connectorId = obj["connectorId"].asString();
   auto connectorInsertTableHandle =
-      std::const_pointer_cast<connector::ConnectorInsertTableHandle>(
-          ISerializable::deserialize<connector::ConnectorInsertTableHandle>(
+      std::const_pointer_cast<connector::common::ConnectorInsertTableHandle>(
+          ISerializable::deserialize<connector::common::ConnectorInsertTableHandle>(
               obj["connectorInsertTableHandle"]));
   const bool hasPartitioningScheme = obj["hasPartitioningScheme"].asBool();
   auto outputType = deserializeRowType(obj["outputType"]);
   auto commitStrategy =
-      connector::stringToCommitStrategy(obj["commitStrategy"].asString());
+      connector::common::stringToCommitStrategy(obj["commitStrategy"].asString());
   return std::make_shared<TableWriteNode>(
       id,
       columns,

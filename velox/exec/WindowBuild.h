@@ -31,7 +31,7 @@ class WindowBuild {
   WindowBuild(
       const std::shared_ptr<const core::WindowNode>& windowNode,
       velox::memory::MemoryPool* pool,
-      const common::SpillConfig* spillConfig,
+      const velox::common::SpillConfig* spillConfig,
       tsan_atomic<bool>* nonReclaimableSection);
 
   virtual ~WindowBuild() = default;
@@ -48,7 +48,7 @@ class WindowBuild {
   virtual void spill() = 0;
 
   /// Returns the spiller stats including total bytes and rows spilled so far.
-  virtual std::optional<common::SpillStats> spilledStats() const = 0;
+  virtual std::optional<velox::common::SpillStats> spilledStats() const = 0;
 
   /// The Window operator invokes this function to indicate that no more input
   /// rows will be passed from the Window operator to the WindowBuild. When
@@ -84,7 +84,7 @@ class WindowBuild {
       const char* rhs,
       const std::vector<std::pair<column_index_t, core::SortOrder>>& keys);
 
-  const common::SpillConfig* const spillConfig_;
+  const velox::common::SpillConfig* const spillConfig_;
   tsan_atomic<bool>* const nonReclaimableSection_;
 
   /// The below 2 vectors represent the ChannelIndex of the partition keys

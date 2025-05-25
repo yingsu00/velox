@@ -27,7 +27,7 @@ class StringColumnReader : public dwio::common::SelectiveColumnReader {
   StringColumnReader(
       const std::shared_ptr<const dwio::common::TypeWithId>& fileType,
       ParquetParams& params,
-      common::ScanSpec& scanSpec);
+      velox::common::ScanSpec& scanSpec);
 
   bool hasBulkPath() const override {
     //  Non-dictionary encodings do not have fast path.

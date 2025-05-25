@@ -48,7 +48,7 @@ void PrestoBatchVectorSerializer::serialize(
       !inUse.exchange(true),
       "PrestoBatchVectorSerializer::serialize being called concurrently on the same object.");
 
-  common::testutil::TestValue::adjust(
+  velox::common::testutil::TestValue::adjust(
       "facebook::velox::serializers::PrestoBatchVectorSerializer::serialize",
       this);
 

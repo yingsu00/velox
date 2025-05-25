@@ -25,7 +25,7 @@ SelectiveIntegerDictionaryColumnReader::SelectiveIntegerDictionaryColumnReader(
     const TypePtr& requestedType,
     std::shared_ptr<const TypeWithId> fileType,
     DwrfParams& params,
-    common::ScanSpec& scanSpec,
+    velox::common::ScanSpec& scanSpec,
     uint32_t numBytes)
     : SelectiveIntegerColumnReader(
           requestedType,

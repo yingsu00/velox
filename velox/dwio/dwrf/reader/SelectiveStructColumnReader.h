@@ -28,7 +28,7 @@ class SelectiveStructColumnReaderBase
       const TypePtr& requestedType,
       const std::shared_ptr<const dwio::common::TypeWithId>& fileType,
       DwrfParams& params,
-      common::ScanSpec& scanSpec,
+      velox::common::ScanSpec& scanSpec,
       bool useColumnNames,
       bool isRoot = false)
       : dwio::common::SelectiveStructColumnReaderBase(
@@ -86,7 +86,7 @@ class SelectiveStructColumnReader : public SelectiveStructColumnReaderBase {
       const TypePtr& requestedType,
       const std::shared_ptr<const dwio::common::TypeWithId>& fileType,
       DwrfParams& params,
-      common::ScanSpec& scanSpec,
+      velox::common::ScanSpec& scanSpec,
       bool useColumnNames,
       bool isRoot = false);
 

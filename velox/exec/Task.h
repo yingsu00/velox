@@ -37,8 +37,8 @@ class OutputBufferManager;
 class HashJoinBridge;
 class NestedLoopJoinBridge;
 
-using ConnectorSplitPreloadFunc =
-    std::function<void(const std::shared_ptr<connector::ConnectorSplit>&)>;
+using ConnectorSplitPreloadFunc = std::function<void(
+    const std::shared_ptr<connector::common::ConnectorSplit>&)>;
 
 class Task : public std::enable_shared_from_this<Task> {
  public:
@@ -504,7 +504,7 @@ class Task : public std::enable_shared_from_this<Task> {
 
   /// Returns the shared skewed partition balancer for scale writer local
   /// partitioning with the given split group id and plan node id.
-  const std::shared_ptr<common::SkewedPartitionRebalancer>&
+  const std::shared_ptr<velox::common::SkewedPartitionRebalancer>&
   getScaleWriterPartitionBalancer(
       uint32_t splitGroupId,
       const core::PlanNodeId& planNodeId);
@@ -954,7 +954,7 @@ class Task : public std::enable_shared_from_this<Task> {
   std::shared_ptr<TBridgeType> getJoinBridgeInternalLocked(
       uint32_t splitGroupId,
       const core::PlanNodeId& planNodeId,
-      MemberType SplitGroupState::*bridges_member);
+      MemberType SplitGroupState::* bridges_member);
 
   std::shared_ptr<JoinBridge> getCustomJoinBridgeInternal(
       uint32_t splitGroupId,
@@ -1382,7 +1382,7 @@ class Task : public std::enable_shared_from_this<Task> {
   std::atomic<bool> spillDirectoryCreated_{false};
 
   // Stores unconsumed preloading splits to ensure they are closed promptly.
-  folly::F14FastSet<std::shared_ptr<connector::ConnectorSplit>>
+  folly::F14FastSet<std::shared_ptr<connector::common::ConnectorSplit>>
       preloadingSplits_;
 
   folly::CancellationSource cancellationSource_;

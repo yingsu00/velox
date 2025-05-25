@@ -58,13 +58,14 @@ bool shouldEagerlyMaterialize(
 
 HiveDataSource::HiveDataSource(
     const RowTypePtr& outputType,
-    const std::shared_ptr<connector::ConnectorTableHandle>& tableHandle,
+    const std::shared_ptr<connector::common::ConnectorTableHandle>& tableHandle,
     const std::unordered_map<
         std::string,
-        std::shared_ptr<connector::ConnectorColumnHandle>>& columnHandles,
+        std::shared_ptr<connector::common::ConnectorColumnHandle>>&
+        columnHandles,
     FileHandleFactory* fileHandleFactory,
     folly::Executor* executor,
-    const ConnectorQueryCtx* connectorQueryCtx,
+    const connector::common::ConnectorQueryCtx* connectorQueryCtx,
     const std::shared_ptr<HiveConfig>& hiveConfig)
     : fileHandleFactory_(fileHandleFactory),
       executor_(executor),
@@ -198,7 +199,7 @@ HiveDataSource::HiveDataSource(
           connectorQueryCtx_->sessionProperties()),
       pool_);
   if (remainingFilter) {
-    metadataFilter_ = std::make_shared<common::MetadataFilter>(
+    metadataFilter_ = std::make_shared<velox::common::MetadataFilter>(
         *scanSpec_, *remainingFilter, expressionEvaluator_);
   }
 
@@ -297,7 +298,8 @@ void HiveDataSource::setupRowIdColumn() {
           connectorQueryCtx_->memoryPool());
 }
 
-void HiveDataSource::addSplit(std::shared_ptr<ConnectorSplit> split) {
+void HiveDataSource::addSplit(
+    std::shared_ptr<connector::common::ConnectorSplit> split) {
   VELOX_CHECK_NULL(
       split_,
       "Previous split has not been processed yet. Call next to process the split.");
@@ -463,7 +465,7 @@ std::optional<RowVectorPtr> HiveDataSource::next(
 
 void HiveDataSource::addDynamicFilter(
     column_index_t outputChannel,
-    const std::shared_ptr<common::Filter>& filter) {
+    const std::shared_ptr<velox::common::Filter>& filter) {
   auto& fieldSpec = scanSpec_->getChildByChannel(outputChannel);
   fieldSpec.addFilter(*filter);
   scanSpec_->resetCachedValues(true);
@@ -531,7 +533,7 @@ std::unordered_map<std::string, RuntimeCounter> HiveDataSource::runtimeStats() {
 }
 
 void HiveDataSource::setFromDataSource(
-    std::unique_ptr<DataSource> sourceUnique) {
+    std::unique_ptr<connector::common::DataSource> sourceUnique) {
   auto source = dynamic_cast<HiveDataSource*>(sourceUnique.get());
   VELOX_CHECK_NOT_NULL(source, "Bad DataSource type");
 

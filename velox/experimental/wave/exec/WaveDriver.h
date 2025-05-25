@@ -213,7 +213,7 @@ class WaveDriver : public exec::SourceOperator {
   void addDynamicFilter(
       const core::PlanNodeId& producer,
       column_index_t outputChannel,
-      const std::shared_ptr<common::Filter>& filter) override {
+      const std::shared_ptr<velox::common::Filter>& filter) override {
     pipelines_[0].operators[0]->addDynamicFilter(
         producer, outputChannel, filter);
   }

@@ -284,9 +284,9 @@ TEST_F(ExprToSubfieldFilterTest, dereferenceWithEmptyField) {
 
 class CustomExprToSubfieldFilterParser : public ExprToSubfieldFilterParser {
  public:
-  std::unique_ptr<common::Filter> leafCallToSubfieldFilter(
+  std::unique_ptr<velox::common::Filter> leafCallToSubfieldFilter(
       const core::CallTypedExpr& call,
-      common::Subfield& subfield,
+      velox::common::Subfield& subfield,
       core::ExpressionEvaluator* evaluator,
       bool negated) override {
     if (call.inputs().empty()) {

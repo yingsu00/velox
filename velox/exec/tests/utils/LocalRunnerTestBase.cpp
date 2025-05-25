@@ -57,19 +57,19 @@ void LocalRunnerTestBase::ensureTestData() {
 }
 
 void LocalRunnerTestBase::setupConnector() {
-  connector::unregisterConnector(kHiveConnectorId);
+  connector::common::unregisterConnector(kHiveConnectorId);
 
   std::unordered_map<std::string, std::string> configs;
   configs[connector::hive::HiveConfig::kLocalDataPath] = testDataPath_;
   configs[connector::hive::HiveConfig::kLocalFileFormat] = localFileFormat_;
   auto hiveConnector =
-      connector::getConnectorFactory(
+      connector::common::getConnectorFactory(
           connector::hive::HiveConnectorFactory::kHiveConnectorName)
           ->newConnector(
               kHiveConnectorId,
               std::make_shared<config::ConfigBase>(std::move(configs)),
               ioExecutor_.get());
-  connector::registerConnector(hiveConnector);
+  connector::common::registerConnector(hiveConnector);
 }
 
 void LocalRunnerTestBase::makeTables(
@@ -107,19 +107,20 @@ LocalRunnerTestBase::makeSimpleSplitSourceFactory(
     const runner::MultiFragmentPlanPtr& plan) {
   std::unordered_map<
       core::PlanNodeId,
-      std::vector<std::shared_ptr<connector::ConnectorSplit>>>
+      std::vector<std::shared_ptr<connector::common::ConnectorSplit>>>
       nodeSplitMap;
   for (auto& fragment : plan->fragments()) {
     for (auto& scan : fragment.scans) {
       auto& name = scan->tableHandle()->name();
       auto files = tableFilePaths_[name];
       VELOX_CHECK(!files.empty(), "No splits known for {}", name);
-      std::vector<std::shared_ptr<connector::ConnectorSplit>> splits;
+      std::vector<std::shared_ptr<connector::common::ConnectorSplit>> splits;
       for (auto& file : files) {
-        splits.push_back(connector::hive::HiveConnectorSplitBuilder(file)
-                             .connectorId(kHiveConnectorId)
-                             .fileFormat(dwio::common::FileFormat::DWRF)
-                             .build());
+        splits.push_back(makeHiveConnectorSplit(file));
+//        splits.push_back(connector::hive::HiveConnectorSplitBuilder(file)
+//                             .connectorId(kHiveConnectorId)
+//                             .fileFormat(dwio::common::FileFormat::DWRF)
+//                             .build());
       }
       nodeSplitMap[scan->id()] = std::move(splits);
     }

@@ -26,19 +26,19 @@ class FuzzerConnectorTestBase : public exec::test::OperatorTestBase {
 
   void SetUp() override {
     OperatorTestBase::SetUp();
-    connector::registerConnectorFactory(
+    connector::common::registerConnectorFactory(
         std::make_shared<connector::fuzzer::FuzzerConnectorFactory>());
     std::shared_ptr<const config::ConfigBase> config;
     auto fuzzerConnector =
-        connector::getConnectorFactory(
+        connector::common::getConnectorFactory(
             connector::fuzzer::FuzzerConnectorFactory::kFuzzerConnectorName)
             ->newConnector(kFuzzerConnectorId, config);
-    connector::registerConnector(fuzzerConnector);
+    connector::common::registerConnector(fuzzerConnector);
   }
 
   void TearDown() override {
-    connector::unregisterConnector(kFuzzerConnectorId);
-    connector::unregisterConnectorFactory(
+    connector::common::unregisterConnector(kFuzzerConnectorId);
+    connector::common::unregisterConnectorFactory(
         connector::fuzzer::FuzzerConnectorFactory::kFuzzerConnectorName);
     OperatorTestBase::TearDown();
   }

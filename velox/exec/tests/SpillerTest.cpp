@@ -92,14 +92,14 @@ struct TestParam {
   // Specifies the spill executor pool size. If the size is zero, then spill
   // write path is executed inline with spiller control code path.
   int poolSize;
-  common::CompressionKind compressionKind;
+  velox::common::CompressionKind compressionKind;
   bool enablePrefixSort;
   core::JoinType joinType;
 
   TestParam(
       SpillerType _type,
       int _poolSize,
-      common::CompressionKind _compressionKind,
+      velox::common::CompressionKind _compressionKind,
       bool _enablePrefixSort,
       core::JoinType _joinType)
       : type(_type),
@@ -126,8 +126,8 @@ struct TestParamsBuilder {
     for (int i = 0; i < numSpillerTypes; ++i) {
       const auto type = static_cast<SpillerType>(i);
       if (typesToExclude.find(type) == typesToExclude.end()) {
-        common::CompressionKind compressionKind =
-            static_cast<common::CompressionKind>(numSpillerTypes % 6);
+        velox::common::CompressionKind compressionKind =
+            static_cast<velox::common::CompressionKind>(numSpillerTypes % 6);
         for (int poolSize : {0, 8}) {
           params.emplace_back(
               type,
@@ -339,7 +339,7 @@ class SpillerTest : public exec::test::RowContainerTestBase {
         ascending,
         makeError));
     constexpr int32_t kNumRows = 5'000;
-    const auto prevGStats = common::globalSpillStats();
+    const auto prevGStats = velox::common::globalSpillStats();
 
     setupSpillData(numKeys_, kNumRows, numDuplicates, [&](RowVectorPtr rows) {
       // Set ordinal so that the sorted order is unambiguous.
@@ -407,7 +407,7 @@ class SpillerTest : public exec::test::RowContainerTestBase {
     ASSERT_GT(stats.spillSerializationTimeNanos, 0);
     ASSERT_GT(stats.spillWrites, 0);
 
-    const auto newGStats = common::globalSpillStats();
+    const auto newGStats = velox::common::globalSpillStats();
     ASSERT_EQ(
         prevGStats.spilledFiles + stats.spilledFiles, newGStats.spilledFiles);
     ASSERT_EQ(
@@ -607,14 +607,14 @@ class SpillerTest : public exec::test::RowContainerTestBase {
       uint64_t maxSpillRunRows = 0,
       uint64_t readBufferSize = 1 << 20) {
     static const std::string kBadSpillDirPath = "/bad/path";
-    common::GetSpillDirectoryPathCB badSpillDirCb = [&]() -> std::string_view {
+    velox::common::GetSpillDirectoryPathCB badSpillDirCb = [&]() -> std::string_view {
       return kBadSpillDirPath;
     };
-    common::GetSpillDirectoryPathCB tempSpillDirCb = [&]() -> std::string_view {
+    velox::common::GetSpillDirectoryPathCB tempSpillDirCb = [&]() -> std::string_view {
       return tempDirPath_->getPath();
     };
     stats_.clear();
-    spillStats_ = folly::Synchronized<common::SpillStats>();
+    spillStats_ = folly::Synchronized<velox::common::SpillStats>();
 
     spillConfig_.startPartitionBit = hashBits_.begin();
     spillConfig_.numPartitionBits = hashBits_.numBits();
@@ -627,7 +627,7 @@ class SpillerTest : public exec::test::RowContainerTestBase {
     spillConfig_.compressionKind = compressionKind_;
     enablePrefixSort_ ? spillConfig_.prefixSortConfig =
                             std::optional<common::PrefixSortConfig>(
-                                common::PrefixSortConfig())
+                                velox::common::PrefixSortConfig())
                       : spillConfig_.prefixSortConfig = std::nullopt;
     spillConfig_.maxSpillRunRows = maxSpillRunRows;
     spillConfig_.maxFileSize = targetFileSize;
@@ -882,7 +882,7 @@ class SpillerTest : public exec::test::RowContainerTestBase {
     // them by partition.
     std::vector<std::unique_ptr<SpillerBase>> spillers;
     for (int iter = 0; iter < numSpillers; ++iter) {
-      const auto prevGStats = common::globalSpillStats();
+      const auto prevGStats = velox::common::globalSpillStats();
       setupSpillData(
           numKeys_,
           (type_ != SpillerType::NO_ROW_CONTAINER) ? numBatchRows * 10 : 0,
@@ -963,7 +963,7 @@ class SpillerTest : public exec::test::RowContainerTestBase {
         ASSERT_EQ(stats.spillFillTimeNanos, 0);
       }
 
-      const auto newGStats = common::globalSpillStats();
+      const auto newGStats = velox::common::globalSpillStats();
       ASSERT_EQ(
           prevGStats.spilledFiles + stats.spilledFiles, newGStats.spilledFiles);
       ASSERT_EQ(
@@ -1007,7 +1007,7 @@ class SpillerTest : public exec::test::RowContainerTestBase {
 
     // Spilled file stats should be updated after finalizing spiller.
     if (numAppendBatches > 0) {
-      ASSERT_GT(common::globalSpillStats().spilledFiles, 0);
+      ASSERT_GT(velox::common::globalSpillStats().spilledFiles, 0);
     }
   }
 
@@ -1203,7 +1203,7 @@ class SpillerTest : public exec::test::RowContainerTestBase {
   const TestParam param_;
   const SpillerType type_;
   const int32_t executorPoolSize_;
-  const common::CompressionKind compressionKind_;
+  const velox::common::CompressionKind compressionKind_;
   const bool enablePrefixSort_;
   const core::JoinType joinType_;
   const bool spillProbedFlag_;
@@ -1230,8 +1230,8 @@ class SpillerTest : public exec::test::RowContainerTestBase {
   std::vector<std::vector<int32_t>> partitions_;
   std::vector<CompareFlags> compareFlags_;
   std::unique_ptr<SpillerBase> spiller_;
-  common::SpillConfig spillConfig_;
-  folly::Synchronized<common::SpillStats> spillStats_;
+  velox::common::SpillConfig spillConfig_;
+  folly::Synchronized<velox::common::SpillStats> spillStats_;
 };
 
 struct AllTypesTestParam {

@@ -15,7 +15,7 @@
  */
 #pragma once
 
-#include "velox/connectors/Connector.h"
+#include "velox/connectors/common/Connector.h"
 #include "velox/exec/Cursor.h"
 #include "velox/exec/Exchange.h"
 #include "velox/runner/MultiFragmentPlan.h"
@@ -34,7 +34,7 @@ class SplitSource {
   /// group means that there are on more splits for the group. In ungrouped
   /// execution, the group is kUngroupedGroupId.
   struct SplitAndGroup {
-    std::shared_ptr<connector::ConnectorSplit> split;
+    std::shared_ptr<connector::common::ConnectorSplit> split;
     uint32_t group{kUngroupedGroupId};
   };
 

@@ -351,7 +351,7 @@ std::shared_ptr<const Type> ReaderBase::convertType(
             DECIMAL(type.getOrcPtr()->precision(), type.getOrcPtr()->scale());
       } else {
         converted = BIGINT();
-        common::testutil::TestValue::adjust(
+        velox::common::testutil::TestValue::adjust(
             "facebook::velox::dwrf::ReaderBase::convertType", &converted);
       }
       return converted;

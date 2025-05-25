@@ -71,7 +71,7 @@ class ParquetTableScanTest : public HiveConnectorTestBase {
       std::vector<std::string>&& outputColumnNames,
       std::unordered_map<
           std::string,
-          std::shared_ptr<connector::ConnectorColumnHandle>>& assignments,
+          std::shared_ptr<connector::common::ConnectorColumnHandle>>& assignments,
       const std::string& sql) {
     auto rowType = getRowType(std::move(outputColumnNames));
     auto plan = PlanBuilder()
@@ -87,7 +87,7 @@ class ParquetTableScanTest : public HiveConnectorTestBase {
       const std::string& sql,
       const std::unordered_map<
           std::string,
-          std::shared_ptr<connector::ConnectorColumnHandle>>& assignments =
+          std::shared_ptr<connector::common::ConnectorColumnHandle>>& assignments =
           {}) {
     auto rowType = getRowType(std::move(outputColumnNames));
     parse::ParseOptions options;
@@ -297,7 +297,7 @@ class ParquetTableScanTest : public HiveConnectorTestBase {
         "SELECT t from tmp where t == TIMESTAMP '2022-12-23 03:56:01'");
   }
 
-  const std::vector<std::shared_ptr<connector::ConnectorSplit>>& splits()
+  const std::vector<std::shared_ptr<connector::common::ConnectorSplit>>& splits()
       const {
     return splits_;
   }
@@ -313,7 +313,7 @@ class ParquetTableScanTest : public HiveConnectorTestBase {
   }
 
   RowTypePtr rowType_;
-  std::vector<std::shared_ptr<connector::ConnectorSplit>> splits_;
+  std::vector<std::shared_ptr<connector::common::ConnectorSplit>> splits_;
   TimestampPrecision timestampPrecision_ = TimestampPrecision::kMicroseconds;
 };
 
@@ -422,7 +422,7 @@ TEST_F(ParquetTableScanTest, aggregatePushdown) {
                   .tableScan(outputType, {"c1 = 1"}, "")
                   .singleAggregation({"c2"}, {"sum(c3)"})
                   .planNode();
-  std::vector<std::shared_ptr<connector::ConnectorSplit>> splits;
+  std::vector<std::shared_ptr<connector::common::ConnectorSplit>> splits;
   splits.push_back(makeSplit(getExampleFilePath("gcc_data_diff.parquet")));
   auto result = AssertQueryBuilder(plan).splits(splits).copyResults(pool());
   ASSERT_EQ(result->size(), 5);
@@ -723,7 +723,7 @@ TEST_F(ParquetTableScanTest, rowIndex) {
       std::unordered_map<std::string, std::string>{{kPath, filePath}});
   std::unordered_map<
       std::string,
-      std::shared_ptr<connector::ConnectorColumnHandle>>
+      std::shared_ptr<connector::common::ConnectorColumnHandle>>
       assignments;
   assignments["a"] = std::make_shared<connector::hive::HiveColumnHandle>(
       "a",
@@ -807,9 +807,9 @@ TEST_F(ParquetTableScanTest, filterNullIcebergPartition) {
       std::unordered_map<std::string, std::optional<std::string>>{
           {"c1", std::nullopt}});
 
-  std::shared_ptr<connector::ConnectorColumnHandle> c0 = makeColumnHandle(
+  std::shared_ptr<connector::common::ConnectorColumnHandle> c0 = makeColumnHandle(
       "c0", BIGINT(), BIGINT(), {}, HiveColumnHandle::ColumnType::kRegular);
-  std::shared_ptr<connector::ConnectorColumnHandle> c1 = makeColumnHandle(
+  std::shared_ptr<connector::common::ConnectorColumnHandle> c1 = makeColumnHandle(
       "c1",
       BIGINT(),
       BIGINT(),
@@ -823,7 +823,7 @@ TEST_F(ParquetTableScanTest, filterNullIcebergPartition) {
       "SELECT c0, c1 FROM tmp WHERE c1 IS NOT NULL",
       std::unordered_map<
           std::string,
-          std::shared_ptr<connector::ConnectorColumnHandle>>{
+          std::shared_ptr<connector::common::ConnectorColumnHandle>>{
           {"c0", c0}, {"c1", c1}});
 
   assertSelectWithFilter(
@@ -833,7 +833,7 @@ TEST_F(ParquetTableScanTest, filterNullIcebergPartition) {
       "SELECT c0, c1 FROM tmp WHERE c1 IS NULL",
       std::unordered_map<
           std::string,
-          std::shared_ptr<connector::ConnectorColumnHandle>>{
+          std::shared_ptr<connector::common::ConnectorColumnHandle>>{
           {"c0", c0}, {"c1", c1}});
 }
 
@@ -1350,15 +1350,15 @@ TEST_F(ParquetTableScanTest, booleanRle) {
   writeToParquetFile(file->getPath(), {vector}, options);
   loadData(file->getPath(), schema, vector);
 
-  std::shared_ptr<connector::ConnectorColumnHandle> c0 = makeColumnHandle(
+  std::shared_ptr<connector::common::ConnectorColumnHandle> c0 = makeColumnHandle(
       "c0", BOOLEAN(), BOOLEAN(), {}, HiveColumnHandle::ColumnType::kRegular);
-  std::shared_ptr<connector::ConnectorColumnHandle> c1 = makeColumnHandle(
+  std::shared_ptr<connector::common::ConnectorColumnHandle> c1 = makeColumnHandle(
       "c1", BOOLEAN(), BOOLEAN(), {}, HiveColumnHandle::ColumnType::kRegular);
-  std::shared_ptr<connector::ConnectorColumnHandle> c2 = makeColumnHandle(
+  std::shared_ptr<connector::common::ConnectorColumnHandle> c2 = makeColumnHandle(
       "c2", BOOLEAN(), BOOLEAN(), {}, HiveColumnHandle::ColumnType::kRegular);
-  std::shared_ptr<connector::ConnectorColumnHandle> c3 = makeColumnHandle(
+  std::shared_ptr<connector::common::ConnectorColumnHandle> c3 = makeColumnHandle(
       "c3", BOOLEAN(), BOOLEAN(), {}, HiveColumnHandle::ColumnType::kRegular);
-  std::shared_ptr<connector::ConnectorColumnHandle> c4 = makeColumnHandle(
+  std::shared_ptr<connector::common::ConnectorColumnHandle> c4 = makeColumnHandle(
       "c4", BOOLEAN(), BOOLEAN(), {}, HiveColumnHandle::ColumnType::kRegular);
 
   assertSelect({"c0"}, "SELECT c0 FROM tmp");
@@ -1386,11 +1386,11 @@ TEST_F(ParquetTableScanTest, singleBooleanRle) {
   writeToParquetFile(file->getPath(), {vector}, options);
   loadData(file->getPath(), schema, vector);
 
-  std::shared_ptr<connector::ConnectorColumnHandle> c0 = makeColumnHandle(
+  std::shared_ptr<connector::common::ConnectorColumnHandle> c0 = makeColumnHandle(
       "c0", BOOLEAN(), BOOLEAN(), {}, HiveColumnHandle::ColumnType::kRegular);
-  std::shared_ptr<connector::ConnectorColumnHandle> c1 = makeColumnHandle(
+  std::shared_ptr<connector::common::ConnectorColumnHandle> c1 = makeColumnHandle(
       "c1", BOOLEAN(), BOOLEAN(), {}, HiveColumnHandle::ColumnType::kRegular);
-  std::shared_ptr<connector::ConnectorColumnHandle> c2 = makeColumnHandle(
+  std::shared_ptr<connector::common::ConnectorColumnHandle> c2 = makeColumnHandle(
       "c2", BOOLEAN(), BOOLEAN(), {}, HiveColumnHandle::ColumnType::kRegular);
 
   assertSelect({"c0"}, "SELECT c0 FROM tmp");

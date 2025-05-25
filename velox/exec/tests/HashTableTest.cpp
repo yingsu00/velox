@@ -95,7 +95,7 @@ class HashTableTest : public testing::TestWithParam<bool>,
   }
 
   void SetUp() override {
-    common::testutil::TestValue::enable();
+    velox::common::testutil::TestValue::enable();
     if (GetParam()) {
       executor_ = std::make_unique<folly::CPUThreadPoolExecutor>(16);
     }

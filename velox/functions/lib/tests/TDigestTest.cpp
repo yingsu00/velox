@@ -53,7 +53,7 @@ TEST_F(TDigestTest, addElementsRandomized) {
   double values[N];
   TDigest digest;
   std::vector<int16_t> positions;
-  std::default_random_engine gen(common::testutil::getRandomSeed(42));
+  std::default_random_engine gen(velox::common::testutil::getRandomSeed(42));
   std::uniform_real_distribution<> dist;
   for (int i = 0; i < N; ++i) {
     auto v = dist(gen);
@@ -311,7 +311,7 @@ TEST_F(TDigestTest, normalDistribution) {
   constexpr int N = 1e5;
   std::vector<int16_t> positions;
   double values[N];
-  std::default_random_engine gen(common::testutil::getRandomSeed(42));
+  std::default_random_engine gen(velox::common::testutil::getRandomSeed(42));
   for (double mean : {0, 1000}) {
     SCOPED_TRACE(fmt::format("mean={}", mean));
     std::normal_distribution<> dist(mean, 1);
@@ -342,7 +342,7 @@ TEST_F(TDigestTest, addWeighed) {
 
 TEST_F(TDigestTest, merge) {
   std::vector<int16_t> positions;
-  std::default_random_engine gen(common::testutil::getRandomSeed(42));
+  std::default_random_engine gen(velox::common::testutil::getRandomSeed(42));
   std::vector<double> values;
   std::string buf;
   auto test = [&](int numDigests, int size, double mean, double stddev) {
@@ -416,7 +416,7 @@ TEST_F(TDigestTest, largeScalePreservesWeights) {
   TDigest digest;
   std::vector<int16_t> positions;
   std::normal_distribution<double> normal(1000, 100);
-  std::default_random_engine gen(common::testutil::getRandomSeed(42));
+  std::default_random_engine gen(velox::common::testutil::getRandomSeed(42));
   constexpr int N = 1e5;
   std::vector<double> values;
   values.reserve(N);

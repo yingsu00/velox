@@ -63,7 +63,7 @@ class LambdaExpr : public SpecialForm {
 
   void extractSubfieldsImpl(
       folly::F14FastMap<std::string, int32_t>* shadowedNames,
-      std::vector<common::Subfield>* subfields) const override;
+      std::vector<velox::common::Subfield>* subfields) const override;
 
   RowTypePtr signature_;
 

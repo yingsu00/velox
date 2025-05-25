@@ -25,11 +25,11 @@
 
 namespace facebook::velox::exec {
 
-struct RemoteConnectorSplit : public connector::ConnectorSplit {
+struct RemoteConnectorSplit : public connector::common::ConnectorSplit {
   const std::string taskId;
 
   explicit RemoteConnectorSplit(const std::string& remoteTaskId)
-      : ConnectorSplit(""), taskId(remoteTaskId) {}
+      : connector::common::ConnectorSplit(""), taskId(remoteTaskId) {}
 
   std::string toString() const override {
     return fmt::format("Remote: {}", taskId);

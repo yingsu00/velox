@@ -25,7 +25,7 @@ using namespace dwio::common;
 SelectiveTimestampColumnReader::SelectiveTimestampColumnReader(
     const std::shared_ptr<const TypeWithId>& fileType,
     DwrfParams& params,
-    common::ScanSpec& scanSpec)
+    velox::common::ScanSpec& scanSpec)
     : SelectiveColumnReader(fileType->type(), fileType, params, scanSpec),
       precision_(
           params.stripeStreams().rowReaderOptions().timestampPrecision()) {
@@ -100,13 +100,13 @@ void SelectiveTimestampColumnReader::read(
 
 template <bool isDense>
 void SelectiveTimestampColumnReader::readHelper(
-    common::Filter* filter,
+    velox::common::Filter* filter,
     const RowSet& rows) {
   ExtractToReader extractValues(this);
-  common::AlwaysTrue alwaysTrue;
+  velox::common::AlwaysTrue alwaysTrue;
   DirectRleColumnVisitor<
       int64_t,
-      common::AlwaysTrue,
+      velox::common::AlwaysTrue,
       decltype(extractValues),
       isDense>
       visitor(alwaysTrue, this, rows, extractValues);
@@ -178,23 +178,23 @@ void SelectiveTimestampColumnReader::readHelper(
   // 1) No filter found;
   // 2) Filter is kIsNotNull but rawNulls==NULL (no elements is null).
   switch (
-      !filter || (filter->kind() == common::FilterKind::kIsNotNull && !rawNulls)
-          ? common::FilterKind::kAlwaysTrue
+      !filter || (filter->kind() == velox::common::FilterKind::kIsNotNull && !rawNulls)
+          ? velox::common::FilterKind::kAlwaysTrue
           : filter->kind()) {
-    case common::FilterKind::kAlwaysTrue:
+    case velox::common::FilterKind::kAlwaysTrue:
       // Simply add all rows to output.
       for (vector_size_t i = 0; i < numValues_; i++) {
         addOutputRow(rows[i]);
       }
       break;
-    case common::FilterKind::kIsNull:
+    case velox::common::FilterKind::kIsNull:
       processNulls(true, rows, rawNulls);
       break;
-    case common::FilterKind::kIsNotNull:
+    case velox::common::FilterKind::kIsNotNull:
       processNulls(false, rows, rawNulls);
       break;
-    case common::FilterKind::kTimestampRange:
-    case common::FilterKind::kMultiRange:
+    case velox::common::FilterKind::kTimestampRange:
+    case velox::common::FilterKind::kMultiRange:
       processFilter(filter, rows, rawNulls);
       break;
     default:
@@ -234,7 +234,7 @@ void SelectiveTimestampColumnReader::processNulls(
 }
 
 void SelectiveTimestampColumnReader::processFilter(
-    const common::Filter* filter,
+    const velox::common::Filter* filter,
     const RowSet& rows,
     const uint64_t* rawNulls) {
   auto rawTs = values_->asMutable<Timestamp>();

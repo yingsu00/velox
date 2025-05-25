@@ -26,7 +26,7 @@ namespace facebook::velox::core {
 class ITypedExpr;
 
 // Exposes expression evaluation functionality of the engine to other parts of
-// the code base.  Connector may use it, for example, to evaluate pushed down
+// the code base.  connector::common::Connector may use it, for example, to evaluate pushed down
 // filters.  This is not thread safe and serializing operations is the
 // responsibility of the caller.  This is self-contained and does not reference
 // objects from the thread which constructs this.  Passing this between threads

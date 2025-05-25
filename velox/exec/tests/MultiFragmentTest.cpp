@@ -39,11 +39,11 @@ namespace {
 
 struct TestParam {
   VectorSerde::Kind serdeKind;
-  common::CompressionKind compressionKind;
+  velox::common::CompressionKind compressionKind;
 
   TestParam(
       VectorSerde::Kind _serdeKind,
-      common::CompressionKind _compressionKind)
+      velox::common::CompressionKind _compressionKind)
       : serdeKind(_serdeKind), compressionKind(_compressionKind) {}
 };
 
@@ -53,17 +53,17 @@ class MultiFragmentTest : public HiveConnectorTestBase,
   static std::vector<TestParam> getTestParams() {
     std::vector<TestParam> params;
     params.emplace_back(
-        VectorSerde::Kind::kPresto, common::CompressionKind_NONE);
+        VectorSerde::Kind::kPresto, velox::common::CompressionKind_NONE);
     params.emplace_back(
-        VectorSerde::Kind::kCompactRow, common::CompressionKind_NONE);
+        VectorSerde::Kind::kCompactRow, velox::common::CompressionKind_NONE);
     params.emplace_back(
-        VectorSerde::Kind::kUnsafeRow, common::CompressionKind_NONE);
+        VectorSerde::Kind::kUnsafeRow, velox::common::CompressionKind_NONE);
     params.emplace_back(
-        VectorSerde::Kind::kPresto, common::CompressionKind_LZ4);
+        VectorSerde::Kind::kPresto, velox::common::CompressionKind_LZ4);
     params.emplace_back(
-        VectorSerde::Kind::kCompactRow, common::CompressionKind_LZ4);
+        VectorSerde::Kind::kCompactRow, velox::common::CompressionKind_LZ4);
     params.emplace_back(
-        VectorSerde::Kind::kUnsafeRow, common::CompressionKind_LZ4);
+        VectorSerde::Kind::kUnsafeRow, velox::common::CompressionKind_LZ4);
     return params;
   }
 
@@ -73,7 +73,7 @@ class MultiFragmentTest : public HiveConnectorTestBase,
     exec::ExchangeSource::factories().clear();
     exec::ExchangeSource::registerFactory(createLocalExchangeSource);
     configSettings_[core::QueryConfig::kShuffleCompressionKind] =
-        common::compressionKindToString(GetParam().compressionKind);
+        velox::common::compressionKindToString(GetParam().compressionKind);
   }
 
   void TearDown() override {
@@ -391,7 +391,7 @@ TEST_P(MultiFragmentTest, aggregationMultiKey) {
       .splits(std::move(finalAggTaskSplits))
       .config(
           core::QueryConfig::kShuffleCompressionKind,
-          common::compressionKindToString(GetParam().compressionKind))
+          velox::common::compressionKindToString(GetParam().compressionKind))
       .assertResults("SELECT c0 % 10, c1 % 2, sum(c2) FROM tmp GROUP BY 1, 2");
 
   for (auto& task : tasks) {
@@ -424,7 +424,7 @@ TEST_P(MultiFragmentTest, distributedTableScan) {
             .split(remoteSplit(leafTaskId))
             .config(
                 core::QueryConfig::kShuffleCompressionKind,
-                common::compressionKindToString(GetParam().compressionKind))
+                velox::common::compressionKindToString(GetParam().compressionKind))
             .assertResults("SELECT c2, c1 % 2, c0 % 10 FROM tmp");
 
     verifyExchangeStats(task, 1, 1);
@@ -584,7 +584,7 @@ TEST_P(MultiFragmentTest, mergeExchange) {
       .split(remoteSplit(finalSortTaskId))
       .config(
           core::QueryConfig::kShuffleCompressionKind,
-          common::compressionKindToString(GetParam().compressionKind))
+          velox::common::compressionKindToString(GetParam().compressionKind))
       .assertResults(
           "SELECT * FROM tmp ORDER BY 1 NULLS LAST", std::vector<uint32_t>{0});
 
@@ -632,7 +632,7 @@ TEST_P(MultiFragmentTest, partitionedOutput) {
         .split(remoteSplit(leafTaskId))
         .config(
             core::QueryConfig::kShuffleCompressionKind,
-            common::compressionKindToString(GetParam().compressionKind))
+            velox::common::compressionKindToString(GetParam().compressionKind))
         .assertResults("SELECT c0, c1 FROM tmp");
 
     ASSERT_TRUE(waitForTaskCompletion(leafTask.get())) << leafTask->taskId();
@@ -656,7 +656,7 @@ TEST_P(MultiFragmentTest, partitionedOutput) {
         .split(remoteSplit(leafTaskId))
         .config(
             core::QueryConfig::kShuffleCompressionKind,
-            common::compressionKindToString(GetParam().compressionKind))
+            velox::common::compressionKindToString(GetParam().compressionKind))
         .assertResults("SELECT c3, c0, c2 FROM tmp");
 
     ASSERT_TRUE(waitForTaskCompletion(leafTask.get())) << leafTask->taskId();
@@ -684,7 +684,7 @@ TEST_P(MultiFragmentTest, partitionedOutput) {
         .split(remoteSplit(leafTaskId))
         .config(
             core::QueryConfig::kShuffleCompressionKind,
-            common::compressionKindToString(GetParam().compressionKind))
+            velox::common::compressionKindToString(GetParam().compressionKind))
         .assertResults("SELECT c0, c1, c2, c3, c4, c3, c2, c1, c0 FROM tmp");
 
     ASSERT_TRUE(waitForTaskCompletion(leafTask.get())) << leafTask->taskId();
@@ -731,7 +731,7 @@ TEST_P(MultiFragmentTest, partitionedOutput) {
             .splits(std::move(intermediateSplits))
             .config(
                 core::QueryConfig::kShuffleCompressionKind,
-                common::compressionKindToString(GetParam().compressionKind))
+                velox::common::compressionKindToString(GetParam().compressionKind))
             .assertResults("SELECT c3, c0, c2 FROM tmp");
 
     verifyExchangeStats(task, kFanout, kFanout);
@@ -770,7 +770,7 @@ TEST_P(MultiFragmentTest, partitionedOutput) {
             .split(remoteSplit(leafTaskId))
             .config(
                 core::QueryConfig::kShuffleCompressionKind,
-                common::compressionKindToString(GetParam().compressionKind))
+                velox::common::compressionKindToString(GetParam().compressionKind))
             .copyResults(pool());
     ASSERT_EQ(*result->type(), *ROW({}));
     ASSERT_EQ(result->size(), numRows);
@@ -844,7 +844,7 @@ TEST_P(MultiFragmentTest, noHashPartitionSkew) {
             .destination(partition)
             .config(
                 core::QueryConfig::kShuffleCompressionKind,
-                common::compressionKindToString(GetParam().compressionKind))
+                velox::common::compressionKindToString(GetParam().compressionKind))
             .maxDrivers(numConsumerDriverThreads)
             .assertResults(expectedResult);
 
@@ -930,7 +930,7 @@ TEST_P(MultiFragmentTest, noHivePartitionSkew) {
             .destination(partition)
             .config(
                 core::QueryConfig::kShuffleCompressionKind,
-                common::compressionKindToString(GetParam().compressionKind))
+                velox::common::compressionKindToString(GetParam().compressionKind))
             .maxDrivers(numConsumerDriverThreads)
             .assertResults(expectedResult);
 
@@ -988,7 +988,7 @@ TEST_P(MultiFragmentTest, partitionedOutputWithLargeInput) {
             .split(remoteSplit(leafTaskId))
             .config(
                 core::QueryConfig::kShuffleCompressionKind,
-                common::compressionKindToString(GetParam().compressionKind))
+                velox::common::compressionKindToString(GetParam().compressionKind))
             .assertResults("SELECT c0, c1, c2, c3, c4 FROM tmp");
     ASSERT_TRUE(waitForTaskCompletion(leafTask.get()))
         << leafTask->taskId() << "state: " << leafTask->state();
@@ -1043,7 +1043,7 @@ TEST_P(MultiFragmentTest, partitionedOutputWithLargeInput) {
             .splits(std::move(intermediateSplits))
             .config(
                 core::QueryConfig::kShuffleCompressionKind,
-                common::compressionKindToString(GetParam().compressionKind))
+                velox::common::compressionKindToString(GetParam().compressionKind))
             .assertResults("SELECT c0, c1, c2, c3, c4 FROM tmp");
     ASSERT_TRUE(waitForTaskCompletion(leafTask.get()))
         << "state: " << leafTask->state();
@@ -1101,7 +1101,7 @@ TEST_P(MultiFragmentTest, broadcast) {
       .splits(std::move(finalAggTaskSplits))
       .config(
           core::QueryConfig::kShuffleCompressionKind,
-          common::compressionKindToString(GetParam().compressionKind))
+          velox::common::compressionKindToString(GetParam().compressionKind))
       .assertResults("SELECT UNNEST(array[1000, 1000, 1000])");
 
   for (auto& task : tasks) {
@@ -1183,7 +1183,7 @@ TEST_P(MultiFragmentTest, roundRobinPartition) {
       .splits(std::move(collectTaskSplits))
       .config(
           core::QueryConfig::kShuffleCompressionKind,
-          common::compressionKindToString(GetParam().compressionKind))
+          velox::common::compressionKindToString(GetParam().compressionKind))
       .assertResults("SELECT * FROM tmp");
 
   for (auto& task : tasks) {
@@ -1251,7 +1251,7 @@ TEST_P(MultiFragmentTest, constantKeys) {
       .splits(std::move(finalAggTaskSplits))
       .config(
           core::QueryConfig::kShuffleCompressionKind,
-          common::compressionKindToString(GetParam().compressionKind))
+          velox::common::compressionKindToString(GetParam().compressionKind))
       .assertResults(
           "SELECT 3 * ceil(1000.0 / 7) /* number of null rows */, 1000 + 2 * ceil(1000.0 / 7) /* total number of rows */");
 
@@ -1318,7 +1318,7 @@ TEST_P(MultiFragmentTest, replicateNullsAndAny) {
       .splits(std::move(finalAggTaskSplits))
       .config(
           core::QueryConfig::kShuffleCompressionKind,
-          common::compressionKindToString(GetParam().compressionKind))
+          velox::common::compressionKindToString(GetParam().compressionKind))
       .assertResults(
           "SELECT 3 * ceil(1000.0 / 7) /* number of null rows */, 1000 + 2 * ceil(1000.0 / 7) /* total number of rows */");
 
@@ -1362,7 +1362,7 @@ TEST_P(MultiFragmentTest, limit) {
           .split(remoteSplit(leafTaskId))
           .config(
               core::QueryConfig::kShuffleCompressionKind,
-              common::compressionKindToString(GetParam().compressionKind))
+              velox::common::compressionKindToString(GetParam().compressionKind))
           .assertResults(
               "VALUES (null), (1), (2), (3), (4), (5), (6), (null), (8), (9)");
   ASSERT_TRUE(waitForTaskCompletion(task.get())) << task->taskId();
@@ -1403,7 +1403,7 @@ TEST_P(MultiFragmentTest, mergeExchangeOverEmptySources) {
       .splits(std::move(leafTaskSplits))
       .config(
           core::QueryConfig::kShuffleCompressionKind,
-          common::compressionKindToString(GetParam().compressionKind))
+          velox::common::compressionKindToString(GetParam().compressionKind))
       .assertResults("");
 
   for (auto& task : tasks) {
@@ -1505,7 +1505,7 @@ TEST_P(MultiFragmentTest, earlyCompletion) {
       .splits(std::move(joinTaskSplits))
       .config(
           core::QueryConfig::kShuffleCompressionKind,
-          common::compressionKindToString(GetParam().compressionKind))
+          velox::common::compressionKindToString(GetParam().compressionKind))
       .assertResults("SELECT UNNEST([3, 3, 3, 3, 4, 4, 4, 4])");
 
   for (auto& task : tasks) {
@@ -1581,7 +1581,7 @@ TEST_P(MultiFragmentTest, earlyCompletionBroadcast) {
       .splits(std::move(joinTaskSplits))
       .config(
           core::QueryConfig::kShuffleCompressionKind,
-          common::compressionKindToString(GetParam().compressionKind))
+          velox::common::compressionKindToString(GetParam().compressionKind))
       .assertResults("SELECT UNNEST([10, 10, 10, 10])");
 
   for (auto& task : tasks) {
@@ -1664,7 +1664,7 @@ TEST_P(MultiFragmentTest, earlyCompletionMerge) {
       .splits(std::move(joinTaskSplits))
       .config(
           core::QueryConfig::kShuffleCompressionKind,
-          common::compressionKindToString(GetParam().compressionKind))
+          velox::common::compressionKindToString(GetParam().compressionKind))
       .assertResults("SELECT UNNEST([3, 3, 3, 3, 4, 4, 4, 4])");
 
   for (auto& task : tasks) {
@@ -1925,7 +1925,7 @@ TEST_P(MultiFragmentTest, customPlanNodeWithExchangeClient) {
   CursorParameters params;
   params.queryConfigs.emplace(
       core::QueryConfig::kShuffleCompressionKind,
-      common::compressionKindToString(GetParam().compressionKind));
+      velox::common::compressionKindToString(GetParam().compressionKind));
   core::PlanNodeId testNodeId;
   params.maxDrivers = 1;
   params.planNode =
@@ -2391,7 +2391,7 @@ class DataFetcher {
 /// of individual pages. PartitionedOutput operator is expected to limit page
 /// sizes to no more than 1MB give and take 30%.
 DEBUG_ONLY_TEST_P(MultiFragmentTest, maxBytes) {
-  if (GetParam().compressionKind != common::CompressionKind_NONE) {
+  if (GetParam().compressionKind != velox::common::CompressionKind_NONE) {
     // NOTE: different compression generates different serialized byte size so
     // only test with no-compression to ease testing.s
     return;
@@ -2776,7 +2776,7 @@ TEST_P(MultiFragmentTest, compression) {
             .split(remoteSplit(producerTaskId))
             .config(
                 core::QueryConfig::kShuffleCompressionKind,
-                common::compressionKindToString(GetParam().compressionKind))
+                velox::common::compressionKindToString(GetParam().compressionKind))
             .destination(0)
             .assertResults(expected);
 
@@ -2784,21 +2784,21 @@ TEST_P(MultiFragmentTest, compression) {
     const auto& consumerPlanStats = consumerTaskStats.at("0");
     ASSERT_EQ(
         consumerPlanStats.customStats.at(Operator::kShuffleCompressionKind).min,
-        static_cast<common::CompressionKind>(GetParam().compressionKind));
+        static_cast<velox::common::CompressionKind>(GetParam().compressionKind));
     ASSERT_EQ(
         consumerPlanStats.customStats.at(Operator::kShuffleCompressionKind).max,
-        static_cast<common::CompressionKind>(GetParam().compressionKind));
+        static_cast<velox::common::CompressionKind>(GetParam().compressionKind));
     ASSERT_EQ(data->size() * kNumRepeats, consumerPlanStats.outputRows);
 
     auto producerTaskStats = exec::toPlanStats(producerTask->taskStats());
     const auto& producerStats = producerTaskStats.at("1");
     ASSERT_EQ(
         producerStats.customStats.at(Operator::kShuffleCompressionKind).min,
-        static_cast<common::CompressionKind>(GetParam().compressionKind));
+        static_cast<velox::common::CompressionKind>(GetParam().compressionKind));
     ASSERT_EQ(
         producerStats.customStats.at(Operator::kShuffleCompressionKind).max,
-        static_cast<common::CompressionKind>(GetParam().compressionKind));
-    if (GetParam().compressionKind == common::CompressionKind_NONE) {
+        static_cast<velox::common::CompressionKind>(GetParam().compressionKind));
+    if (GetParam().compressionKind == velox::common::CompressionKind_NONE) {
       ASSERT_EQ(
           producerStats.customStats.count(
               IterativeVectorSerializer::kCompressedBytes),
@@ -2930,7 +2930,7 @@ TEST_P(MultiFragmentTest, scaledTableScan) {
         .split(remoteSplit(finalAggTaskId))
         .config(
             core::QueryConfig::kShuffleCompressionKind,
-            common::compressionKindToString(GetParam().compressionKind))
+            velox::common::compressionKindToString(GetParam().compressionKind))
         .assertResults(
             "SELECT c5, max(c0), sum(c1), sum(c2), sum(c3), sum(c4) FROM tmp group by c5");
 

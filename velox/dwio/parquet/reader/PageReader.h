@@ -40,7 +40,7 @@ class PageReader {
       std::unique_ptr<dwio::common::SeekableInputStream> stream,
       memory::MemoryPool& pool,
       ParquetTypeWithIdPtr fileType,
-      common::CompressionKind codec,
+      velox::common::CompressionKind codec,
       int64_t chunkSize,
       const tz::TimeZone* sessionTimezone)
       : pool_(pool),
@@ -60,7 +60,7 @@ class PageReader {
   PageReader(
       std::unique_ptr<dwio::common::SeekableInputStream> stream,
       memory::MemoryPool& pool,
-      common::CompressionKind codec,
+      velox::common::CompressionKind codec,
       int64_t chunkSize,
       const tz::TimeZone* sessionTimezone = nullptr)
       : pool_(pool),
@@ -377,7 +377,7 @@ class PageReader {
   const int32_t maxDefine_;
   const bool isTopLevel_;
 
-  const common::CompressionKind codec_;
+  const velox::common::CompressionKind codec_;
   const int64_t chunkSize_;
   const char* bufferStart_{nullptr};
   const char* bufferEnd_{nullptr};
@@ -516,16 +516,16 @@ class PageReader {
 };
 
 FOLLY_ALWAYS_INLINE dwio::common::compression::CompressionOptions
-getParquetDecompressionOptions(common::CompressionKind kind) {
+getParquetDecompressionOptions(velox::common::CompressionKind kind) {
   dwio::common::compression::CompressionOptions options{};
 
-  if (kind == common::CompressionKind_ZLIB ||
-      kind == common::CompressionKind_GZIP) {
+  if (kind == velox::common::CompressionKind_ZLIB ||
+      kind == velox::common::CompressionKind_GZIP) {
     options.format.zlib.windowBits =
         dwio::common::compression::Compressor::PARQUET_ZLIB_WINDOW_BITS;
   } else if (
-      kind == common::CompressionKind_LZ4 ||
-      kind == common::CompressionKind_LZO) {
+      kind == velox::common::CompressionKind_LZ4 ||
+      kind == velox::common::CompressionKind_LZO) {
     options.format.lz4_lzo.isHadoopFrameFormat = true;
   }
   return options;
@@ -534,7 +534,7 @@ getParquetDecompressionOptions(common::CompressionKind kind) {
 template <typename Visitor>
 void PageReader::readWithVisitor(Visitor& visitor) {
   constexpr bool hasFilter =
-      !std::is_same_v<typename Visitor::FilterType, common::AlwaysTrue>;
+      !std::is_same_v<typename Visitor::FilterType, velox::common::AlwaysTrue>;
   constexpr bool filterOnly =
       std::is_same_v<typename Visitor::Extract, dwio::common::DropValues>;
   bool mayProduceNulls = !filterOnly && visitor.allowNulls();

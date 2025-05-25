@@ -90,7 +90,7 @@ void registerMergeAggregate(
       prefix + kMerge,
       false,
       overwrite,
-      common::hll::kDefaultApproxSetStandardError);
+      velox::common::hll::kDefaultApproxSetStandardError);
 }
 
 } // namespace facebook::velox::aggregate::prestosql

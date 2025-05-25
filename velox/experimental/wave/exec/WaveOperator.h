@@ -135,7 +135,7 @@ class WaveOperator {
   }
 
   void addSubfieldAndType(
-      const common::Subfield* subfield,
+      const velox::common::Subfield* subfield,
       const TypePtr& type) {
     VELOX_UNSUPPORTED();
     // subfields_.push_back(subfield);
@@ -176,7 +176,7 @@ class WaveOperator {
   virtual void addDynamicFilter(
       const core::PlanNodeId& /*producer*/,
       column_index_t /*outputChannel*/,
-      const std::shared_ptr<common::Filter>& /*filter*/) {
+      const std::shared_ptr<velox::common::Filter>& /*filter*/) {
     VELOX_UNSUPPORTED();
   }
 
@@ -193,7 +193,7 @@ class WaveOperator {
   // different times on different waves. In this list, ordered in
   // depth first preorder of outputType_. Top struct not listed,
   // struct columns have the parent before the children.
-  // std::vector<const common::Subfield*> subfields_;
+  // std::vector<const velox::common::Subfield*> subfields_;
 
   // Pairwise type for each subfield.
   // std::vector<TypePtr> types_;

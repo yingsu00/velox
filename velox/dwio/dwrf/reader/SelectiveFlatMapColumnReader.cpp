@@ -70,7 +70,7 @@ std::vector<KeyNode<T>> getKeyNodes(
     const TypePtr& requestedType,
     const std::shared_ptr<const dwio::common::TypeWithId>& fileType,
     DwrfParams& params,
-    common::ScanSpec& scanSpec,
+    velox::common::ScanSpec& scanSpec,
     bool asStruct,
     bool useColumnNames) {
   using namespace dwio::common::flatmap;
@@ -82,14 +82,14 @@ std::vector<KeyNode<T>> getKeyNodes(
   auto& dataValueType = fileType->childAt(1);
   auto& stripe = params.stripeStreams();
 
-  common::ScanSpec* keysSpec = nullptr;
-  common::ScanSpec* valuesSpec = nullptr;
-  std::unordered_map<KeyValue<T>, common::ScanSpec*, KeyValueHash<T>>
+  velox::common::ScanSpec* keysSpec = nullptr;
+  velox::common::ScanSpec* valuesSpec = nullptr;
+  std::unordered_map<KeyValue<T>, velox::common::ScanSpec*, KeyValueHash<T>>
       childSpecs;
   if (!asStruct) {
-    keysSpec = scanSpec.getOrCreateChild(common::ScanSpec::kMapKeysFieldName);
+    keysSpec = scanSpec.getOrCreateChild(velox::common::ScanSpec::kMapKeysFieldName);
     valuesSpec =
-        scanSpec.getOrCreateChild(common::ScanSpec::kMapValuesFieldName);
+        scanSpec.getOrCreateChild(velox::common::ScanSpec::kMapValuesFieldName);
     VELOX_CHECK(!valuesSpec->hasFilter());
     keysSpec->setProjectOut(true);
     valuesSpec->setProjectOut(true);
@@ -118,7 +118,7 @@ std::vector<KeyNode<T>> getKeyNodes(
         EncodingKey seqEk(dataValueType->id(), sequence);
         const auto& keyInfo = stripe.getEncoding(seqEk).key();
         auto key = extractKey<T>(keyInfo);
-        common::ScanSpec* childSpec;
+        velox::common::ScanSpec* childSpec;
         if (auto it = childSpecs.find(key);
             it != childSpecs.end() && !it->second->isConstant()) {
           childSpec = it->second;
@@ -174,7 +174,7 @@ class SelectiveFlatMapAsStructReader : public SelectiveStructColumnReaderBase {
       const TypePtr& requestedType,
       const std::shared_ptr<const dwio::common::TypeWithId>& fileType,
       DwrfParams& params,
-      common::ScanSpec& scanSpec,
+      velox::common::ScanSpec& scanSpec,
       bool useColumnNames)
       : SelectiveStructColumnReaderBase(
             requestedType,
@@ -213,7 +213,7 @@ class SelectiveFlatMapReader : public SelectiveStructColumnReaderBase {
       const TypePtr& requestedType,
       const std::shared_ptr<const dwio::common::TypeWithId>& fileType,
       DwrfParams& params,
-      common::ScanSpec& scanSpec,
+      velox::common::ScanSpec& scanSpec,
       bool useColumnNames)
       : SelectiveStructColumnReaderBase(
             requestedType,
@@ -250,7 +250,7 @@ std::unique_ptr<dwio::common::SelectiveColumnReader> createReader(
     const TypePtr& requestedType,
     const std::shared_ptr<const dwio::common::TypeWithId>& fileType,
     DwrfParams& params,
-    common::ScanSpec& scanSpec,
+    velox::common::ScanSpec& scanSpec,
     bool useColumnNames) {
   if (scanSpec.isFlatMapAsStruct()) {
     return std::make_unique<SelectiveFlatMapAsStructReader<T>>(
@@ -268,7 +268,7 @@ createSelectiveFlatMapColumnReader(
     const TypePtr& requestedType,
     const std::shared_ptr<const dwio::common::TypeWithId>& fileType,
     DwrfParams& params,
-    common::ScanSpec& scanSpec,
+    velox::common::ScanSpec& scanSpec,
     bool useColumnNames) {
   auto kind = fileType->childAt(0)->type()->kind();
   switch (kind) {

@@ -126,12 +126,12 @@ class HiveDataSinkTest : public exec::test::HiveConnectorTestBase {
     connectorPool_ =
         root_->addAggregateChild("connector", exec::MemoryReclaimer::create());
 
-    connectorQueryCtx_ = std::make_unique<connector::ConnectorQueryCtx>(
+    connectorQueryCtx_ = std::make_unique<connector::common::ConnectorQueryCtx>(
         opPool_.get(),
         connectorPool_.get(),
         connectorSessionProperties_.get(),
         nullptr,
-        common::PrefixSortConfig(),
+        velox::common::PrefixSortConfig(),
         nullptr,
         nullptr,
         "query.HiveDataSinkTest",
@@ -156,16 +156,10 @@ class HiveDataSinkTest : public exec::test::HiveConnectorTestBase {
         outputRowType->names(),
         outputRowType->children(),
         partitionedBy,
-        bucketProperty,
         makeLocationHandle(
             outputDirectoryPath,
             std::nullopt,
-            connector::hive::LocationHandle::TableType::kNew),
-        fileFormat,
-        CompressionKind::CompressionKind_ZSTD,
-        {},
-        writerOptions,
-        ensureFiles);
+            connector::common::LocationHandle::TableType::kNew),;
   }
 
   std::shared_ptr<HiveDataSink> createDataSink(
@@ -189,7 +183,7 @@ class HiveDataSinkTest : public exec::test::HiveConnectorTestBase {
             writerOptions,
             ensureFiles),
         connectorQueryCtx_.get(),
-        CommitStrategy::kNoCommit,
+        connector::common::CommitStrategy::kNoCommit,
         connectorConfig_);
   }
 
@@ -206,7 +200,7 @@ class HiveDataSinkTest : public exec::test::HiveConnectorTestBase {
   void verifyWrittenData(const std::string& dirPath, int32_t numFiles = 1) {
     const std::vector<std::string> filePaths = listFiles(dirPath);
     ASSERT_EQ(filePaths.size(), numFiles);
-    std::vector<std::shared_ptr<connector::ConnectorSplit>> splits;
+    std::vector<std::shared_ptr<connector::common::ConnectorSplit>> splits;
     std::for_each(filePaths.begin(), filePaths.end(), [&](auto filePath) {
       splits.push_back(makeHiveConnectorSplit(filePath));
     });
@@ -217,7 +211,7 @@ class HiveDataSinkTest : public exec::test::HiveConnectorTestBase {
   }
 
   void setConnectorQueryContext(
-      std::unique_ptr<ConnectorQueryCtx> connectorQueryCtx) {
+      std::unique_ptr<connector::common::ConnectorQueryCtx> connectorQueryCtx) {
     connectorQueryCtx_ = std::move(connectorQueryCtx);
   }
 
@@ -232,7 +226,7 @@ class HiveDataSinkTest : public exec::test::HiveConnectorTestBase {
       std::make_shared<config::ConfigBase>(
           std::unordered_map<std::string, std::string>(),
           /*mutable=*/true);
-  std::unique_ptr<ConnectorQueryCtx> connectorQueryCtx_;
+  std::unique_ptr<connector::common::ConnectorQueryCtx> connectorQueryCtx_;
   std::shared_ptr<HiveConfig> connectorConfig_ =
       std::make_shared<HiveConfig>(std::make_shared<config::ConfigBase>(
           std::unordered_map<std::string, std::string>()));
@@ -740,12 +734,12 @@ DEBUG_ONLY_TEST_F(HiveDataSinkTest, memoryReclaim) {
       spillDirectory = exec::test::TempDirectoryPath::create();
       spillConfig = getSpillConfig(
           spillDirectory->getPath(), testData.writerFlushThreshold);
-      auto connectorQueryCtx = std::make_unique<connector::ConnectorQueryCtx>(
+      auto connectorQueryCtx = std::make_unique<connector::common::ConnectorQueryCtx>(
           opPool_.get(),
           connectorPool_.get(),
           connectorSessionProperties_.get(),
           spillConfig.get(),
-          common::PrefixSortConfig(),
+          velox::common::PrefixSortConfig(),
           nullptr,
           nullptr,
           "query.HiveDataSinkTest",
@@ -755,12 +749,12 @@ DEBUG_ONLY_TEST_F(HiveDataSinkTest, memoryReclaim) {
           "");
       setConnectorQueryContext(std::move(connectorQueryCtx));
     } else {
-      auto connectorQueryCtx = std::make_unique<connector::ConnectorQueryCtx>(
+      auto connectorQueryCtx = std::make_unique<connector::common::ConnectorQueryCtx>(
           opPool_.get(),
           connectorPool_.get(),
           connectorSessionProperties_.get(),
           nullptr,
-          common::PrefixSortConfig(),
+          velox::common::PrefixSortConfig(),
           nullptr,
           nullptr,
           "query.HiveDataSinkTest",
@@ -881,12 +875,12 @@ TEST_F(HiveDataSinkTest, memoryReclaimAfterClose) {
     if (testData.writerSpillEnabled) {
       spillDirectory = exec::test::TempDirectoryPath::create();
       spillConfig = getSpillConfig(spillDirectory->getPath(), 0);
-      auto connectorQueryCtx = std::make_unique<connector::ConnectorQueryCtx>(
+      auto connectorQueryCtx = std::make_unique<connector::common::ConnectorQueryCtx>(
           opPool_.get(),
           connectorPool_.get(),
           connectorSessionProperties_.get(),
           spillConfig.get(),
-          common::PrefixSortConfig(),
+          velox::common::PrefixSortConfig(),
           nullptr,
           nullptr,
           "query.HiveDataSinkTest",
@@ -896,12 +890,12 @@ TEST_F(HiveDataSinkTest, memoryReclaimAfterClose) {
           "");
       setConnectorQueryContext(std::move(connectorQueryCtx));
     } else {
-      auto connectorQueryCtx = std::make_unique<connector::ConnectorQueryCtx>(
+      auto connectorQueryCtx = std::make_unique<connector::common::ConnectorQueryCtx>(
           opPool_.get(),
           connectorPool_.get(),
           connectorSessionProperties_.get(),
           nullptr,
-          common::PrefixSortConfig(),
+          velox::common::PrefixSortConfig(),
           nullptr,
           nullptr,
           "query.HiveDataSinkTest",
@@ -1022,12 +1016,12 @@ TEST_F(HiveDataSinkTest, sortWriterMemoryReclaimDuringFinish) {
       HiveConfig::kSortWriterFinishTimeSliceLimitMsSession, "1");
   connectorSessionProperties_->set(
       HiveConfig::kSortWriterMaxOutputRowsSession, "100");
-  auto connectorQueryCtx = std::make_unique<connector::ConnectorQueryCtx>(
+  auto connectorQueryCtx = std::make_unique<connector::common::ConnectorQueryCtx>(
       opPool_.get(),
       connectorPool_.get(),
       connectorSessionProperties_.get(),
       spillConfig.get(),
-      common::PrefixSortConfig(),
+      velox::common::PrefixSortConfig(),
       nullptr,
       nullptr,
       "query.HiveDataSinkTest",
@@ -1087,12 +1081,12 @@ DEBUG_ONLY_TEST_F(HiveDataSinkTest, sortWriterFailureTest) {
       getSpillConfig(spillDirectory->getPath(), 0);
   // Triggers the memory reservation in sort buffer.
   spillConfig->minSpillableReservationPct = 1'000;
-  auto connectorQueryCtx = std::make_unique<connector::ConnectorQueryCtx>(
+  auto connectorQueryCtx = std::make_unique<connector::common::ConnectorQueryCtx>(
       opPool_.get(),
       connectorPool_.get(),
       connectorSessionProperties_.get(),
       spillConfig.get(),
-      common::PrefixSortConfig(),
+      velox::common::PrefixSortConfig(),
       nullptr,
       nullptr,
       "query.HiveDataSinkTest",
@@ -1277,41 +1271,22 @@ TEST_F(HiveDataSinkTest, ensureFilesUnsupported) {
       makeHiveInsertTableHandle(
           rowType_->names(),
           rowType_->children(),
-          {rowType_->names()[0]}, // partitionedBy
-          nullptr, // bucketProperty
-          makeLocationHandle(
+          {rowType_->names()[0]}, // bucketProperty
+makeLocationHandle(
               "/path/to/test",
               std::nullopt,
-              connector::hive::LocationHandle::TableType::kNew),
-          dwio::common::FileFormat::DWRF,
-          CompressionKind::CompressionKind_ZSTD,
-          {}, // serdeParameters
-          nullptr, // writeOptions
-          true // ensureFiles
-          ),
+              connector::common::LocationHandle::TableType::kNew),,
       "ensureFiles is not supported with partition keys in the data");
 
   VELOX_ASSERT_THROW(
       makeHiveInsertTableHandle(
           rowType_->names(),
           rowType_->children(),
-          {}, // partitionedBy
-          {std::make_shared<HiveBucketProperty>(
-              HiveBucketProperty::Kind::kPrestoNative,
-              1,
-              std::vector<std::string>{rowType_->names()[0]},
-              std::vector<TypePtr>{rowType_->children()[0]},
-              std::vector<std::shared_ptr<const HiveSortingColumn>>{})},
+          {},
           makeLocationHandle(
               "/path/to/test",
               std::nullopt,
-              connector::hive::LocationHandle::TableType::kNew),
-          dwio::common::FileFormat::DWRF,
-          CompressionKind::CompressionKind_ZSTD,
-          {}, // serdeParameters
-          nullptr, // writeOptions
-          true // ensureFiles
-          ),
+              connector::common::LocationHandle::TableType::kNew),,
       "ensureFiles is not supported with bucketing");
 }
 } // namespace

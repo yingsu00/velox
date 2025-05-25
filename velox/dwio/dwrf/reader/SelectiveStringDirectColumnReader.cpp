@@ -25,7 +25,7 @@ namespace facebook::velox::dwrf {
 SelectiveStringDirectColumnReader::SelectiveStringDirectColumnReader(
     const std::shared_ptr<const dwio::common::TypeWithId>& fileType,
     DwrfParams& params,
-    common::ScanSpec& scanSpec)
+    velox::common::ScanSpec& scanSpec)
     : SelectiveColumnReader(fileType->type(), fileType, params, scanSpec) {
   EncodingKey encodingKey{fileType->id(), params.flatMapContext().sequence};
   auto& stripe = params.stripeStreams();
@@ -195,7 +195,7 @@ bool SelectiveStringDirectColumnReader::try8ConsecutiveSmall(
     int startRow) {
 #ifndef NDEBUG
   bool testCoverage[] = {kScatter, kGreaterThan4};
-  common::testutil::TestValue::adjust(
+  velox::common::testutil::TestValue::adjust(
       "facebook::velox::dwrf::SelectiveStringDirectColumnReader::try8ConsecutiveSmall",
       testCoverage);
 #endif
@@ -428,7 +428,7 @@ void SelectiveStringDirectColumnReader::readWithVisitor(
     TVisitor visitor) {
   int32_t current = visitor.start();
   constexpr bool isExtract =
-      std::is_same_v<typename TVisitor::FilterType, common::AlwaysTrue> &&
+      std::is_same_v<typename TVisitor::FilterType, velox::common::AlwaysTrue> &&
       std::is_same_v<typename TVisitor::Extract, dwio::common::ExtractToReader>;
   auto nulls = nullsInReadRange_ ? nullsInReadRange_->as<uint64_t>() : nullptr;
 

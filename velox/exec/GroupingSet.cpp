@@ -51,10 +51,10 @@ GroupingSet::GroupingSet(
     bool isRawInput,
     const std::vector<vector_size_t>& globalGroupingSets,
     const std::optional<column_index_t>& groupIdChannel,
-    const common::SpillConfig* spillConfig,
+    const velox::common::SpillConfig* spillConfig,
     tsan_atomic<bool>* nonReclaimableSection,
     OperatorCtx* operatorCtx,
-    folly::Synchronized<common::SpillStats>* spillStats)
+    folly::Synchronized<velox::common::SpillStats>* spillStats)
     : preGroupedKeyChannels_(std::move(preGroupedKeys)),
       groupingKeyOutputProjections_(std::move(groupingKeyOutputProjections)),
       hashers_(std::move(hashers)),
@@ -990,7 +990,7 @@ RowTypePtr GroupingSet::makeSpillType() const {
   return ROW(std::move(names), std::move(types));
 }
 
-std::optional<common::SpillStats> GroupingSet::spilledStats() const {
+std::optional<velox::common::SpillStats> GroupingSet::spilledStats() const {
   if (!hasSpilled()) {
     return std::nullopt;
   }
@@ -1523,8 +1523,8 @@ AggregationInputSpiller::AggregationInputSpiller(
     RowTypePtr rowType,
     const HashBitRange& hashBitRange,
     const std::vector<SpillSortKey>& sortingKeys,
-    const common::SpillConfig* spillConfig,
-    folly::Synchronized<common::SpillStats>* spillStats)
+    const velox::common::SpillConfig* spillConfig,
+    folly::Synchronized<velox::common::SpillStats>* spillStats)
     : SpillerBase(
           container,
           std::move(rowType),
@@ -1539,8 +1539,8 @@ AggregationInputSpiller::AggregationInputSpiller(
 AggregationOutputSpiller::AggregationOutputSpiller(
     RowContainer* container,
     RowTypePtr rowType,
-    const common::SpillConfig* spillConfig,
-    folly::Synchronized<common::SpillStats>* spillStats)
+    const velox::common::SpillConfig* spillConfig,
+    folly::Synchronized<velox::common::SpillStats>* spillStats)
     : SpillerBase(
           container,
           std::move(rowType),

@@ -21,10 +21,10 @@ DECLARE_int32(wave_max_reader_batch_rows);
 
 namespace facebook::velox::wave::test {
 
-using common::Subfield;
+using velox::common::Subfield;
 
 WaveTestSplitReader::WaveTestSplitReader(
-    const std::shared_ptr<connector::ConnectorSplit>& split,
+    const std::shared_ptr<connector::common::ConnectorSplit>& split,
     const SplitReaderParams& params,
     const DefinesMap* defines) {
   params_ = params;
@@ -113,7 +113,7 @@ namespace {
 class WaveTestSplitReaderFactory : public WaveSplitReaderFactory {
  public:
   std::shared_ptr<WaveSplitReader> create(
-      const std::shared_ptr<connector::ConnectorSplit>& split,
+      const std::shared_ptr<connector::common::ConnectorSplit>& split,
       const SplitReaderParams& params,
       const DefinesMap* defines) override {
     auto hiveSplit =

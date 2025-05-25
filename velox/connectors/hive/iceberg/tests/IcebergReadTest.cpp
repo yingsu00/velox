@@ -187,7 +187,7 @@ class HiveIcebergTest : public HiveConnectorTestBase {
         deleteFilePaths = writePositionDeleteFiles(
             deleteFilesForBaseDatafiles, dataFilePaths);
 
-    std::vector<std::shared_ptr<ConnectorSplit>> splits;
+    std::vector<std::shared_ptr<connector::common::ConnectorSplit>> splits;
 
     for (const auto& dataFile : dataFilePaths) {
       std::string baseFileName = dataFile.first;
@@ -240,7 +240,7 @@ class HiveIcebergTest : public HiveConnectorTestBase {
   std::shared_ptr<dwrf::Config> config_;
   std::function<std::unique_ptr<dwrf::DWRFFlushPolicy>()> flushPolicyFactory_;
 
-  std::vector<std::shared_ptr<ConnectorSplit>> makeIcebergSplits(
+  std::vector<std::shared_ptr<connector::common::ConnectorSplit>> makeIcebergSplits(
       const std::string& dataFilePath,
       const std::vector<IcebergDeleteFile>& deleteFiles = {},
       const std::unordered_map<std::string, std::optional<std::string>>&
@@ -252,7 +252,7 @@ class HiveIcebergTest : public HiveConnectorTestBase {
     auto file = filesystems::getFileSystem(dataFilePath, nullptr)
                     ->openFileForRead(dataFilePath);
     const int64_t fileSize = file->size();
-    std::vector<std::shared_ptr<ConnectorSplit>> splits;
+    std::vector<std::shared_ptr<connector::common::ConnectorSplit>> splits;
     const uint64_t splitSize = std::floor((fileSize) / splitCount);
 
     for (int i = 0; i < splitCount; ++i) {
@@ -701,7 +701,7 @@ TEST_F(HiveIcebergTest, testPartitionedRead) {
   // Iceberg API sets partition values for dates to daysSinceEpoch, so
   // in velox, we do not need to convert it to days.
   // Test query on two partitions ds=17627(2018-04-06), ds=17628(2018-04-07)
-  std::vector<std::shared_ptr<ConnectorSplit>> splits;
+  std::vector<std::shared_ptr<connector::common::ConnectorSplit>> splits;
   std::vector<std::shared_ptr<TempFilePath>> dataFilePaths;
   for (int i = 0; i <= 1; ++i) {
     std::vector<RowVectorPtr> dataVectors;
@@ -723,7 +723,7 @@ TEST_F(HiveIcebergTest, testPartitionedRead) {
 
   std::unordered_map<
       std::string,
-      std::shared_ptr<connector::ConnectorColumnHandle>>
+      std::shared_ptr<connector::common::ConnectorColumnHandle>>
       assignments;
   assignments.insert(
       {"c0",
@@ -733,7 +733,7 @@ TEST_F(HiveIcebergTest, testPartitionedRead) {
            rowType->childAt(0),
            rowType->childAt(0))});
 
-  std::vector<common::Subfield> requiredSubFields;
+  std::vector<velox::common::Subfield> requiredSubFields;
   HiveColumnHandle::ColumnParseParameters columnParseParameters;
   columnParseParameters.partitionDateValueFormat =
       HiveColumnHandle::ColumnParseParameters::kDaysSinceEpoch;

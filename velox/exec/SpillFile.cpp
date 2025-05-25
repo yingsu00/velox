@@ -77,9 +77,9 @@ SpillWriterBase::SpillWriterBase(
     uint64_t targetFileSize,
     const std::string& pathPrefix,
     const std::string& fileCreateConfig,
-    common::UpdateAndCheckSpillLimitCB& updateAndCheckSpillLimitCb,
+    velox::common::UpdateAndCheckSpillLimitCB& updateAndCheckSpillLimitCb,
     memory::MemoryPool* pool,
-    folly::Synchronized<common::SpillStats>* stats)
+    folly::Synchronized<velox::common::SpillStats>* stats)
     : pool_(pool),
       stats_(stats),
       updateAndCheckSpillLimitCb_(updateAndCheckSpillLimitCb),
@@ -170,14 +170,14 @@ void SpillWriterBase::updateWriteStats(
   statsLocked->spillFlushTimeNanos += flushTimeNs;
   statsLocked->spillWriteTimeNanos += writeTimeNs;
   ++statsLocked->spillWrites;
-  common::updateGlobalSpillWriteStats(spilledBytes, flushTimeNs, writeTimeNs);
+  velox::common::updateGlobalSpillWriteStats(spilledBytes, flushTimeNs, writeTimeNs);
 }
 
 void SpillWriterBase::updateSpilledFileStats(uint64_t fileSize) {
   ++stats_->wlock()->spilledFiles;
   addThreadLocalRuntimeStat(
       "spillFileSize", RuntimeCounter(fileSize, RuntimeCounter::Unit::kBytes));
-  common::incrementGlobalSpilledFiles();
+  velox::common::incrementGlobalSpilledFiles();
 }
 
 void SpillWriterBase::updateAppendStats(
@@ -186,20 +186,20 @@ void SpillWriterBase::updateAppendStats(
   auto statsLocked = stats_->wlock();
   statsLocked->spilledRows += numRows;
   statsLocked->spillSerializationTimeNanos += serializationTimeNs;
-  common::updateGlobalSpillAppendStats(numRows, serializationTimeNs);
+  velox::common::updateGlobalSpillAppendStats(numRows, serializationTimeNs);
 }
 
 SpillWriter::SpillWriter(
     const RowTypePtr& type,
     const std::vector<SpillSortKey>& sortingKeys,
-    common::CompressionKind compressionKind,
+    velox::common::CompressionKind compressionKind,
     const std::string& pathPrefix,
     uint64_t targetFileSize,
     uint64_t writeBufferSize,
     const std::string& fileCreateConfig,
-    common::UpdateAndCheckSpillLimitCB& updateAndCheckSpillLimitCb,
+    velox::common::UpdateAndCheckSpillLimitCB& updateAndCheckSpillLimitCb,
     memory::MemoryPool* pool,
-    folly::Synchronized<common::SpillStats>* stats)
+    folly::Synchronized<velox::common::SpillStats>* stats)
     : SpillWriterBase(
           writeBufferSize,
           targetFileSize,
@@ -294,7 +294,7 @@ std::unique_ptr<SpillReadFile> SpillReadFile::create(
     const SpillFileInfo& fileInfo,
     uint64_t bufferSize,
     memory::MemoryPool* pool,
-    folly::Synchronized<common::SpillStats>* stats) {
+    folly::Synchronized<velox::common::SpillStats>* stats) {
   return std::unique_ptr<SpillReadFile>(new SpillReadFile(
       fileInfo.id,
       fileInfo.path,
@@ -314,9 +314,9 @@ SpillReadFile::SpillReadFile(
     uint64_t bufferSize,
     const RowTypePtr& type,
     const std::vector<SpillSortKey>& sortingKeys,
-    common::CompressionKind compressionKind,
+    velox::common::CompressionKind compressionKind,
     memory::MemoryPool* pool,
-    folly::Synchronized<common::SpillStats>* stats)
+    folly::Synchronized<velox::common::SpillStats>* stats)
     : id_(id),
       path_(path),
       size_(size),
@@ -350,14 +350,14 @@ bool SpillReadFile::nextBatch(RowVectorPtr& rowVector) {
         input_.get(), pool_, type_, serde_, &rowVector, &readOptions_);
   }
   stats_->wlock()->spillDeserializationTimeNanos += timeNs;
-  common::updateGlobalSpillDeserializationTimeNs(timeNs);
+  velox::common::updateGlobalSpillDeserializationTimeNs(timeNs);
   return true;
 }
 
 void SpillReadFile::recordSpillStats() {
   VELOX_CHECK(input_->atEnd());
   const auto readStats = input_->stats();
-  common::updateGlobalSpillReadStats(
+  velox::common::updateGlobalSpillReadStats(
       readStats.numReads, readStats.readBytes, readStats.readTimeNs);
   auto lockedSpillStats = stats_->wlock();
   lockedSpillStats->spillReads += readStats.numReads;

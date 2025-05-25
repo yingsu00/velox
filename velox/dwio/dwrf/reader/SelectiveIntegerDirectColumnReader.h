@@ -32,7 +32,7 @@ class SelectiveIntegerDirectColumnReader
       std::shared_ptr<const dwio::common::TypeWithId> fileType,
       DwrfParams& params,
       uint32_t numBytes,
-      common::ScanSpec& scanSpec)
+      velox::common::ScanSpec& scanSpec)
       : SelectiveIntegerColumnReader(
             requestedType,
             params,

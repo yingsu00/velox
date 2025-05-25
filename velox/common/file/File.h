@@ -99,7 +99,7 @@ class ReadFile {
   //
   // This method should be thread safe.
   virtual uint64_t preadv(
-      folly::Range<const common::Region*> regions,
+      folly::Range<const velox::common::Region*> regions,
       folly::Range<folly::IOBuf*> iobufs,
       filesystems::File::IoStats* stats = nullptr) const;
 

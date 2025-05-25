@@ -38,8 +38,8 @@ class SortBuffer {
       const std::vector<CompareFlags>& sortCompareFlags,
       velox::memory::MemoryPool* pool,
       tsan_atomic<bool>* nonReclaimableSection,
-      common::PrefixSortConfig prefixSortConfig,
-      const common::SpillConfig* spillConfig = nullptr,
+      velox::common::PrefixSortConfig prefixSortConfig,
+      const velox::common::SpillConfig* spillConfig = nullptr,
       folly::Synchronized<velox::common::SpillStats>* spillStats = nullptr);
 
   ~SortBuffer();
@@ -121,11 +121,11 @@ class SortBuffer {
   tsan_atomic<bool>* const nonReclaimableSection_;
 
   // Configuration settings for prefix-sort.
-  const common::PrefixSortConfig prefixSortConfig_;
+  const velox::common::PrefixSortConfig prefixSortConfig_;
 
-  const common::SpillConfig* const spillConfig_;
+  const velox::common::SpillConfig* const spillConfig_;
 
-  folly::Synchronized<common::SpillStats>* const spillStats_;
+  folly::Synchronized<velox::common::SpillStats>* const spillStats_;
 
   // The column projection map between 'input_' and 'spillerStoreType_' as sort
   // buffer stores the sort columns first in 'data_'.

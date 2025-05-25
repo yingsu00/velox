@@ -96,7 +96,7 @@ struct WriterOptions : public dwio::common::WriterOptions {
   arrow::Encoding::type encoding = arrow::Encoding::PLAIN;
 
   std::shared_ptr<CodecOptions> codecOptions;
-  std::unordered_map<std::string, common::CompressionKind>
+  std::unordered_map<std::string, velox::common::CompressionKind>
       columnCompressionsMap;
 
   /// Timestamp unit for Parquet write through Arrow bridge.
@@ -168,7 +168,7 @@ class Writer : public dwio::common::Writer {
 
   ~Writer() override = default;
 
-  static bool isCodecAvailable(common::CompressionKind compression);
+  static bool isCodecAvailable(velox::common::CompressionKind compression);
 
   // Appends 'data' into the writer.
   void write(const VectorPtr& data) override;

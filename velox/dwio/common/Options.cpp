@@ -18,6 +18,8 @@
 
 namespace facebook::velox::dwio::common {
 
+using namespace velox::common;
+
 FileFormat toFileFormat(std::string_view s) {
   if (s == "dwrf") {
     return FileFormat::DWRF;
@@ -68,6 +70,91 @@ std::string_view toString(FileFormat fmt) {
     default:
       return "unknown";
   }
+}
+
+folly::dynamic WriterOptions::serialize() const {
+  folly::dynamic obj = folly::dynamic::object;
+
+  if (schema) {
+    obj["schema"] = schema->serialize();
+  }
+
+  if (spillConfig) {
+    // TODO
+    //    obj["spillConfig"] = spillConfig->serialize();
+  }
+
+  if (nonReclaimableSection) {
+    obj["nonReclaimableSection"] = *nonReclaimableSection;
+  }
+
+  // TODO: serialize memoryReclaimerFactory
+
+  if (compressionKind) {
+    obj["compressionKind"] = static_cast<int>(*compressionKind);
+  }
+
+  if (!serdeParameters.empty()) {
+    folly::dynamic serdeObj = folly::dynamic::object;
+    for (auto& kv : serdeParameters) {
+      serdeObj[kv.first] = kv.second;
+    }
+    obj["serdeParameters"] = std::move(serdeObj);
+  }
+
+  // TODO: serialize flushPolicyFactory
+
+  obj["sessionTimezoneName"] = sessionTimezoneName;
+  obj["adjustTimestampToTimezone"] = adjustTimestampToTimezone;
+
+  return obj;
+}
+
+std::unique_ptr<WriterOptions> WriterOptions::deserialize(
+    const folly::dynamic& obj) {
+  auto opts = std::make_unique<WriterOptions>();
+
+  if (auto schema = obj.get_ptr("schema")) {
+    opts->schema = ISerializable::deserialize<Type>(*schema);
+    //    opts->schema = Type::deserialize(schema);
+  }
+
+  if (auto spillConfig = obj.get_ptr("spillConfig")) {
+    // TODO
+//    opts->spillConfig = ISerializable::deserialize<SpillConfig>(*spillConfig);
+  }
+
+  if (auto nonReclaimableSection = obj.get_ptr("nonReclaimableSection")) {
+    // you need to supply an actual atomic somewhere; here we just allocate one:
+    opts->nonReclaimableSection =
+        new tsan_atomic<bool>(nonReclaimableSection->asBool());
+  }
+
+  // TODO: deserialize memoryReclaimerFactory
+
+  if (auto compressionKind = obj.get_ptr("compressionKind")) {
+    opts->compressionKind =
+        static_cast<CompressionKind>(compressionKind->asInt());
+  }
+
+  if (auto serdeParameters = obj.get_ptr("serdeParameters")) {
+        for (auto& kv : serdeParameters->items()) {
+          opts->serdeParameters[kv.first.asString()] = kv.second.asString();
+        }
+  }
+
+  // TODO: deserialize flushPolicyFactory
+
+  if (auto sessionTimezoneName = obj.get_ptr("sessionTimezoneName")) {
+    opts->sessionTimezoneName = sessionTimezoneName->asString();
+  }
+
+  if (auto adjustTimestampToTimezone =
+          obj.get_ptr("adjustTimestampToTimezone")) {
+    opts->adjustTimestampToTimezone = adjustTimestampToTimezone->asBool();
+  }
+
+  return opts;
 }
 
 } // namespace facebook::velox::dwio::common

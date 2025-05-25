@@ -302,10 +302,10 @@ struct DriverCtx {
       const std::string& operatorType);
 
   /// Builds the spill config for the operator with specified 'operatorId'.
-  std::optional<common::SpillConfig> makeSpillConfig(int32_t operatorId) const;
+  std::optional<velox::common::SpillConfig> makeSpillConfig(int32_t operatorId) const;
 
-  common::PrefixSortConfig prefixSortConfig() const {
-    return common::PrefixSortConfig{
+  velox::common::PrefixSortConfig prefixSortConfig() const {
+    return velox::common::PrefixSortConfig{
         queryConfig().prefixSortNormalizedKeyMaxBytes(),
         queryConfig().prefixSortMinRows(),
         queryConfig().prefixSortMaxStringPrefixLength()};

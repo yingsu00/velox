@@ -74,7 +74,7 @@ class Foo {
 std::unordered_map<int64_t, std::shared_ptr<Foo>> Foo::instances_;
 
 class PrestoSerializerTest
-    : public ::testing::TestWithParam<common::CompressionKind>,
+    : public ::testing::TestWithParam<velox::common::CompressionKind>,
       public VectorTestBase {
  protected:
   static void SetUpTestSuite() {
@@ -118,7 +118,7 @@ class PrestoSerializerTest
           serdeOptions) {
     const bool useLosslessTimestamp =
         serdeOptions == nullptr ? false : serdeOptions->useLosslessTimestamp;
-    common::CompressionKind kind = GetParam();
+    velox::common::CompressionKind kind = GetParam();
     const bool nullsFirst =
         serdeOptions == nullptr ? false : serdeOptions->nullsFirst;
     const bool preserveEncodings =
@@ -189,7 +189,7 @@ class PrestoSerializerTest
     facebook::velox::serializer::presto::PrestoOutputStreamListener listener;
     OStreamOutputStream out(output, &listener);
     serializer->flush(&out);
-    if (paramOptions.compressionKind == common::CompressionKind_NONE) {
+    if (paramOptions.compressionKind == velox::common::CompressionKind_NONE) {
       EXPECT_EQ(size, out.tellp() - streamInitialSize);
     } else {
       EXPECT_GE(size, out.tellp() - streamInitialSize);
@@ -216,7 +216,7 @@ class PrestoSerializerTest
           paramOptions) {
     if (paramOptions.useLosslessTimestamp ||
         paramOptions.compressionKind !=
-            common::CompressionKind::CompressionKind_NONE ||
+            velox::common::CompressionKind::CompressionKind_NONE ||
         paramOptions.nullsFirst) {
       // Unsupported options
       return;
@@ -1132,7 +1132,7 @@ TEST_P(PrestoSerializerTest, timestampWithNanosecondPrecision) {
   // passed to the serde.
   const serializer::presto::PrestoVectorSerde::PrestoOptions
       kUseLosslessTimestampOptions(
-          true, common::CompressionKind::CompressionKind_NONE);
+          true, velox::common::CompressionKind::CompressionKind_NONE);
   auto timestamp = makeFlatVector<Timestamp>(
       {Timestamp{0, 0},
        Timestamp{12, 0},
@@ -1538,7 +1538,7 @@ TEST_P(PrestoSerializerTest, opaqueInteractiveVectorSerializer) {
 
 TEST_P(PrestoSerializerTest, encodedConcatenation) {
   // Slow test, run only for no compression.
-  if (GetParam() != common::CompressionKind::CompressionKind_NONE) {
+  if (GetParam() != velox::common::CompressionKind::CompressionKind_NONE) {
     return;
   }
 
@@ -1589,7 +1589,7 @@ TEST_P(PrestoSerializerTest, encodedConcatenation) {
 
 TEST_P(PrestoSerializerTest, encodedConcatenation2) {
   // Slow test, run only for no compression.
-  if (GetParam() != common::CompressionKind::CompressionKind_NONE) {
+  if (GetParam() != velox::common::CompressionKind::CompressionKind_NONE) {
     return;
   }
   VectorFuzzer::Options options;
@@ -1639,7 +1639,7 @@ TEST_P(PrestoSerializerTest, typeMismatch) {
       "number of columns requested for deserialization");
 
   // TMore columns in serialization than in type.
-  if (GetParam() == common::CompressionKind_NONE) {
+  if (GetParam() == velox::common::CompressionKind_NONE) {
     // No throw.
     deserialize(ROW({BIGINT()}), serialized, nullptr);
   } else {
@@ -1723,12 +1723,12 @@ INSTANTIATE_TEST_SUITE_P(
     PrestoSerializerTest,
     PrestoSerializerTest,
     ::testing::Values(
-        common::CompressionKind::CompressionKind_NONE,
-        common::CompressionKind::CompressionKind_ZLIB,
-        common::CompressionKind::CompressionKind_SNAPPY,
-        common::CompressionKind::CompressionKind_ZSTD,
-        common::CompressionKind::CompressionKind_LZ4,
-        common::CompressionKind::CompressionKind_GZIP));
+        velox::common::CompressionKind::CompressionKind_NONE,
+        velox::common::CompressionKind::CompressionKind_ZLIB,
+        velox::common::CompressionKind::CompressionKind_SNAPPY,
+        velox::common::CompressionKind::CompressionKind_ZSTD,
+        velox::common::CompressionKind::CompressionKind_LZ4,
+        velox::common::CompressionKind::CompressionKind_GZIP));
 
 TEST_F(PrestoSerializerTest, serdeSingleColumn) {
   // The difference between serialized data obtained from

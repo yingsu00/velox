@@ -66,14 +66,14 @@ class SortBufferTest : public OperatorTestBase,
     OperatorTestBase::TearDown();
   }
 
-  common::SpillConfig getSpillConfig(
+  velox::common::SpillConfig getSpillConfig(
       const std::string& spillDir,
       bool enableSpillPrefixSort = true) const {
     std::optional<common::PrefixSortConfig> spillPrefixSortConfig =
         enableSpillPrefixSort
         ? std::optional<common::PrefixSortConfig>(prefixSortConfig_)
         : std::nullopt;
-    return common::SpillConfig(
+    return velox::common::SpillConfig(
         [spillDir]() -> const std::string& { return spillDir; },
         [&](uint64_t) {},
         "0.0.0",
@@ -385,7 +385,7 @@ TEST_P(SortBufferTest, batchOutput) {
   for (const auto& testData : testSettings) {
     SCOPED_TRACE(testData.debugString());
     auto spillDirectory = exec::test::TempDirectoryPath::create();
-    auto spillConfig = common::SpillConfig(
+    auto spillConfig = velox::common::SpillConfig(
         [&]() -> const std::string& { return spillDirectory->getPath(); },
         [&](uint64_t) {},
         "0.0.0",
@@ -402,7 +402,7 @@ TEST_P(SortBufferTest, batchOutput) {
         0,
         "none",
         prefixSortConfig_);
-    folly::Synchronized<common::SpillStats> spillStats;
+    folly::Synchronized<velox::common::SpillStats> spillStats;
     auto sortBuffer = std::make_unique<SortBuffer>(
         inputType_,
         sortColumnIndices_,
@@ -482,7 +482,7 @@ TEST_P(SortBufferTest, spill) {
     // memory reservation failure and thus trigger disk spilling.
     auto spillableReservationGrowthPct =
         testData.memoryReservationFailure ? 100000 : 100;
-    auto spillConfig = common::SpillConfig(
+    auto spillConfig = velox::common::SpillConfig(
         [&]() -> const std::string& { return spillDirectory->getPath(); },
         [&](uint64_t) {},
         "0.0.0",
@@ -499,7 +499,7 @@ TEST_P(SortBufferTest, spill) {
         0,
         "none",
         prefixSortConfig_);
-    folly::Synchronized<common::SpillStats> spillStats;
+    folly::Synchronized<velox::common::SpillStats> spillStats;
     auto sortBuffer = std::make_unique<SortBuffer>(
         inputType_,
         sortColumnIndices_,
@@ -570,7 +570,7 @@ TEST_P(SortBufferTest, spill) {
 DEBUG_ONLY_TEST_P(SortBufferTest, spillDuringInput) {
   auto spillDirectory = exec::test::TempDirectoryPath::create();
   const auto spillConfig = getSpillConfig(spillDirectory->getPath());
-  folly::Synchronized<common::SpillStats> spillStats;
+  folly::Synchronized<velox::common::SpillStats> spillStats;
   auto sortBuffer = std::make_unique<SortBuffer>(
       inputType_,
       sortColumnIndices_,
@@ -626,7 +626,7 @@ DEBUG_ONLY_TEST_P(SortBufferTest, spillDuringInput) {
 DEBUG_ONLY_TEST_P(SortBufferTest, spillDuringOutput) {
   auto spillDirectory = exec::test::TempDirectoryPath::create();
   const auto spillConfig = getSpillConfig(spillDirectory->getPath());
-  folly::Synchronized<common::SpillStats> spillStats;
+  folly::Synchronized<velox::common::SpillStats> spillStats;
   auto sortBuffer = std::make_unique<SortBuffer>(
       inputType_,
       sortColumnIndices_,
@@ -680,7 +680,7 @@ DEBUG_ONLY_TEST_P(SortBufferTest, reserveMemorySortGetOutput) {
 
     auto spillDirectory = exec::test::TempDirectoryPath::create();
     const auto spillConfig = getSpillConfig(spillDirectory->getPath());
-    folly::Synchronized<common::SpillStats> spillStats;
+    folly::Synchronized<velox::common::SpillStats> spillStats;
     auto sortBuffer = std::make_unique<SortBuffer>(
         inputType_,
         sortColumnIndices_,
@@ -739,7 +739,7 @@ DEBUG_ONLY_TEST_P(SortBufferTest, reserveMemorySort) {
         "usePrefixSort: {}, spillEnabled: {}, ", usePrefixSort, spillEnabled));
     auto spillDirectory = exec::test::TempDirectoryPath::create();
     auto spillConfig = getSpillConfig(spillDirectory->getPath(), usePrefixSort);
-    folly::Synchronized<common::SpillStats> spillStats;
+    folly::Synchronized<velox::common::SpillStats> spillStats;
     auto sortBuffer = std::make_unique<SortBuffer>(
         inputType_,
         sortColumnIndices_,
@@ -784,7 +784,7 @@ TEST_P(SortBufferTest, emptySpill) {
     SCOPED_TRACE(fmt::format("hasPostSpillData {}", hasPostSpillData));
     auto spillDirectory = exec::test::TempDirectoryPath::create();
     auto spillConfig = getSpillConfig(spillDirectory->getPath());
-    folly::Synchronized<common::SpillStats> spillStats;
+    folly::Synchronized<velox::common::SpillStats> spillStats;
     auto sortBuffer = std::make_unique<SortBuffer>(
         inputType_,
         sortColumnIndices_,

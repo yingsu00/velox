@@ -38,7 +38,7 @@ std::unique_ptr<SelectiveColumnReader> buildIntegerReader(
     const std::shared_ptr<const dwio::common::TypeWithId>& fileType,
     DwrfParams& params,
     uint32_t numBytes,
-    common::ScanSpec& scanSpec) {
+    velox::common::ScanSpec& scanSpec) {
   const EncodingKey encodingKey{
       fileType->id(), params.flatMapContext().sequence};
   auto& stripe = params.stripeStreams();
@@ -63,7 +63,7 @@ std::unique_ptr<SelectiveColumnReader> SelectiveDwrfReader::build(
     const TypePtr& requestedType,
     const std::shared_ptr<const dwio::common::TypeWithId>& fileType,
     DwrfParams& params,
-    common::ScanSpec& scanSpec,
+    velox::common::ScanSpec& scanSpec,
     bool useColumnNames,
     bool isRoot) {
   VELOX_CHECK(

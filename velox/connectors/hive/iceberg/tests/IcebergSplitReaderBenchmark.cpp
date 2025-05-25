@@ -308,13 +308,13 @@ void IcebergSplitReaderBenchmark::readSingleColumn(
       std::make_shared<config::ConfigBase>(
           std::unordered_map<std::string, std::string>());
 
-  std::unique_ptr<connector::ConnectorQueryCtx> connectorQueryCtx_ =
-      std::make_unique<connector::ConnectorQueryCtx>(
+  std::unique_ptr<connector::common::ConnectorQueryCtx> connectorQueryCtx_ =
+      std::make_unique<connector::common::ConnectorQueryCtx>(
           opPool.get(),
           connectorPool.get(),
           connectorSessionProperties_.get(),
           nullptr,
-          common::PrefixSortConfig(),
+          velox::common::PrefixSortConfig(),
           nullptr,
           nullptr,
           "query.IcebergSplitReader",

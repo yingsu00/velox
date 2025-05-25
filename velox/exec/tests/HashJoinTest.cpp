@@ -3721,7 +3721,7 @@ TEST_F(HashJoinTest, dynamicFilters) {
   // having different names than column names in the files.
   {
     auto scanOutputType = ROW({"a", "b"}, {INTEGER(), BIGINT()});
-    ConnectorColumnHandleMap assignments;
+    connector::common::ConnectorColumnHandleMap assignments;
     assignments["a"] = regularColumn("c0", INTEGER());
     assignments["b"] = regularColumn("c1", BIGINT());
 
@@ -4500,7 +4500,7 @@ TEST_F(HashJoinTest, dynamicFiltersAppliedToPreloadedSplits) {
   }
 
   auto outputType = ROW({"p0", "p1"}, {BIGINT(), BIGINT()});
-  ConnectorColumnHandleMap assignments = {
+  connector::common::ConnectorColumnHandleMap assignments = {
       {"p0", regularColumn("p0", BIGINT())},
       {"p1", partitionKey("p1", BIGINT())}};
   createDuckDbTable("p", probeVectors);
@@ -4894,7 +4894,7 @@ TEST_F(HashJoinTest, dynamicFilterOnPartitionKey) {
                    .partitionKey("k", "0")
                    .build();
   auto outputType = ROW({"n1_0", "n1_1"}, {BIGINT(), BIGINT()});
-  ConnectorColumnHandleMap assignments = {
+  connector::common::ConnectorColumnHandleMap assignments = {
       {"n1_0", regularColumn("c0", BIGINT())},
       {"n1_1", partitionKey("k", BIGINT())}};
 
@@ -6267,7 +6267,7 @@ DEBUG_ONLY_TEST_F(HashJoinTest, exceededMaxSpillLevel) {
 
   auto tempDirectory = exec::test::TempDirectoryPath::create();
   const int exceededMaxSpillLevelCount =
-      common::globalSpillStats().spillMaxLevelExceededCount;
+      velox::common::globalSpillStats().spillMaxLevelExceededCount;
   SCOPED_TESTVALUE_SET(
       "facebook::velox::exec::HashBuild::reclaim",
       std::function<void(exec::Operator*)>(([&](exec::Operator* op) {
@@ -6321,7 +6321,7 @@ DEBUG_ONLY_TEST_F(HashJoinTest, exceededMaxSpillLevel) {
       })
       .run();
   ASSERT_EQ(
-      common::globalSpillStats().spillMaxLevelExceededCount,
+      velox::common::globalSpillStats().spillMaxLevelExceededCount,
       exceededMaxSpillLevelCount + 16);
 }
 

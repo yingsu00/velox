@@ -54,12 +54,12 @@ const core::CallTypedExpr* asCall(const core::ITypedExpr* expr) {
   return dynamic_cast<const core::CallTypedExpr*>(expr);
 }
 
-common::BigintRange* asBigintRange(std::unique_ptr<common::Filter>& filter) {
+common::BigintRange* asBigintRange(std::unique_ptr<velox::common::Filter>& filter) {
   return dynamic_cast<common::BigintRange*>(filter.get());
 }
 
 common::BigintMultiRange* asBigintMultiRange(
-    std::unique_ptr<common::Filter>& filter) {
+    std::unique_ptr<velox::common::Filter>& filter) {
   return dynamic_cast<common::BigintMultiRange*>(filter.get());
 }
 
@@ -68,9 +68,9 @@ std::unique_ptr<T> asUniquePtr(std::unique_ptr<U> ptr) {
   return std::unique_ptr<T>(static_cast<T*>(ptr.release()));
 }
 
-std::unique_ptr<common::Filter> makeOrFilter(
-    std::unique_ptr<common::Filter> a,
-    std::unique_ptr<common::Filter> b) {
+std::unique_ptr<velox::common::Filter> makeOrFilter(
+    std::unique_ptr<velox::common::Filter> a,
+    std::unique_ptr<velox::common::Filter> b) {
   if (asBigintRange(a) && asBigintRange(b)) {
     return bigintOr(
         asUniquePtr<common::BigintRange>(std::move(a)),
@@ -122,13 +122,13 @@ std::function<std::shared_ptr<ExprToSubfieldFilterParser>()>
 
 bool ExprToSubfieldFilterParser::toSubfield(
     const core::ITypedExpr* field,
-    common::Subfield& subfield) {
-  std::vector<std::unique_ptr<common::Subfield::PathElement>> path;
+    velox::common::Subfield& subfield) {
+  std::vector<std::unique_ptr<velox::common::Subfield::PathElement>> path;
   for (auto* current = field;;) {
     if (auto* fieldAccess =
             dynamic_cast<const core::FieldAccessTypedExpr*>(current)) {
       path.push_back(
-          std::make_unique<common::Subfield::NestedField>(fieldAccess->name()));
+          std::make_unique<velox::common::Subfield::NestedField>(fieldAccess->name()));
     } else if (
         auto* dereference =
             dynamic_cast<const core::DereferenceTypedExpr*>(current)) {
@@ -138,7 +138,7 @@ bool ExprToSubfieldFilterParser::toSubfield(
       if (name.empty()) {
         return false;
       }
-      path.push_back(std::make_unique<common::Subfield::NestedField>(name));
+      path.push_back(std::make_unique<velox::common::Subfield::NestedField>(name));
     } else if (dynamic_cast<const core::InputTypedExpr*>(current) == nullptr) {
       return false;
     } else {
@@ -157,11 +157,11 @@ bool ExprToSubfieldFilterParser::toSubfield(
     }
   }
   std::reverse(path.begin(), path.end());
-  subfield = common::Subfield(std::move(path));
+  subfield = velox::common::Subfield(std::move(path));
   return true;
 }
 
-std::unique_ptr<common::Filter> ExprToSubfieldFilterParser::makeNotEqualFilter(
+std::unique_ptr<velox::common::Filter> ExprToSubfieldFilterParser::makeNotEqualFilter(
     const core::TypedExprPtr& valueExpr,
     core::ExpressionEvaluator* evaluator) {
   auto value = toConstant(valueExpr, evaluator);
@@ -169,12 +169,12 @@ std::unique_ptr<common::Filter> ExprToSubfieldFilterParser::makeNotEqualFilter(
     return nullptr;
   }
 
-  std::unique_ptr<common::Filter> lessThanFilter =
+  std::unique_ptr<velox::common::Filter> lessThanFilter =
       makeLessThanFilter(valueExpr, evaluator);
   if (!lessThanFilter) {
     return nullptr;
   }
-  std::unique_ptr<common::Filter> greaterThanFilter =
+  std::unique_ptr<velox::common::Filter> greaterThanFilter =
       makeGreaterThanFilter(valueExpr, evaluator);
   if (!greaterThanFilter) {
     return nullptr;
@@ -201,14 +201,14 @@ std::unique_ptr<common::Filter> ExprToSubfieldFilterParser::makeNotEqualFilter(
   } else if (value->typeKind() == TypeKind::HUGEINT) {
     VELOX_NYI();
   } else {
-    std::vector<std::unique_ptr<common::Filter>> filters;
+    std::vector<std::unique_ptr<velox::common::Filter>> filters;
     filters.emplace_back(std::move(lessThanFilter));
     filters.emplace_back(std::move(greaterThanFilter));
-    return std::make_unique<common::MultiRange>(std::move(filters), false);
+    return std::make_unique<velox::common::MultiRange>(std::move(filters), false);
   }
 }
 
-std::unique_ptr<common::Filter> ExprToSubfieldFilterParser::makeEqualFilter(
+std::unique_ptr<velox::common::Filter> ExprToSubfieldFilterParser::makeEqualFilter(
     const core::TypedExprPtr& valueExpr,
     core::ExpressionEvaluator* evaluator) {
   auto value = toConstant(valueExpr, evaluator);
@@ -237,7 +237,7 @@ std::unique_ptr<common::Filter> ExprToSubfieldFilterParser::makeEqualFilter(
   }
 }
 
-std::unique_ptr<common::Filter>
+std::unique_ptr<velox::common::Filter>
 ExprToSubfieldFilterParser::makeGreaterThanFilter(
     const core::TypedExprPtr& lowerExpr,
     core::ExpressionEvaluator* evaluator) {
@@ -269,7 +269,7 @@ ExprToSubfieldFilterParser::makeGreaterThanFilter(
   }
 }
 
-std::unique_ptr<common::Filter> ExprToSubfieldFilterParser::makeLessThanFilter(
+std::unique_ptr<velox::common::Filter> ExprToSubfieldFilterParser::makeLessThanFilter(
     const core::TypedExprPtr& upperExpr,
     core::ExpressionEvaluator* evaluator) {
   auto upper = toConstant(upperExpr, evaluator);
@@ -300,7 +300,7 @@ std::unique_ptr<common::Filter> ExprToSubfieldFilterParser::makeLessThanFilter(
   }
 }
 
-std::unique_ptr<common::Filter>
+std::unique_ptr<velox::common::Filter>
 ExprToSubfieldFilterParser::makeLessThanOrEqualFilter(
     const core::TypedExprPtr& upperExpr,
     core::ExpressionEvaluator* evaluator) {
@@ -332,7 +332,7 @@ ExprToSubfieldFilterParser::makeLessThanOrEqualFilter(
   }
 }
 
-std::unique_ptr<common::Filter>
+std::unique_ptr<velox::common::Filter>
 ExprToSubfieldFilterParser::makeGreaterThanOrEqualFilter(
     const core::TypedExprPtr& lowerExpr,
     core::ExpressionEvaluator* evaluator) {
@@ -364,7 +364,7 @@ ExprToSubfieldFilterParser::makeGreaterThanOrEqualFilter(
   }
 }
 
-std::unique_ptr<common::Filter> ExprToSubfieldFilterParser::makeInFilter(
+std::unique_ptr<velox::common::Filter> ExprToSubfieldFilterParser::makeInFilter(
     const core::TypedExprPtr& expr,
     core::ExpressionEvaluator* evaluator,
     bool negated) {
@@ -413,7 +413,7 @@ std::unique_ptr<common::Filter> ExprToSubfieldFilterParser::makeInFilter(
   }
 }
 
-std::unique_ptr<common::Filter> ExprToSubfieldFilterParser::makeBetweenFilter(
+std::unique_ptr<velox::common::Filter> ExprToSubfieldFilterParser::makeBetweenFilter(
     const core::TypedExprPtr& lowerExpr,
     const core::TypedExprPtr& upperExpr,
     core::ExpressionEvaluator* evaluator,
@@ -465,10 +465,10 @@ std::unique_ptr<common::Filter> ExprToSubfieldFilterParser::makeBetweenFilter(
   }
 }
 
-std::unique_ptr<common::Filter>
+std::unique_ptr<velox::common::Filter>
 PrestoExprToSubfieldFilterParser::leafCallToSubfieldFilter(
     const core::CallTypedExpr& call,
-    common::Subfield& subfield,
+    velox::common::Subfield& subfield,
     core::ExpressionEvaluator* evaluator,
     bool negated) {
   if (call.inputs().empty()) {
@@ -528,7 +528,7 @@ PrestoExprToSubfieldFilterParser::leafCallToSubfieldFilter(
   return nullptr;
 }
 
-std::pair<common::Subfield, std::unique_ptr<common::Filter>> toSubfieldFilter(
+std::pair<velox::common::Subfield, std::unique_ptr<velox::common::Filter>> toSubfieldFilter(
     const core::TypedExprPtr& expr,
     core::ExpressionEvaluator* evaluator) {
   if (auto call = asCall(expr.get())) {
@@ -540,8 +540,8 @@ std::pair<common::Subfield, std::unique_ptr<common::Filter>> toSubfieldFilter(
           std::move(left.first),
           makeOrFilter(std::move(left.second), std::move(right.second))};
     }
-    common::Subfield subfield;
-    std::unique_ptr<common::Filter> filter;
+    velox::common::Subfield subfield;
+    std::unique_ptr<velox::common::Filter> filter;
     if (call->name() == "not") {
       if (auto* inner = asCall(call->inputs()[0].get())) {
         filter =

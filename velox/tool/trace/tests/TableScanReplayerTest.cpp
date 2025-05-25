@@ -59,9 +59,9 @@ class TableScanReplayerTest : public HiveConnectorTestBase {
       serializer::presto::PrestoVectorSerde::registerVectorSerde();
     }
     Type::registerSerDe();
-    common::Filter::registerSerDe();
+    velox::common::Filter::registerSerDe();
     connector::hive::HiveTableHandle::registerSerDe();
-    connector::hive::LocationHandle::registerSerDe();
+    connector::hive::HiveLocationHandle::registerSerDe();
     connector::hive::HiveColumnHandle::registerSerDe();
     connector::hive::HiveInsertTableHandle::registerSerDe();
     connector::hive::HiveInsertFileNameGenerator::registerSerDe();
@@ -298,11 +298,11 @@ TEST_F(TableScanReplayerTest, subfieldPrunning) {
   auto vectors = makeVectors(10, 1'000, rowType);
   auto filePath = TempFilePath::create();
   writeToFile(filePath->getPath(), vectors);
-  std::vector<common::Subfield> requiredSubfields;
+  std::vector<velox::common::Subfield> requiredSubfields;
   requiredSubfields.emplace_back("e.c");
   std::unordered_map<
       std::string,
-      std::shared_ptr<connector::ConnectorColumnHandle>>
+      std::shared_ptr<connector::common::ConnectorColumnHandle>>
       assignments;
   assignments["e"] = std::make_shared<HiveColumnHandle>(
       "e",

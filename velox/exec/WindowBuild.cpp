@@ -86,7 +86,7 @@ slice(const std::vector<TypePtr>& types, int32_t start, int32_t end) {
 WindowBuild::WindowBuild(
     const std::shared_ptr<const core::WindowNode>& windowNode,
     velox::memory::MemoryPool* pool,
-    const common::SpillConfig* spillConfig,
+    const velox::common::SpillConfig* spillConfig,
     tsan_atomic<bool>* nonReclaimableSection)
     : spillConfig_{spillConfig},
       nonReclaimableSection_{nonReclaimableSection},

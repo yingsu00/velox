@@ -39,22 +39,22 @@ class S3ReadTest : public S3Test, public ::test::VectorTestBase {
   void SetUp() override {
     S3Test::SetUp();
     filesystems::registerS3FileSystem();
-    connector::registerConnectorFactory(
+    connector::common::registerConnectorFactory(
         std::make_shared<connector::hive::HiveConnectorFactory>());
     auto hiveConnector =
-        connector::getConnectorFactory(
+        connector::common::getConnectorFactory(
             connector::hive::HiveConnectorFactory::kHiveConnectorName)
             ->newConnector(kHiveConnectorId, minioServer_->hiveConfig());
-    connector::registerConnector(hiveConnector);
+    connector::common::registerConnector(hiveConnector);
     parquet::registerParquetReaderFactory();
   }
 
   void TearDown() override {
     parquet::unregisterParquetReaderFactory();
     filesystems::finalizeS3FileSystem();
-    connector::unregisterConnectorFactory(
+    connector::common::unregisterConnectorFactory(
         connector::hive::HiveConnectorFactory::kHiveConnectorName);
-    connector::unregisterConnector(kHiveConnectorId);
+    connector::common::unregisterConnector(kHiveConnectorId);
     S3Test::TearDown();
   }
 };

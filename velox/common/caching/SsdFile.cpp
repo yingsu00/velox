@@ -935,13 +935,13 @@ void SsdFile::disableFileCow() {
 
 namespace {
 template <typename T>
-T readNumber(common::FileInputStream* stream) {
+T readNumber(velox::common::FileInputStream* stream) {
   T data;
   stream->readBytes(reinterpret_cast<uint8_t*>(&data), sizeof(T));
   return data;
 }
 
-std::string readString(common::FileInputStream* stream, int32_t length) {
+std::string readString(velox::common::FileInputStream* stream, int32_t length) {
   std::string data(length, '\0');
   stream->readBytes(
       reinterpret_cast<uint8_t*>(const_cast<char*>(data.data())), length);
@@ -949,7 +949,7 @@ std::string readString(common::FileInputStream* stream, int32_t length) {
 }
 
 template <typename T>
-std::vector<T> readVector(common::FileInputStream* stream, int32_t size) {
+std::vector<T> readVector(velox::common::FileInputStream* stream, int32_t size) {
   std::vector<T> dataVector(size);
   stream->readBytes(
       reinterpret_cast<uint8_t*>(dataVector.data()), size * sizeof(T));

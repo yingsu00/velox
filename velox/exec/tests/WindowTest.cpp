@@ -39,13 +39,13 @@ class WindowTest : public OperatorTestBase {
     filesystems::registerLocalFileSystem();
   }
 
-  common::SpillConfig getSpillConfig(
+  velox::common::SpillConfig getSpillConfig(
       const std::string& spillDir,
       bool enablePrefixSort) const {
     const auto prefixSortConfig = enablePrefixSort
-        ? std::optional<common::PrefixSortConfig>(common::PrefixSortConfig())
+        ? std::optional<common::PrefixSortConfig>(velox::common::PrefixSortConfig())
         : std::nullopt;
-    return common::SpillConfig(
+    return velox::common::SpillConfig(
         [spillDir]() -> const std::string& { return spillDir; },
         [&](uint64_t) {},
         "0.0.0",
@@ -653,7 +653,7 @@ DEBUG_ONLY_TEST_F(WindowTest, reserveMemorySort) {
     auto spillDirectory = exec::test::TempDirectoryPath::create();
     auto spillConfig =
         getSpillConfig(spillDirectory->getPath(), enableSpillPrefixSort);
-    folly::Synchronized<common::SpillStats> spillStats;
+    folly::Synchronized<velox::common::SpillStats> spillStats;
     const auto plan = usePrefixSort ? prefixSortPlan : nonPrefixSortPlan;
     velox::common::PrefixSortConfig prefixSortConfig =
         velox::common::PrefixSortConfig{

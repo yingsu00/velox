@@ -61,16 +61,16 @@ void SpillMergeStream::close() {
 }
 
 SpillState::SpillState(
-    const common::GetSpillDirectoryPathCB& getSpillDirPathCb,
-    const common::UpdateAndCheckSpillLimitCB& updateAndCheckSpillLimitCb,
+    const velox::common::GetSpillDirectoryPathCB& getSpillDirPathCb,
+    const velox::common::UpdateAndCheckSpillLimitCB& updateAndCheckSpillLimitCb,
     const std::string& fileNamePrefix,
     const std::vector<SpillSortKey>& sortingKeys,
     uint64_t targetFileSize,
     uint64_t writeBufferSize,
-    common::CompressionKind compressionKind,
+    velox::common::CompressionKind compressionKind,
     const std::optional<common::PrefixSortConfig>& prefixSortConfig,
     memory::MemoryPool* pool,
-    folly::Synchronized<common::SpillStats>* stats,
+    folly::Synchronized<velox::common::SpillStats>* stats,
     const std::string& fileCreateConfig)
     : getSpillDirPathCb_(getSpillDirPathCb),
       updateAndCheckSpillLimitCb_(updateAndCheckSpillLimitCb),
@@ -111,7 +111,7 @@ void SpillState::setPartitionSpilled(const SpillPartitionId& id) {
   VELOX_DCHECK(!spilledPartitionIdSet_.contains(id));
   spilledPartitionIdSet_.emplace(id);
   ++stats_->wlock()->spilledPartitions;
-  common::incrementGlobalSpilledPartitionStats();
+  velox::common::incrementGlobalSpilledPartitionStats();
 }
 
 /*static*/
@@ -129,7 +129,7 @@ void SpillState::validateSpillBytesSize(uint64_t bytes) {
 void SpillState::updateSpilledInputBytes(uint64_t bytes) {
   auto statsLocked = stats_->wlock();
   statsLocked->spilledInputBytes += bytes;
-  common::updateGlobalSpillMemoryBytes(bytes);
+  velox::common::updateGlobalSpillMemoryBytes(bytes);
 }
 
 uint64_t SpillState::appendToPartition(
@@ -278,7 +278,7 @@ std::unique_ptr<UnorderedStreamReader<BatchStream>>
 SpillPartition::createUnorderedReader(
     uint64_t bufferSize,
     memory::MemoryPool* pool,
-    folly::Synchronized<common::SpillStats>* spillStats) {
+    folly::Synchronized<velox::common::SpillStats>* spillStats) {
   VELOX_CHECK_NOT_NULL(pool);
   std::vector<std::unique_ptr<BatchStream>> streams;
   streams.reserve(files_.size());
@@ -295,7 +295,7 @@ std::unique_ptr<TreeOfLosers<SpillMergeStream>>
 SpillPartition::createOrderedReader(
     uint64_t bufferSize,
     memory::MemoryPool* pool,
-    folly::Synchronized<common::SpillStats>* spillStats) {
+    folly::Synchronized<velox::common::SpillStats>* spillStats) {
   std::vector<std::unique_ptr<SpillMergeStream>> streams;
   streams.reserve(files_.size());
   for (auto& fileInfo : files_) {

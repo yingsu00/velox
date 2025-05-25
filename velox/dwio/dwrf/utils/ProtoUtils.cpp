@@ -63,7 +63,7 @@ void ProtoUtils::writeType(
     // testing before the ORC footer write is implemented.
     auto kind = SchemaType<TypeKind::BIGINT>::kind;
     self->set_kind(kind);
-    common::testutil::TestValue::adjust(
+    velox::common::testutil::TestValue::adjust(
         "facebook::velox::dwrf::ProtoUtils::writeType", &kindSet);
   } else {
     auto kind =

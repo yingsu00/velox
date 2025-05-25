@@ -2117,7 +2117,7 @@ TEST_F(TestReader, setRowNumberColumnInfo) {
   auto schema = asRowType(batches[0]->type());
   auto [writer, reader] = createWriterReader(batches, pool());
 
-  auto spec = std::make_shared<common::ScanSpec>("<root>");
+  auto spec = std::make_shared<velox::common::ScanSpec>("<root>");
   spec->addAllChildFields(*schema);
   RowReaderOptions rowReaderOpts;
   rowReaderOpts.setScanSpec(spec);
@@ -2131,7 +2131,7 @@ TEST_F(TestReader, setRowNumberColumnInfo) {
     verifyRowNumbers(*rowReader, pool(), 16);
   }
   spec->childByName("c0")->setFilter(
-      common::createBigintValues({1, 4, 5, 7, 11, 14}, false));
+      velox::common::createBigintValues({1, 4, 5, 7, 11, 14}, false));
   spec->resetCachedValues(true);
   {
     SCOPED_TRACE("Selective with filter");
@@ -2146,7 +2146,7 @@ TEST_F(TestReader, reuseRowNumberColumn) {
   auto schema = asRowType(batches[0]->type());
   auto [writer, reader] = createWriterReader(batches, pool());
 
-  auto spec = std::make_shared<common::ScanSpec>("<root>");
+  auto spec = std::make_shared<velox::common::ScanSpec>("<root>");
   spec->addAllChildFields(*schema);
   RowReaderOptions rowReaderOpts;
   rowReaderOpts.setScanSpec(spec);
@@ -2211,10 +2211,10 @@ TEST_F(TestReader, explicitRowNumberColumn) {
   };
   auto batches = createBatches(integerValues);
   auto [writer, reader] = createWriterReader(batches, pool());
-  auto spec = std::make_shared<common::ScanSpec>("<root>");
+  auto spec = std::make_shared<velox::common::ScanSpec>("<root>");
   spec->addField("c0", 0);
   spec->addField("$row_number", 1)
-      ->setColumnType(common::ScanSpec::ColumnType::kRowIndex);
+      ->setColumnType(velox::common::ScanSpec::ColumnType::kRowIndex);
   RowReaderOptions rowReaderOpts;
   rowReaderOpts.setScanSpec(spec);
   {
@@ -2223,7 +2223,7 @@ TEST_F(TestReader, explicitRowNumberColumn) {
     verifyRowNumbers(*rowReader, pool(), 16, true);
   }
   spec->childByName("c0")->setFilter(
-      common::createBigintValues({1, 4, 5, 7, 11, 14}, false));
+      velox::common::createBigintValues({1, 4, 5, 7, 11, 14}, false));
   spec->resetCachedValues(true);
   {
     SCOPED_TRACE("Selective with filter");
@@ -2248,7 +2248,7 @@ TEST_F(TestReader, failToReuseReaderNulls) {
   });
   auto schema = asRowType(data->type());
   auto [writer, reader] = createWriterReader({data}, pool());
-  auto spec = std::make_shared<common::ScanSpec>("<root>");
+  auto spec = std::make_shared<velox::common::ScanSpec>("<root>");
   spec->addAllChildFields(*schema);
   spec->childByName("c0")->childByName("a")->setFilter(
       std::make_unique<common::BigintRange>(
@@ -2300,11 +2300,11 @@ TEST_F(TestReader, readFlatMapsSomeEmpty) {
   auto [writer, reader] = createWriterReader({row}, pool(), config);
 
   auto schema = asRowType(row->type());
-  auto spec = std::make_shared<common::ScanSpec>("<root>");
+  auto spec = std::make_shared<velox::common::ScanSpec>("<root>");
   spec->addAllChildFields(*schema);
   spec->childByName("a")
-      ->childByName(common::ScanSpec::kMapKeysFieldName)
-      ->setFilter(common::createBigintValues({1, 2, 3}, false));
+      ->childByName(velox::common::ScanSpec::kMapKeysFieldName)
+      ->setFilter(velox::common::createBigintValues({1, 2, 3}, false));
   RowReaderOptions rowReaderOpts;
   rowReaderOpts.setScanSpec(spec);
 
@@ -2366,11 +2366,11 @@ TEST_F(TestReader, readFlatMapsWithNullMaps) {
   auto [writer, reader] = createWriterReader({row}, pool(), config);
 
   auto schema = asRowType(row->type());
-  auto spec = std::make_shared<common::ScanSpec>("<root>");
+  auto spec = std::make_shared<velox::common::ScanSpec>("<root>");
   spec->addAllChildFields(*schema);
   spec->childByName("a")
-      ->childByName(common::ScanSpec::kMapKeysFieldName)
-      ->setFilter(common::createBigintValues({1, 2, 3}, false));
+      ->childByName(velox::common::ScanSpec::kMapKeysFieldName)
+      ->setFilter(velox::common::createBigintValues({1, 2, 3}, false));
   RowReaderOptions rowReaderOpts;
   rowReaderOpts.setScanSpec(spec);
 
@@ -2439,7 +2439,7 @@ TEST_F(TestReader, readStructWithWholeBatchFiltered) {
   auto [writer, reader] = createWriterReader({row}, pool());
 
   auto schema = asRowType(row->type());
-  auto spec = std::make_shared<common::ScanSpec>("<root>");
+  auto spec = std::make_shared<velox::common::ScanSpec>("<root>");
   spec->addAllChildFields(*schema);
   // Create a filter that will filter out all rows in the first batch.
   spec->childByName("c0")->setFilter(std::make_unique<common::IsNotNull>());
@@ -2496,7 +2496,7 @@ TEST_F(TestReader, readStringDictionaryAsFlat) {
       // for first batch.
       E2EWriterTestUtil::simpleFlushPolicyFactory(false));
   auto rowType = reader->rowType();
-  auto spec = std::make_shared<common::ScanSpec>("<root>");
+  auto spec = std::make_shared<velox::common::ScanSpec>("<root>");
   spec->addAllChildFields(*rowType);
   RowReaderOptions rowReaderOpts;
   rowReaderOpts.setScanSpec(spec);
@@ -2511,7 +2511,7 @@ TEST_F(TestReader, readStringDictionaryAsFlat) {
   dwio::common::RuntimeStatistics stats;
   rowReader->updateRuntimeStats(stats);
   ASSERT_EQ(stats.columnReaderStatistics.flattenStringDictionaryValues, 0);
-  spec->childByName("c0")->setFilter(std::make_unique<common::BytesValues>(
+  spec->childByName("c0")->setFilter(std::make_unique<velox::common::BytesValues>(
       std::vector<std::string>{"aaaaaaaaaaaaaaaaaaaa"}, false));
   spec->resetCachedValues(true);
   rowReader = reader->createRowReader(rowReaderOpts);
@@ -2533,7 +2533,7 @@ TEST_F(TestReader, missingSubfieldsNoResultReusing) {
   });
   auto [writer, reader] = createWriterReader({batch}, pool());
   auto schema = ROW({{"c0", ROW({{"c0", BIGINT()}, {"c1", VARCHAR()}})}});
-  auto spec = std::make_shared<common::ScanSpec>("<root>");
+  auto spec = std::make_shared<velox::common::ScanSpec>("<root>");
   spec->addAllChildFields(*schema);
   RowReaderOptions rowReaderOpts;
   rowReaderOpts.setScanSpec(spec);
@@ -2562,11 +2562,11 @@ TEST_F(TestReader, selectiveStringDirectFastPath) {
   });
   auto [writer, reader] = createWriterReader({batch}, pool());
   auto schema = asRowType(batch->type());
-  auto spec = std::make_shared<common::ScanSpec>("<root>");
+  auto spec = std::make_shared<velox::common::ScanSpec>("<root>");
   spec->addAllChildFields(*schema);
   RowReaderOptions rowReaderOpts;
   rowReaderOpts.setScanSpec(spec);
-  spec->childByName("c0")->setFilter(common::createBigintValues({1}, false));
+  spec->childByName("c0")->setFilter(velox::common::createBigintValues({1}, false));
   auto rowReader = reader->createRowReader(rowReaderOpts);
   auto actual = BaseVector::create(schema, 0, pool());
   ASSERT_EQ(rowReader->next(1024, actual), batch->size());
@@ -2588,11 +2588,11 @@ TEST_F(TestReader, selectiveStringDirect) {
   });
   auto [writer, reader] = createWriterReader({batch}, pool());
   auto schema = asRowType(batch->type());
-  auto spec = std::make_shared<common::ScanSpec>("<root>");
+  auto spec = std::make_shared<velox::common::ScanSpec>("<root>");
   spec->addAllChildFields(*schema);
   RowReaderOptions rowReaderOpts;
   rowReaderOpts.setScanSpec(spec);
-  spec->childByName("c0")->setFilter(common::createBigintValues({1}, false));
+  spec->childByName("c0")->setFilter(velox::common::createBigintValues({1}, false));
   auto rowReader = reader->createRowReader(rowReaderOpts);
   auto actual = BaseVector::create(schema, 0, pool());
   ASSERT_EQ(rowReader->next(1024, actual), batch->size());
@@ -2612,7 +2612,7 @@ TEST_F(TestReader, selectiveFlatMapFastPathAllInlinedStringKeys) {
   config->set(dwrf::Config::MAP_FLAT_COLS, {0});
   auto [writer, reader] = createWriterReader({row}, pool(), config);
   auto schema = asRowType(row->type());
-  auto spec = std::make_shared<common::ScanSpec>("<root>");
+  auto spec = std::make_shared<velox::common::ScanSpec>("<root>");
   spec->addAllChildFields(*schema);
   RowReaderOptions rowReaderOpts;
   rowReaderOpts.setScanSpec(spec);
@@ -2631,7 +2631,7 @@ TEST_F(TestReader, skipLongString) {
   dwio::common::ReaderOptions readerOpts(pool());
   readerOpts.setFileFormat(FileFormat::DWRF);
   auto reader = DwrfReader::create(std::move(input), readerOpts);
-  auto spec = std::make_shared<common::ScanSpec>("<root>");
+  auto spec = std::make_shared<velox::common::ScanSpec>("<root>");
   spec->addField("c0", 0);
   spec->getOrCreateChild("c1")->setFilter(
       std::make_unique<common::BoolValue>(true, false));

@@ -23,8 +23,8 @@ class SubfieldFiltersBuilder {
  public:
   SubfieldFiltersBuilder& add(
       const std::string& path,
-      std::unique_ptr<common::Filter> filter) {
-    filters_[common::Subfield(path)] = std::move(filter);
+      std::unique_ptr<velox::common::Filter> filter) {
+    filters_[velox::common::Subfield(path)] = std::move(filter);
     return *this;
   }
 
@@ -38,7 +38,7 @@ class SubfieldFiltersBuilder {
 
 inline SubfieldFilters singleSubfieldFilter(
     const std::string& path,
-    std::unique_ptr<common::Filter> filter) {
+    std::unique_ptr<velox::common::Filter> filter) {
   return SubfieldFiltersBuilder().add(path, std::move(filter)).build();
 }
 } // namespace facebook::velox::common::test

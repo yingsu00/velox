@@ -58,7 +58,7 @@ int searchIndex(
 }
 
 common::InputByteStream initializeInputStream(const char* serialized) {
-  common::InputByteStream stream(serialized);
+  velox::common::InputByteStream stream(serialized);
 
   auto version = stream.read<int8_t>();
   VELOX_CHECK_EQ(kPrestoSparseV2, version);
@@ -111,7 +111,7 @@ int64_t SparseHll::cardinality(const char* serialized) {
 }
 
 void SparseHll::serialize(int8_t indexBitLength, char* output) const {
-  common::OutputByteStream stream(output);
+  velox::common::OutputByteStream stream(output);
   stream.appendOne(kPrestoSparseV2);
   stream.appendOne(indexBitLength);
   stream.appendOne(static_cast<int16_t>(entries_.size()));
@@ -127,7 +127,7 @@ std::string SparseHll::serializeEmpty(int8_t indexBitLength) {
   std::string serialized;
   serialized.resize(kSize);
 
-  common::OutputByteStream stream(serialized.data());
+  velox::common::OutputByteStream stream(serialized.data());
   stream.appendOne(kPrestoSparseV2);
   stream.appendOne(indexBitLength);
   stream.appendOne(static_cast<int16_t>(0));

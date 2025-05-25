@@ -45,7 +45,7 @@ Timestamp toInt96Timestamp(const int128_t& value) {
 
 // Range filter for Parquet Timestamp.
 template <typename T>
-class ParquetTimestampRange final : public common::TimestampRange {
+class ParquetTimestampRange final : public velox::common::TimestampRange {
  public:
   // Use int128_t for Int96
   static_assert(std::is_same_v<T, int64_t> || std::is_same_v<T, int128_t>);
@@ -89,7 +89,7 @@ class TimestampColumnReader : public IntegerColumnReader {
       const TypePtr& requestedType,
       std::shared_ptr<const dwio::common::TypeWithId> fileType,
       ParquetParams& params,
-      common::ScanSpec& scanSpec)
+      velox::common::ScanSpec& scanSpec)
       : IntegerColumnReader(requestedType, fileType, params, scanSpec),
         requestedPrecision_(params.timestampPrecision()) {
     if constexpr (std::is_same_v<T, int64_t>) {
@@ -173,7 +173,7 @@ class TimestampColumnReader : public IntegerColumnReader {
           rows,
           dwio::common::ColumnVisitor<
               int128_t,
-              common::TimestampRange,
+              velox::common::TimestampRange,
               ExtractValues,
               isDense>(newRange, this, rows, extractValues));
     } else {

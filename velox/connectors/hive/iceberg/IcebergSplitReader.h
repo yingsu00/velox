@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "velox/connectors/Connector.h"
+#include "../../common/Connector.h"
 #include "velox/connectors/hive/SplitReader.h"
 #include "velox/connectors/hive/iceberg/PositionalDeleteFileReader.h"
 
@@ -31,19 +31,19 @@ class IcebergSplitReader : public SplitReader {
       const std::shared_ptr<const HiveTableHandle>& hiveTableHandle,
       const std::unordered_map<std::string, std::shared_ptr<HiveColumnHandle>>*
           partitionKeys,
-      const ConnectorQueryCtx* connectorQueryCtx,
+      const connector::common::ConnectorQueryCtx* connectorQueryCtx,
       const std::shared_ptr<const HiveConfig>& hiveConfig,
       const RowTypePtr& readerOutputType,
       const std::shared_ptr<io::IoStatistics>& ioStats,
       const std::shared_ptr<filesystems::File::IoStats>& fsStats,
       FileHandleFactory* fileHandleFactory,
       folly::Executor* executor,
-      const std::shared_ptr<common::ScanSpec>& scanSpec);
+      const std::shared_ptr<velox::common::ScanSpec>& scanSpec);
 
   ~IcebergSplitReader() override = default;
 
   void prepareSplit(
-      std::shared_ptr<common::MetadataFilter> metadataFilter,
+      std::shared_ptr<velox::common::MetadataFilter> metadataFilter,
       dwio::common::RuntimeStatistics& runtimeStats) override;
 
   uint64_t next(uint64_t size, VectorPtr& output) override;

@@ -44,7 +44,7 @@ struct TestParams {
   std::shared_ptr<CodecOptions> codecOptions;
 
   explicit TestParams(
-      common::CompressionKind compressionKind,
+      velox::common::CompressionKind compressionKind,
       std::shared_ptr<CodecOptions> codecOptions = kDefaultCodecOptions)
       : compressionKind(compressionKind),
         codecOptions(std::move(codecOptions)) {}

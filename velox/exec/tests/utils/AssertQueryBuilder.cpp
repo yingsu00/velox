@@ -146,21 +146,21 @@ AssertQueryBuilder& AssertQueryBuilder::splits(
 }
 
 AssertQueryBuilder& AssertQueryBuilder::split(
-    const std::shared_ptr<connector::ConnectorSplit>& connectorSplit) {
+    const std::shared_ptr<connector::common::ConnectorSplit>& connectorSplit) {
   split(getOnlyLeafPlanNodeId(params_.planNode), connectorSplit);
   return *this;
 }
 
 AssertQueryBuilder& AssertQueryBuilder::split(
     const core::PlanNodeId& planNodeId,
-    const std::shared_ptr<connector::ConnectorSplit>& connectorSplit) {
+    const std::shared_ptr<connector::common::ConnectorSplit>& connectorSplit) {
   splits_[planNodeId].emplace_back(
       exec::Split(folly::copy(connectorSplit), -1));
   return *this;
 }
 
 AssertQueryBuilder& AssertQueryBuilder::splits(
-    const std::vector<std::shared_ptr<connector::ConnectorSplit>>&
+    const std::vector<std::shared_ptr<connector::common::ConnectorSplit>>&
         connectorSplits) {
   splits(getOnlyLeafPlanNodeId(params_.planNode), connectorSplits);
   return *this;
@@ -168,7 +168,7 @@ AssertQueryBuilder& AssertQueryBuilder::splits(
 
 AssertQueryBuilder& AssertQueryBuilder::splits(
     const core::PlanNodeId& planNodeId,
-    const std::vector<std::shared_ptr<connector::ConnectorSplit>>&
+    const std::vector<std::shared_ptr<connector::common::ConnectorSplit>>&
         connectorSplits) {
   std::vector<Split> splits;
   for (auto& connectorSplit : connectorSplits) {

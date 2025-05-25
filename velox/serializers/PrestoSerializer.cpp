@@ -138,7 +138,7 @@ void PrestoVectorSerde::deserialize(
     const Options* options) {
   const auto prestoOptions = toPrestoOptions(options);
   const auto codec =
-      common::compressionKindToCodec(prestoOptions.compressionKind);
+      velox::common::compressionKindToCodec(prestoOptions.compressionKind);
   auto maybeHeader = detail::PrestoHeader::read(source);
   VELOX_CHECK(
       maybeHeader.hasValue(),
@@ -205,7 +205,7 @@ void PrestoVectorSerde::deserializeSingleColumn(
   const auto prestoOptions = toPrestoOptions(options);
   VELOX_CHECK_EQ(
       prestoOptions.compressionKind,
-      common::CompressionKind::CompressionKind_NONE);
+      velox::common::CompressionKind::CompressionKind_NONE);
   if (*result && result->use_count() == 1) {
     VELOX_CHECK(
         *(*result)->type() == *type,
@@ -232,7 +232,7 @@ void PrestoVectorSerde::serializeSingleColumn(
   const auto prestoOptions = toPrestoOptions(opts);
   VELOX_USER_CHECK_EQ(
       prestoOptions.compressionKind,
-      common::CompressionKind::CompressionKind_NONE);
+      velox::common::CompressionKind::CompressionKind_NONE);
   VELOX_USER_CHECK_EQ(prestoOptions.nullsFirst, false);
 
   const IndexRange range{0, vector->size()};
@@ -277,7 +277,7 @@ void PrestoVectorSerde::registerNamedVectorSerde() {
           "Lossless timestamps are not supported, because they cannot be decoded without the Schema"));
   VELOX_RETURN_IF(
       prestoOptions.compressionKind !=
-          common::CompressionKind::CompressionKind_NONE,
+          velox::common::CompressionKind::CompressionKind_NONE,
       Status::Invalid("Compression is not supported"));
   VELOX_RETURN_IF(
       prestoOptions.nullsFirst,

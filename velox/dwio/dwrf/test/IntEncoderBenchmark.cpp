@@ -58,7 +58,7 @@ static size_t generateAutoId2(int64_t startId, int64_t count) {
     for (int64_t i = 0; i < bufCount; ++i) {
       buffer[i] = currentId++;
     }
-    encoder->add(buffer, common::Ranges::of(0, bufCount), nullptr);
+    encoder->add(buffer, velox::common::Ranges::of(0, bufCount), nullptr);
     countRemaining -= bufCount;
   }
   return encoder->flush();

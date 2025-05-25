@@ -21,7 +21,7 @@
 namespace facebook::velox {
 
 using namespace std::chrono;
-using common::testutil::ScopedTestTime;
+using velox::common::testutil::ScopedTestTime;
 
 #ifndef NDEBUG
 

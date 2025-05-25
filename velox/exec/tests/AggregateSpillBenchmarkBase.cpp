@@ -130,7 +130,7 @@ void AggregateSpillBenchmarkBase::writeSpillData() {
 }
 
 std::unique_ptr<SpillerBase> AggregateSpillBenchmarkBase::makeSpiller() {
-  common::SpillConfig spillConfig;
+  velox::common::SpillConfig spillConfig;
   spillConfig.getSpillDirPathCb = [&]() -> std::string_view {
     return spillDir_;
   };

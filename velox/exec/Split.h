@@ -15,12 +15,12 @@
  */
 #pragma once
 
-#include "velox/connectors/Connector.h"
+#include "velox/connectors/common/Connector.h"
 
 namespace facebook::velox::exec {
 
 struct Split {
-  std::shared_ptr<velox::connector::ConnectorSplit> connectorSplit{nullptr};
+  std::shared_ptr<velox::connector::common::ConnectorSplit> connectorSplit{nullptr};
   int32_t groupId{-1}; // Bucketed group id (-1 means 'none').
 
   /// Indicates if this is a barrier split. A barrier split is used by task
@@ -31,7 +31,7 @@ struct Split {
   Split() = default;
 
   explicit Split(
-      std::shared_ptr<velox::connector::ConnectorSplit>&& connectorSplit,
+      std::shared_ptr<velox::connector::common::ConnectorSplit>&& connectorSplit,
       int32_t groupId = -1)
       : connectorSplit(std::move(connectorSplit)), groupId(groupId) {}
 

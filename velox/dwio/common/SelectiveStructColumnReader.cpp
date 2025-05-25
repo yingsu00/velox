@@ -256,7 +256,7 @@ void SelectiveStructColumnReaderBase::next(
     const Mutation* mutation) {
   process::TraceContext trace("SelectiveStructColumnReaderBase::next");
   mutation_ = mutation;
-  hasDeletion_ = common::hasDeletion(mutation);
+  hasDeletion_ = dwio::common::hasDeletion(mutation);
   const RowSet rows(iota(numValues, rows_), numValues);
 
   if (!children_.empty()) {

@@ -132,7 +132,7 @@ void registerApproxDistinctAggregates(
       false,
       withCompanionFunctions,
       overwrite,
-      common::hll::kDefaultApproxDistinctStandardError);
+      velox::common::hll::kDefaultApproxDistinctStandardError);
   // approx_set is companion function for approx_distinct. Don't register
   // companion functions for it.
   registerApproxDistinct(
@@ -140,7 +140,7 @@ void registerApproxDistinctAggregates(
       true,
       false,
       overwrite,
-      common::hll::kDefaultApproxSetStandardError);
+      velox::common::hll::kDefaultApproxSetStandardError);
 }
 
 } // namespace facebook::velox::aggregate::prestosql

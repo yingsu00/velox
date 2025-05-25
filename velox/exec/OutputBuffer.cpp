@@ -476,7 +476,7 @@ bool OutputBuffer::enqueue(
     }
 
     if (bufferedBytes_ >= maxSize_ && future) {
-      common::testutil::TestValue::adjust(
+      velox::common::testutil::TestValue::adjust(
           "facebook::velox::exec::OutputBuffer::enqueue", this);
 
       promises_.emplace_back("OutputBuffer::enqueue");
@@ -602,7 +602,7 @@ void OutputBuffer::checkIfDone(bool oneDriverFinished) {
         }
       }
 
-      common::testutil::TestValue::adjust(
+      velox::common::testutil::TestValue::adjust(
           "facebook::velox::exec::OutputBuffer::checkIfDone", this);
     }
   }

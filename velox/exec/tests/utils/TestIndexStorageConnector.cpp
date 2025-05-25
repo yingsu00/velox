@@ -33,7 +33,7 @@ core::TypedExprPtr toJoinConditionExpr(
     const RowTypePtr& inputType,
     const std::unordered_map<
         std::string,
-        std::shared_ptr<connector::ConnectorColumnHandle>>& columnHandles) {
+        std::shared_ptr<connector::common::ConnectorColumnHandle>>& columnHandles) {
   if (joinConditions.empty()) {
     return nullptr;
   }
@@ -102,7 +102,7 @@ TestIndexSource::TestIndexSource(
     size_t numEqualJoinKeys,
     const core::TypedExprPtr& joinConditionExpr,
     const std::shared_ptr<TestIndexTableHandle>& tableHandle,
-    connector::ConnectorQueryCtx* connectorQueryCtx,
+    connector::common::ConnectorQueryCtx* connectorQueryCtx,
     folly::Executor* executor)
     : tableHandle_(tableHandle),
       inputType_(inputType),
@@ -138,7 +138,7 @@ void TestIndexSource::checkNotFailed() {
   }
 }
 
-std::shared_ptr<connector::IndexSource::LookupResultIterator>
+std::shared_ptr<connector::common::IndexSource::LookupResultIterator>
 TestIndexSource::lookup(const LookupRequest& request) {
   checkNotFailed();
   const auto numInputRows = request.input->size();
@@ -250,7 +250,7 @@ TestIndexSource::ResultIterator::ResultIterator(
   lookupResultIter_->reset(*lookupResult_);
 }
 
-std::optional<std::unique_ptr<connector::IndexSource::LookupResult>>
+std::optional<std::unique_ptr<connector::common::IndexSource::LookupResult>>
 TestIndexSource::ResultIterator::next(
     vector_size_t size,
     ContinueFuture& future) {
@@ -328,7 +328,7 @@ void TestIndexSource::ResultIterator::asyncLookup(
   });
 }
 
-std::unique_ptr<connector::IndexSource::LookupResult>
+std::unique_ptr<connector::common::IndexSource::LookupResult>
 TestIndexSource::ResultIterator::syncLookup(vector_size_t size) {
   VELOX_CHECK(hasPendingRequest_);
   if (lookupResultIter_->atEnd()) {
@@ -453,18 +453,18 @@ TestIndexConnector::TestIndexConnector(
     const std::string& id,
     std::shared_ptr<const config::ConfigBase> /*unused*/,
     folly::Executor* executor)
-    : Connector(id), executor_(executor) {}
+    : connector::common::Connector(id), executor_(executor) {}
 
-std::shared_ptr<connector::IndexSource> TestIndexConnector::createIndexSource(
+std::shared_ptr<connector::common::IndexSource> TestIndexConnector::createIndexSource(
     const RowTypePtr& inputType,
     size_t numJoinKeys,
     const std::vector<core::IndexLookupConditionPtr>& joinConditions,
     const RowTypePtr& outputType,
-    const std::shared_ptr<connector::ConnectorTableHandle>& tableHandle,
+    const std::shared_ptr<connector::common::ConnectorTableHandle>& tableHandle,
     const std::unordered_map<
         std::string,
-        std::shared_ptr<connector::ConnectorColumnHandle>>& columnHandles,
-    connector::ConnectorQueryCtx* connectorQueryCtx) {
+        std::shared_ptr<connector::common::ConnectorColumnHandle>>& columnHandles,
+    connector::common::ConnectorQueryCtx* connectorQueryCtx) {
   VELOX_CHECK_GE(inputType->size(), numJoinKeys + joinConditions.size());
   auto testIndexTableHandle =
       std::dynamic_pointer_cast<TestIndexTableHandle>(tableHandle);

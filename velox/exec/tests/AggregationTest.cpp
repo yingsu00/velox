@@ -42,7 +42,7 @@ namespace facebook::velox::exec::test {
 
 using core::QueryConfig;
 using facebook::velox::test::BatchMaker;
-using namespace common::testutil;
+using namespace velox::common::testutil;
 
 /// No-op implementation of Aggregate. Provides public access to following
 /// base class methods: setNull, clearNull and isNull.

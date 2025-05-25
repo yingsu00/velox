@@ -27,7 +27,7 @@ SelectiveStructColumnReader::SelectiveStructColumnReader(
     const TypePtr& requestedType,
     const std::shared_ptr<const TypeWithId>& fileType,
     DwrfParams& params,
-    common::ScanSpec& scanSpec,
+    velox::common::ScanSpec& scanSpec,
     bool useColumnNames,
     bool isRoot)
     : SelectiveStructColumnReaderBase(

@@ -1357,7 +1357,7 @@ void readTopColumns(
   const auto& childTypes = type->asRow().children();
   // Bug for bug compatibility: Extra columns at the end are allowed for
   // non-compressed data.
-  if (opts.compressionKind == common::CompressionKind_NONE) {
+  if (opts.compressionKind == velox::common::CompressionKind_NONE) {
     VELOX_USER_CHECK_GE(
         numColumns,
         type->size(),

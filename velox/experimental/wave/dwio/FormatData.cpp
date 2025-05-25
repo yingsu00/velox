@@ -172,7 +172,7 @@ void setFilter(GpuDecode* step, ColumnReader* reader, Stream* stream) {
     return;
   }
   switch (veloxFilter->kind()) {
-    case common::FilterKind::kBigintRange: {
+    case velox::common::FilterKind::kBigintRange: {
       step->filterKind = WaveFilterKind::kBigintRange;
       step->nullsAllowed = veloxFilter->testNull();
       step->filter._.int64Range[0] =

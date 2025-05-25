@@ -56,7 +56,7 @@ class IntEncoder {
    */
   virtual uint64_t add(
       const int64_t* data,
-      const common::Ranges& ranges,
+      const velox::common::Ranges& ranges,
       const uint64_t* nulls) {
     return addImpl(data, ranges, nulls);
   }
@@ -68,28 +68,28 @@ class IntEncoder {
   // to unsigned then to int64_t.
   virtual uint64_t add(
       const int32_t* data,
-      const common::Ranges& ranges,
+      const velox::common::Ranges& ranges,
       const uint64_t* nulls) {
     return addImpl(data, ranges, nulls);
   }
 
   virtual uint64_t add(
       const uint32_t* data,
-      const common::Ranges& ranges,
+      const velox::common::Ranges& ranges,
       const uint64_t* nulls) {
     return addImpl(data, ranges, nulls);
   }
 
   virtual uint64_t add(
       const int16_t* data,
-      const common::Ranges& ranges,
+      const velox::common::Ranges& ranges,
       const uint64_t* nulls) {
     return addImpl(data, ranges, nulls);
   }
 
   virtual uint64_t add(
       const uint16_t* data,
-      const common::Ranges& ranges,
+      const velox::common::Ranges& ranges,
       const uint64_t* nulls) {
     return addImpl(data, ranges, nulls);
   }
@@ -204,7 +204,7 @@ class IntEncoder {
  private:
   template <typename T>
   uint64_t
-  addImpl(const T* data, const common::Ranges& ranges, const uint64_t* nulls);
+  addImpl(const T* data, const velox::common::Ranges& ranges, const uint64_t* nulls);
 
   FOLLY_ALWAYS_INLINE void writeBuffer(char* start, char* end) {
     int32_t valsToWrite = end - start;
@@ -273,7 +273,7 @@ template <bool isSigned>
 template <typename T>
 uint64_t IntEncoder<isSigned>::addImpl(
     const T* data,
-    const common::Ranges& ranges,
+    const velox::common::Ranges& ranges,
     const uint64_t* nulls) {
   if (!useVInts_) {
     WRITE_INTS(writeLongLE);

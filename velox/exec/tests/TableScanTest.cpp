@@ -100,7 +100,7 @@ class TableScanTest : public HiveConnectorTestBase {
 
   std::shared_ptr<Task> assertQuery(
       const PlanNodePtr& plan,
-      const std::shared_ptr<connector::ConnectorSplit>& hiveSplit,
+      const std::shared_ptr<connector::common::ConnectorSplit>& hiveSplit,
       const std::string& duckDbSql) {
     return OperatorTestBase::assertQuery(plan, {hiveSplit}, duckDbSql);
   }
@@ -187,7 +187,7 @@ class TableScanTest : public HiveConnectorTestBase {
     ASSERT_EQ(n, task->numFinishedDrivers());
   }
 
-  void testPartitionedTableImpl(
+  void testPartitionedTableImpl(TypeWithId
       const std::string& filePath,
       const TypePtr& partitionType,
       const std::optional<std::string>& partitionValue) {
@@ -196,7 +196,7 @@ class TableScanTest : public HiveConnectorTestBase {
                      .build();
     auto outputType =
         ROW({"pkey", "c0", "c1"}, {partitionType, BIGINT(), DOUBLE()});
-    ConnectorColumnHandleMap assignments = {
+    connector::common::ConnectorColumnHandleMap assignments = {
         {"pkey", partitionKey("pkey", partitionType)},
         {"c0", regularColumn("c0", BIGINT())},
         {"c1", regularColumn("c1", DOUBLE())}};
@@ -402,7 +402,7 @@ DEBUG_ONLY_TEST_F(TableScanTest, pendingCoalescedIoWhenTaskFailed) {
 TEST_F(TableScanTest, connectorStats) {
   auto hiveConnector =
       std::dynamic_pointer_cast<connector::hive::HiveConnector>(
-          connector::getConnector(kHiveConnectorId));
+          connector::common::getConnector(kHiveConnectorId));
   EXPECT_NE(nullptr, hiveConnector);
   verifyCacheStats(hiveConnector->fileHandleCacheStats(), 0, 0, 0);
 
@@ -479,7 +479,7 @@ TEST_F(TableScanTest, partitionKeyAlias) {
   writeToFile(filePath->getPath(), vectors);
   createDuckDbTable(vectors);
 
-  ConnectorColumnHandleMap assignments = {
+  connector::common::ConnectorColumnHandleMap assignments = {
       {"a", regularColumn("c0", BIGINT())},
       {"ds_alias", partitionKey("ds", VARCHAR())}};
 
@@ -711,11 +711,11 @@ TEST_F(TableScanTest, subfieldPruningRowType) {
   auto vectors = makeVectors(10, 1'000, rowType);
   auto filePath = TempFilePath::create();
   writeToFile(filePath->getPath(), vectors);
-  std::vector<common::Subfield> requiredSubfields;
+  std::vector<velox::common::Subfield> requiredSubfields;
   requiredSubfields.emplace_back("e.c");
   std::unordered_map<
       std::string,
-      std::shared_ptr<connector::ConnectorColumnHandle>>
+      std::shared_ptr<connector::common::ConnectorColumnHandle>>
       assignments;
   assignments["e"] = std::make_shared<HiveColumnHandle>(
       "e",
@@ -770,11 +770,11 @@ TEST_F(TableScanTest, subfieldPruningRemainingFilterSubfieldsMissing) {
   auto vectors = makeVectors(10, 1'000, rowType);
   auto filePath = TempFilePath::create();
   writeToFile(filePath->getPath(), vectors);
-  std::vector<common::Subfield> requiredSubfields;
+  std::vector<velox::common::Subfield> requiredSubfields;
   requiredSubfields.emplace_back("e.c");
   std::unordered_map<
       std::string,
-      std::shared_ptr<connector::ConnectorColumnHandle>>
+      std::shared_ptr<connector::common::ConnectorColumnHandle>>
       assignments;
   assignments["e"] = std::make_shared<HiveColumnHandle>(
       "e",
@@ -832,7 +832,7 @@ TEST_F(TableScanTest, subfieldPruningRemainingFilterRootFieldMissing) {
   writeToFile(filePath->getPath(), vectors);
   std::unordered_map<
       std::string,
-      std::shared_ptr<connector::ConnectorColumnHandle>>
+      std::shared_ptr<connector::common::ConnectorColumnHandle>>
       assignments;
   assignments["d"] = std::make_shared<HiveColumnHandle>(
       "d", HiveColumnHandle::ColumnType::kRegular, BIGINT(), BIGINT());
@@ -877,12 +877,12 @@ TEST_F(TableScanTest, subfieldPruningRemainingFilterStruct) {
       SCOPED_TRACE(fmt::format("{} {}", outputColumn, filterColumn));
       std::unordered_map<
           std::string,
-          std::shared_ptr<connector::ConnectorColumnHandle>>
+          std::shared_ptr<connector::common::ConnectorColumnHandle>>
           assignments;
       assignments["d"] = std::make_shared<HiveColumnHandle>(
           "d", HiveColumnHandle::ColumnType::kRegular, BIGINT(), BIGINT());
       if (outputColumn > kNoOutput) {
-        std::vector<common::Subfield> subfields;
+        std::vector<velox::common::Subfield> subfields;
         if (outputColumn == kSubfieldOnly) {
           subfields.emplace_back("c.b");
         }
@@ -965,12 +965,12 @@ TEST_F(TableScanTest, subfieldPruningRemainingFilterMap) {
       SCOPED_TRACE(fmt::format("{} {}", outputColumn, filterColumn));
       std::unordered_map<
           std::string,
-          std::shared_ptr<connector::ConnectorColumnHandle>>
+          std::shared_ptr<connector::common::ConnectorColumnHandle>>
           assignments;
       assignments["a"] = std::make_shared<HiveColumnHandle>(
           "a", HiveColumnHandle::ColumnType::kRegular, BIGINT(), BIGINT());
       if (outputColumn > kNoOutput) {
-        std::vector<common::Subfield> subfields;
+        std::vector<velox::common::Subfield> subfields;
         if (outputColumn == kSubfieldOnly) {
           subfields.emplace_back("b[1]");
         }
@@ -1061,13 +1061,13 @@ TEST_F(TableScanTest, subfieldPruningMapType) {
   auto rowType = asRowType(vectors[0]->type());
   auto filePath = TempFilePath::create();
   writeToFile(filePath->getPath(), vectors);
-  std::vector<common::Subfield> requiredSubfields;
+  std::vector<velox::common::Subfield> requiredSubfields;
   requiredSubfields.emplace_back("c[0]");
   requiredSubfields.emplace_back("c[2]");
   requiredSubfields.emplace_back("c[4]");
   std::unordered_map<
       std::string,
-      std::shared_ptr<connector::ConnectorColumnHandle>>
+      std::shared_ptr<connector::common::ConnectorColumnHandle>>
       assignments;
   assignments["c"] = std::make_shared<HiveColumnHandle>(
       "c",
@@ -1149,11 +1149,11 @@ TEST_F(TableScanTest, subfieldPruningArrayType) {
   auto rowType = asRowType(vectors[0]->type());
   auto filePath = TempFilePath::create();
   writeToFile(filePath->getPath(), vectors);
-  std::vector<common::Subfield> requiredSubfields;
+  std::vector<velox::common::Subfield> requiredSubfields;
   requiredSubfields.emplace_back("c[3]");
   std::unordered_map<
       std::string,
-      std::shared_ptr<connector::ConnectorColumnHandle>>
+      std::shared_ptr<connector::common::ConnectorColumnHandle>>
       assignments;
   assignments["c"] = std::make_shared<HiveColumnHandle>(
       "c",
@@ -1312,11 +1312,11 @@ TEST_F(TableScanTest, missingColumns) {
   assertQuery(op, filePaths, "SELECT count(*) FROM tmp WHERE c1 <= 4000.1", 0);
 
   // Use missing column 'c1' in 'is null' filter, while not selecting 'c1'.
-  common::SubfieldFilters filters;
-  filters[common::Subfield("c1")] = lessThanOrEqualDouble(1050.0, true);
+  velox::common::SubfieldFilters filters;
+  filters[velox::common::Subfield("c1")] = lessThanOrEqualDouble(1050.0, true);
   auto tableHandle = std::make_shared<HiveTableHandle>(
       kHiveConnectorId, "tmp", true, std::move(filters), nullptr, dataColumns);
-  ConnectorColumnHandleMap assignments;
+  connector::common::ConnectorColumnHandleMap assignments;
   assignments["c0"] = regularColumn("c0", BIGINT());
   op = PlanBuilder(pool_.get())
            .startTableScan()
@@ -2157,14 +2157,14 @@ TEST_F(TableScanTest, partitionedTableDateKey) {
                      .partitionKey("pkey", partitionValue)
                      .build();
     auto outputType = ROW({"pkey", "c0", "c1"}, {DATE(), BIGINT(), DOUBLE()});
-    ConnectorColumnHandleMap assignments = {
+    connector::common::ConnectorColumnHandleMap assignments = {
         {"pkey", partitionKey("pkey", DATE())},
         {"c0", regularColumn("c0", BIGINT())},
         {"c1", regularColumn("c1", DOUBLE())}};
 
-    common::SubfieldFilters filters;
+    velox::common::SubfieldFilters filters;
     // pkey > 2020-09-01.
-    filters[common::Subfield("pkey")] = std::make_unique<common::BigintRange>(
+    filters[velox::common::Subfield("pkey")] = std::make_unique<common::BigintRange>(
         18506, std::numeric_limits<int64_t>::max(), false);
 
     auto tableHandle = std::make_shared<HiveTableHandle>(
@@ -2197,7 +2197,7 @@ TEST_F(TableScanTest, partitionedTableTimestampKey) {
                    .partitionKey("pkey", partitionValue)
                    .build();
 
-  ConnectorColumnHandleMap assignments = {
+  connector::common::ConnectorColumnHandleMap assignments = {
       {"pkey", partitionKey("pkey", TIMESTAMP())},
       {"c0", regularColumn("c0", BIGINT())},
       {"c1", regularColumn("c1", DOUBLE())}};
@@ -2328,7 +2328,7 @@ TEST_F(TableScanTest, partitionedTableTimestampKey) {
     auto planWithSubfilter = [&](bool asLocalTime) {
       auto outputType =
           ROW({"pkey", "c0", "c1"}, {TIMESTAMP(), BIGINT(), DOUBLE()});
-      common::SubfieldFilters filters;
+      velox::common::SubfieldFilters filters;
       // pkey = 2023-10-27 00:12:35.
       auto lower =
           util::fromTimestampString(
@@ -2337,7 +2337,7 @@ TEST_F(TableScanTest, partitionedTableTimestampKey) {
       if (asLocalTime) {
         lower.toGMT(Timestamp::defaultTimezone());
       }
-      filters[common::Subfield("pkey")] =
+      filters[velox::common::Subfield("pkey")] =
           std::make_unique<common::TimestampRange>(lower, lower, false);
       auto tableHandle = std::make_shared<HiveTableHandle>(
           "test-hive",
@@ -2525,7 +2525,7 @@ TEST_F(TableScanTest, statsBasedSkipping) {
   // c0 <= -1 -> whole file should be skipped based on stats
   auto subfieldFilters = singleSubfieldFilter("c0", lessThanOrEqual(-1));
 
-  ConnectorColumnHandleMap assignments = {
+  connector::common::ConnectorColumnHandleMap assignments = {
       {"c1", regularColumn("c1", INTEGER())}};
 
   auto assertQuery = [&](const std::string& query) {
@@ -3036,7 +3036,7 @@ TEST_F(TableScanTest, filterPushdown) {
   createDuckDbTable(vectors);
 
   // c1 >= 0 or null and c3 is true
-  common::SubfieldFilters subfieldFilters =
+  velox::common::SubfieldFilters subfieldFilters =
       SubfieldFiltersBuilder()
           .add("c1", greaterThanOrEqual(0, true))
           .add("c3", std::make_unique<common::BoolValue>(true, false))
@@ -3132,7 +3132,7 @@ TEST_F(TableScanTest, path) {
 
   // use $path in a filter, but don't project it out
   auto tableHandle = makeTableHandle(
-      common::SubfieldFilters{},
+      velox::common::SubfieldFilters{},
       parseExpr(fmt::format("\"{}\" = '{}'", kPath, pathValue), typeWithPath));
   op = PlanBuilder()
            .startTableScan()
@@ -3189,7 +3189,7 @@ TEST_F(TableScanTest, fileSizeAndModifiedTime) {
 
   auto filterTest = [&](const std::string& filter) {
     auto tableHandle = makeTableHandle(
-        common::SubfieldFilters{},
+        velox::common::SubfieldFilters{},
         parseExpr(filter, allColumns),
         "hive_table",
         allColumns);
@@ -3233,7 +3233,7 @@ TEST_F(TableScanTest, bucket) {
 
   auto filePaths = makeFilePaths(numBatches);
 
-  std::vector<std::shared_ptr<connector::ConnectorSplit>> splits;
+  std::vector<std::shared_ptr<connector::common::ConnectorSplit>> splits;
   splits.reserve(numBatches);
 
   std::vector<int> buckets = {10, 12, 15, 16, 27};
@@ -3322,7 +3322,7 @@ TEST_F(TableScanTest, bucketConversion) {
   constexpr int kNewNumBuckets = 16;
   const int selectedBuckets[] = {3, 5, 11};
   auto makeSplits = [&] {
-    std::vector<std::shared_ptr<connector::ConnectorSplit>> splits;
+    std::vector<std::shared_ptr<connector::common::ConnectorSplit>> splits;
     for (int bucket : selectedBuckets) {
       std::vector<std::shared_ptr<HiveColumnHandle>> handles;
       handles.push_back(makeColumnHandle("c0", INTEGER(), {}));
@@ -3404,7 +3404,7 @@ TEST_F(TableScanTest, bucketConversionWithSubfieldPruning) {
   writeToFile(file->getPath(), {vector});
   constexpr int kNewNumBuckets = 16;
   const int selectedBuckets[] = {3, 5, 11};
-  std::vector<std::shared_ptr<connector::ConnectorSplit>> splits;
+  std::vector<std::shared_ptr<connector::common::ConnectorSplit>> splits;
   for (int bucket : selectedBuckets) {
     std::vector<std::shared_ptr<HiveColumnHandle>> handles;
     handles.push_back(makeColumnHandle("c0", key->type(), {}));
@@ -3720,7 +3720,7 @@ TEST_F(TableScanTest, remainingFilter) {
       "SELECT * FROM tmp WHERE c1 > c0 AND c0 >= 0");
 
   // Remaining filter uses columns that are not used otherwise.
-  ConnectorColumnHandleMap assignments = {
+  connector::common::ConnectorColumnHandleMap assignments = {
       {"c2", regularColumn("c2", DOUBLE())}};
 
   assertQuery(
@@ -4330,7 +4330,7 @@ TEST_F(TableScanTest, interleaveLazyEager) {
   auto eagerFile = TempFilePath::create();
   writeToFile(eagerFile->getPath(), rowsWithNulls);
 
-  ConnectorColumnHandleMap assignments = {
+  connector::common::ConnectorColumnHandleMap assignments = {
       {"c0", regularColumn("c0", column->type())}};
   CursorParameters params;
   params.planNode = PlanBuilder()
@@ -5144,7 +5144,7 @@ TEST_F(TableScanTest, varbinaryPartitionKey) {
   writeToFile(filePath->getPath(), vectors);
   createDuckDbTable(vectors);
 
-  ConnectorColumnHandleMap assignments = {
+  connector::common::ConnectorColumnHandleMap assignments = {
       {"a", regularColumn("c0", BIGINT())},
       {"ds_alias", partitionKey("ds", VARBINARY())}};
 
@@ -5191,7 +5191,7 @@ TEST_F(TableScanTest, timestampPartitionKey) {
   writeToFile(filePath->getPath(), vectors);
 
   const auto getSplits = [&]() {
-    std::vector<std::shared_ptr<connector::ConnectorSplit>> splits;
+    std::vector<std::shared_ptr<connector::common::ConnectorSplit>> splits;
     for (auto& t : inputs) {
       splits.push_back(
           exec::test::HiveConnectorSplitBuilder(filePath->getPath())
@@ -5201,7 +5201,7 @@ TEST_F(TableScanTest, timestampPartitionKey) {
     return splits;
   };
 
-  ConnectorColumnHandleMap assignments = {
+  connector::common::ConnectorColumnHandleMap assignments = {
       {"t", partitionKey("t", TIMESTAMP())}};
   auto plan = PlanBuilder()
                   .startTableScan()
@@ -5357,7 +5357,7 @@ TEST_F(TableScanTest, dynamicFilterWithRowIndexColumn) {
        makeFlatVector<int64_t>(5, folly::identity)});
   std::unordered_map<
       std::string,
-      std::shared_ptr<connector::ConnectorColumnHandle>>
+      std::shared_ptr<connector::common::ConnectorColumnHandle>>
       assignments;
   assignments["a"] = std::make_shared<connector::hive::HiveColumnHandle>(
       "a",
@@ -5642,7 +5642,7 @@ TEST_F(TableScanTest, rowNumberInRemainingFilter) {
   auto outputType = ROW({"c0"}, {BIGINT()});
   auto remainingFilter = parseExpr("r1 % 2 == 0", ROW({"r1"}, {BIGINT()}));
   auto tableHandle =
-      makeTableHandle(common::SubfieldFilters{}, remainingFilter);
+      makeTableHandle(velox::common::SubfieldFilters{}, remainingFilter);
   auto plan = PlanBuilder()
                   .startTableScan()
                   .outputType(outputType)

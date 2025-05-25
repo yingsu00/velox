@@ -546,7 +546,7 @@ class ExprExceptionContext {
 
     // Persist vector to disk
     try {
-      auto dataPathOpt = common::generateTempFilePath(basePath, "vector");
+      auto dataPathOpt = velox::common::generateTempFilePath(basePath, "vector");
       if (!dataPathOpt.has_value()) {
         dataPath_ = "Failed to create file for saving input vector.";
         return;
@@ -561,7 +561,7 @@ class ExprExceptionContext {
     // Persist sql to disk
     auto sql = expr_->toSql();
     try {
-      auto sqlPathOpt = common::generateTempFilePath(basePath, "sql");
+      auto sqlPathOpt = velox::common::generateTempFilePath(basePath, "sql");
       if (!sqlPathOpt.has_value()) {
         sqlPath_ = "Failed to create file for saving SQL.";
         return;
@@ -583,7 +583,7 @@ class ExprExceptionContext {
         allSql << exprs[i]->toSql();
       }
       try {
-        auto sqlPathOpt = common::generateTempFilePath(basePath, "allExprSql");
+        auto sqlPathOpt = velox::common::generateTempFilePath(basePath, "allExprSql");
         if (!sqlPathOpt.has_value()) {
           allExprSqlPath_ =
               "Failed to create file for saving all SQL expressions.";
@@ -1035,7 +1035,7 @@ Expr::PeelEncodingsResult Expr::peelEncodings(
         !peeledVectors[0]->memoDisabled();
   }
 
-  common::testutil::TestValue::adjust(
+  velox::common::testutil::TestValue::adjust(
       "facebook::velox::exec::Expr::peelEncodings::mayCache", &mayCache);
   return {newRows, finalRowsHolder.get(), mayCache};
 }
@@ -1673,7 +1673,7 @@ namespace {
 common::Subfield extractSubfield(
     const Expr* expr,
     const folly::F14FastMap<std::string, int32_t>& shadowedNames) {
-  std::vector<std::unique_ptr<common::Subfield::PathElement>> path;
+  std::vector<std::unique_ptr<velox::common::Subfield::PathElement>> path;
   for (;;) {
     if (auto* ref = expr->as<FieldReference>()) {
       const auto& name = ref->name();
@@ -1683,7 +1683,7 @@ common::Subfield extractSubfield(
         expr = expr->inputs()[0].get();
         continue;
       }
-      path.push_back(std::make_unique<common::Subfield::NestedField>(name));
+      path.push_back(std::make_unique<velox::common::Subfield::NestedField>(name));
       if (!ref->inputs().empty()) {
         expr = ref->inputs()[0].get();
         continue;
@@ -1692,7 +1692,7 @@ common::Subfield extractSubfield(
         return {};
       }
       std::reverse(path.begin(), path.end());
-      return common::Subfield(std::move(path));
+      return velox::common::Subfield(std::move(path));
     }
     if (!expr->vectorFunction()) {
       return {};
@@ -1708,23 +1708,23 @@ common::Subfield extractSubfield(
     }
     switch (index->value()->typeKind()) {
       case TypeKind::TINYINT:
-        path.push_back(std::make_unique<common::Subfield::LongSubscript>(
+        path.push_back(std::make_unique<velox::common::Subfield::LongSubscript>(
             index->value()->as<ConstantVector<int8_t>>()->value()));
         break;
       case TypeKind::SMALLINT:
-        path.push_back(std::make_unique<common::Subfield::LongSubscript>(
+        path.push_back(std::make_unique<velox::common::Subfield::LongSubscript>(
             index->value()->as<ConstantVector<int16_t>>()->value()));
         break;
       case TypeKind::INTEGER:
-        path.push_back(std::make_unique<common::Subfield::LongSubscript>(
+        path.push_back(std::make_unique<velox::common::Subfield::LongSubscript>(
             index->value()->as<ConstantVector<int32_t>>()->value()));
         break;
       case TypeKind::BIGINT:
-        path.push_back(std::make_unique<common::Subfield::LongSubscript>(
+        path.push_back(std::make_unique<velox::common::Subfield::LongSubscript>(
             index->value()->as<ConstantVector<int64_t>>()->value()));
         break;
       case TypeKind::VARCHAR:
-        path.push_back(std::make_unique<common::Subfield::StringSubscript>(
+        path.push_back(std::make_unique<velox::common::Subfield::StringSubscript>(
             index->value()->as<ConstantVector<StringView>>()->value()));
         break;
       default:
@@ -1738,7 +1738,7 @@ common::Subfield extractSubfield(
 
 void Expr::extractSubfieldsImpl(
     folly::F14FastMap<std::string, int32_t>* shadowedNames,
-    std::vector<common::Subfield>* subfields) const {
+    std::vector<velox::common::Subfield>* subfields) const {
   auto subfield = extractSubfield(this, *shadowedNames);
   if (subfield.valid()) {
     subfields->push_back(std::move(subfield));
@@ -1749,9 +1749,9 @@ void Expr::extractSubfieldsImpl(
   }
 }
 
-std::vector<common::Subfield> Expr::extractSubfields() const {
+std::vector<velox::common::Subfield> Expr::extractSubfields() const {
   folly::F14FastMap<std::string, int32_t> shadowedNames;
-  std::vector<common::Subfield> subfields;
+  std::vector<velox::common::Subfield> subfields;
   extractSubfieldsImpl(&shadowedNames, &subfields);
   return subfields;
 }
@@ -1865,7 +1865,7 @@ void printInputAndExprs(
   }
   // Persist vector to disk
   try {
-    auto dataPathOpt = common::generateTempFilePath(basePath, "vector");
+    auto dataPathOpt = velox::common::generateTempFilePath(basePath, "vector");
     if (!dataPathOpt.has_value()) {
       return;
     }
@@ -1883,7 +1883,7 @@ void printInputAndExprs(
       }
       allSql << exprs[i]->toSql();
     }
-    auto sqlPathOpt = common::generateTempFilePath(basePath, "allExprSql");
+    auto sqlPathOpt = velox::common::generateTempFilePath(basePath, "allExprSql");
     if (!sqlPathOpt.has_value()) {
       return;
     }

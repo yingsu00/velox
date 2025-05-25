@@ -92,23 +92,23 @@ INSTANTIATE_TEST_SUITE_P(
         // "e": 1.1, float
         OrcReaderFilterParam{
             "e",
-            std::make_shared<common::FloatingPointRange<
+            std::make_shared<velox::common::FloatingPointRange<
                 float>>(1.0, false, false, 2.0, false, false, false),
             1},
         OrcReaderFilterParam{
             "e",
-            std::make_shared<common::FloatingPointRange<
+            std::make_shared<velox::common::FloatingPointRange<
                 float>>(2.0, false, false, 3.0, false, false, false),
             0},
         // "f": 1.12, double
         OrcReaderFilterParam{
             "f",
-            std::make_shared<common::FloatingPointRange<
+            std::make_shared<velox::common::FloatingPointRange<
                 double>>(1.0, false, false, 2.0, false, false, false),
             1},
         OrcReaderFilterParam{
             "f",
-            std::make_shared<common::FloatingPointRange<
+            std::make_shared<velox::common::FloatingPointRange<
                 double>>(2.0, false, false, 3.0, false, false, false),
             0},
         // "g": "velox", varchar
@@ -212,7 +212,7 @@ TEST_P(OrcReaderFilterTestP, tests) {
 
   // auto rowType = DataSetBuilder::makeRowType(schema, true);
   // auto filterGenerator = std::make_unique<FilterGenerator>(rowType);
-  auto scanSpec = std::make_shared<common::ScanSpec>("<root>");
+  auto scanSpec = std::make_shared<velox::common::ScanSpec>("<root>");
   scanSpec->addAllChildFields(*schema);
 
   std::string fileName = "orc_all_type.orc";

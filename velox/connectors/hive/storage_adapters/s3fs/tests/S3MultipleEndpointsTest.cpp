@@ -52,7 +52,7 @@ class S3MultipleEndpoints : public S3Test, public ::test::VectorTestBase {
     minioSecondServer_->addBucket(kBucketName.data());
 
     filesystems::registerS3FileSystem();
-    connector::registerConnectorFactory(
+    connector::common::registerConnectorFactory(
         std::make_shared<connector::hive::HiveConnectorFactory>());
     parquet::registerParquetReaderFactory();
     parquet::registerParquetWriterFactory();
@@ -64,27 +64,27 @@ class S3MultipleEndpoints : public S3Test, public ::test::VectorTestBase {
       const std::unordered_map<std::string, std::string> config1Override = {},
       const std::unordered_map<std::string, std::string> config2Override = {}) {
     auto hiveConnector1 =
-        connector::getConnectorFactory(
+        connector::common::getConnectorFactory(
             connector::hive::HiveConnectorFactory::kHiveConnectorName)
             ->newConnector(
                 std::string(connectorId1),
                 minioServer_->hiveConfig(config1Override),
                 ioExecutor_.get());
     auto hiveConnector2 =
-        connector::getConnectorFactory(
+        connector::common::getConnectorFactory(
             connector::hive::HiveConnectorFactory::kHiveConnectorName)
             ->newConnector(
                 std::string(connectorId2),
                 minioSecondServer_->hiveConfig(config2Override),
                 ioExecutor_.get());
-    connector::registerConnector(hiveConnector1);
-    connector::registerConnector(hiveConnector2);
+    connector::common::registerConnector(hiveConnector1);
+    connector::common::registerConnector(hiveConnector2);
   }
 
   void TearDown() override {
     parquet::unregisterParquetReaderFactory();
     parquet::unregisterParquetWriterFactory();
-    connector::unregisterConnectorFactory(
+    connector::common::unregisterConnectorFactory(
         connector::hive::HiveConnectorFactory::kHiveConnectorName);
     S3Test::TearDown();
   }
@@ -198,8 +198,8 @@ TEST_F(S3MultipleEndpoints, baseEndpoints) {
 
   testJoin(kExpectedRows, outputDirectory, kConnectorId1, kConnectorId2);
 
-  connector::unregisterConnector(std::string(kConnectorId1));
-  connector::unregisterConnector(std::string(kConnectorId2));
+  connector::common::unregisterConnector(std::string(kConnectorId1));
+  connector::common::unregisterConnector(std::string(kConnectorId2));
 }
 
 TEST_F(S3MultipleEndpoints, bucketEndpoints) {
@@ -225,8 +225,8 @@ TEST_F(S3MultipleEndpoints, bucketEndpoints) {
 
   testJoin(kExpectedRows, outputDirectory, kConnectorId1, kConnectorId2);
 
-  connector::unregisterConnector(std::string(kConnectorId1));
-  connector::unregisterConnector(std::string(kConnectorId2));
+  connector::common::unregisterConnector(std::string(kConnectorId1));
+  connector::common::unregisterConnector(std::string(kConnectorId2));
 }
 
 } // namespace facebook::velox

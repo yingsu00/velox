@@ -29,7 +29,7 @@ class PyVector;
 // node id to a list of splits.
 using TScanFiles = std::unordered_map<
     core::PlanNodeId,
-    std::vector<std::shared_ptr<connector::ConnectorSplit>>>;
+    std::vector<std::shared_ptr<connector::common::ConnectorSplit>>>;
 using TQueryConfigs = std::unordered_map<std::string, std::string>;
 
 /// Stores the context for a particular plan generation, since a single plan may

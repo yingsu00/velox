@@ -63,7 +63,7 @@ class AsyncSource {
   // Makes an item if it is not already made. To be called on a background
   // executor.
   void prepare() {
-    common::testutil::TestValue::adjust(
+    velox::common::testutil::TestValue::adjust(
         "facebook::velox::AsyncSource::prepare", this);
     std::function<std::unique_ptr<Item>()> make = nullptr;
     {
@@ -101,7 +101,7 @@ class AsyncSource {
   // If the item is preparing on the executor, waits for the item and
   // otherwise makes it on the caller thread.
   std::unique_ptr<Item> move() {
-    common::testutil::TestValue::adjust(
+    velox::common::testutil::TestValue::adjust(
         "facebook::velox::AsyncSource::move", this);
     std::function<std::unique_ptr<Item>()> make = nullptr;
     ContinueFuture wait;

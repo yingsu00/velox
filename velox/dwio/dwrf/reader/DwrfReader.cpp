@@ -998,7 +998,7 @@ uint64_t DwrfReader::getMemoryUse(
   // Decompressors need buffers for each stream
   uint64_t decompressorMemoryBytes = 0;
   const auto compressionKind = readerBase.compressionKind();
-  if (compressionKind != common::CompressionKind_NONE) {
+  if (compressionKind != velox::common::CompressionKind_NONE) {
     for (int32_t i = 0; i < fileFooter.typesSize(); ++i) {
       if (cs.shouldReadNode(i)) {
         const auto type = fileFooter.types(i);
@@ -1006,7 +1006,7 @@ uint64_t DwrfReader::getMemoryUse(
             maxStreamsForType(type) * readerBase.compressionBlockSize();
       }
     }
-    if (compressionKind == common::CompressionKind_SNAPPY) {
+    if (compressionKind == velox::common::CompressionKind_SNAPPY) {
       decompressorMemoryBytes *= 2; // Snappy decompressor uses a second buffer
     }
   }

@@ -63,12 +63,12 @@ void makeFieldSpecs(
     const std::string& pathPrefix,
     int32_t level,
     const std::shared_ptr<const RowType>& type,
-    common::ScanSpec* spec) {
+    velox::common::ScanSpec* spec) {
   for (auto i = 0; i < type->size(); ++i) {
     std::string path =
         level == 0 ? type->nameOf(i) : pathPrefix + "." + type->nameOf(i);
-    common::Subfield subfield(path);
-    common::ScanSpec* fieldSpec = spec->getOrCreateChild(subfield);
+    velox::common::Subfield subfield(path);
+    velox::common::ScanSpec* fieldSpec = spec->getOrCreateChild(subfield);
     fieldSpec->setProjectOut(true);
     if (level == 0) {
       fieldSpec->setChannel(i);
@@ -118,7 +118,7 @@ class ColumnReaderTestBase {
       const std::shared_ptr<const Type>& requestedType,
       const std::shared_ptr<const Type>& fileType = nullptr,
       std::vector<uint64_t> nodes = {},
-      common::ScanSpec* scanSpec = nullptr) {
+      velox::common::ScanSpec* scanSpec = nullptr) {
     const std::shared_ptr<const RowType>& rowType =
         std::dynamic_pointer_cast<const RowType>(requestedType);
     if (parallelDecoding() && !executor_) {
@@ -139,7 +139,7 @@ class ColumnReaderTestBase {
 
     if (useSelectiveReader()) {
       if (!scanSpec) {
-        scanSpec_ = std::make_unique<common::ScanSpec>("root");
+        scanSpec_ = std::make_unique<velox::common::ScanSpec>("root");
         scanSpec_->addAllChildFields(*fileTypeWithId->type());
         scanSpec = scanSpec_.get();
       }
@@ -230,7 +230,7 @@ class ColumnReaderTestBase {
   std::unique_ptr<SelectiveColumnReader> selectiveColumnReader_;
 
  private:
-  std::unique_ptr<common::ScanSpec> scanSpec_;
+  std::unique_ptr<velox::common::ScanSpec> scanSpec_;
   ColumnReaderStatistics columnReaderStatistics_;
 };
 
@@ -472,7 +472,7 @@ class SchemaMismatchTest : public TestWithParam<SchemaMismatchTestParam>,
 
     // build columnReader_ and selectiveColumnReader_. They are used as
     // mismatch ColumnReaders
-    auto scanSpec2 = std::make_unique<common::ScanSpec>("root2");
+    auto scanSpec2 = std::make_unique<velox::common::ScanSpec>("root2");
     buildReader(requestedType, fileType, {}, scanSpec2.get());
     VectorPtr mismatchBatch = newBatch(requestedType);
     if (columnReader_) {
@@ -911,7 +911,7 @@ TEST_P(TestColumnReader, testIntegerRLEv2) {
   auto fileType = TypeWithId::create(rowType)->type();
   VectorPtr batch = newBatch(rowType);
   if (useSelectiveReader()) {
-    auto scanSpec = std::make_unique<common::ScanSpec>("root");
+    auto scanSpec = std::make_unique<velox::common::ScanSpec>("root");
     scanSpec->addAllChildFields(*fileType);
     scanSpec->childByName("col_0")->setFilter(
         std::make_unique<common::BigintRange>(2100, 2140, false));

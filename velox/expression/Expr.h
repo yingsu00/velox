@@ -318,11 +318,11 @@ class Expr {
     return false;
   }
 
-  std::vector<common::Subfield> extractSubfields() const;
+  std::vector<velox::common::Subfield> extractSubfields() const;
 
   virtual void extractSubfieldsImpl(
       folly::F14FastMap<std::string, int32_t>* shadowedNames,
-      std::vector<common::Subfield>* subfields) const;
+      std::vector<velox::common::Subfield>* subfields) const;
 
   template <typename T>
   const T* as() const {

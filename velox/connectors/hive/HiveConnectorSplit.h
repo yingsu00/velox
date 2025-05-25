@@ -17,7 +17,7 @@
 
 #include <optional>
 #include <unordered_map>
-#include "velox/connectors/Connector.h"
+#include "velox/connectors/common/Connector.h"
 #include "velox/connectors/hive/FileProperties.h"
 #include "velox/connectors/hive/TableHandle.h"
 #include "velox/dwio/common/Options.h"
@@ -42,7 +42,7 @@ struct RowIdProperties {
   std::string tableGuid;
 };
 
-struct HiveConnectorSplit : public connector::ConnectorSplit {
+struct HiveConnectorSplit : public connector::common::ConnectorSplit {
   const std::string filePath;
   dwio::common::FileFormat fileFormat;
   const uint64_t start;
@@ -95,7 +95,7 @@ struct HiveConnectorSplit : public connector::ConnectorSplit {
       std::optional<RowIdProperties> _rowIdProperties = std::nullopt,
       const std::optional<HiveBucketConversion>& _bucketConversion =
           std::nullopt)
-      : ConnectorSplit(connectorId, splitWeight, cacheable),
+      : connector::common::ConnectorSplit(connectorId, splitWeight, cacheable),
         filePath(_filePath),
         fileFormat(_fileFormat),
         start(_start),

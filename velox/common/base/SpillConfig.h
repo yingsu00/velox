@@ -149,7 +149,7 @@ struct SpillConfig {
   uint64_t writerFlushThresholdSize;
 
   /// CompressionKind when spilling, CompressionKind_NONE means no compression.
-  common::CompressionKind compressionKind;
+  velox::common::CompressionKind compressionKind;
 
   /// Prefix sort config when spilling, enable prefix sort when this config is
   /// set, otherwise, fallback to timsort.

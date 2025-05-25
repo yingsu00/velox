@@ -21,7 +21,7 @@ namespace facebook::velox::exec {
 PartitionStreamingWindowBuild::PartitionStreamingWindowBuild(
     const std::shared_ptr<const core::WindowNode>& windowNode,
     velox::memory::MemoryPool* pool,
-    const common::SpillConfig* spillConfig,
+    const velox::common::SpillConfig* spillConfig,
     tsan_atomic<bool>* nonReclaimableSection)
     : WindowBuild(windowNode, pool, spillConfig, nonReclaimableSection) {}
 

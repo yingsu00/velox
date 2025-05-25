@@ -160,7 +160,7 @@ struct Value {
   Value() = default;
   Value(const exec::Expr* expr) : expr(expr), subfield(nullptr) {}
 
-  Value(const common::Subfield* subfield) : expr(nullptr), subfield(subfield) {}
+  Value(const velox::common::Subfield* subfield) : expr(nullptr), subfield(subfield) {}
   ~Value() = default;
 
   bool operator==(const Value& other) const {
@@ -171,7 +171,7 @@ struct Value {
   std::string toString() const;
 
   const exec::Expr* expr;
-  const common::Subfield* subfield;
+  const velox::common::Subfield* subfield;
 };
 
 struct ValueHasher {
@@ -190,7 +190,7 @@ struct ValueComparer {
 };
 
 using SubfieldMap =
-    folly::F14FastMap<std::string, std::unique_ptr<common::Subfield>>;
+    folly::F14FastMap<std::string, std::unique_ptr<velox::common::Subfield>>;
 
 using DefinesMap =
     folly::F14FastMap<Value, AbstractOperand*, ValueHasher, ValueComparer>;
@@ -200,7 +200,7 @@ using DefinesMap =
 /// moved into a Subfield. Not thread safe for 'path'.
 AbstractOperand* pathToOperand(
     const DefinesMap& map,
-    std::vector<std::unique_ptr<common::Subfield::PathElement>>& path);
+    std::vector<std::unique_ptr<velox::common::Subfield::PathElement>>& path);
 
 const SubfieldMap*& threadSubfieldMap();
 

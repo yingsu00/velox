@@ -102,7 +102,7 @@ class RleBpDataDecoder : public facebook::velox::parquet::RleBpDecoder {
   template <bool hasNulls, typename Visitor>
   void fastPath(const uint64_t* nulls, Visitor& visitor) {
     constexpr bool hasFilter =
-        !std::is_same_v<typename Visitor::FilterType, common::AlwaysTrue>;
+        !std::is_same_v<typename Visitor::FilterType, velox::common::AlwaysTrue>;
     constexpr bool hasHook =
         !std::is_same_v<typename Visitor::HookType, dwio::common::NoHook>;
     auto rows = visitor.rows();

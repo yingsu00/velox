@@ -51,12 +51,12 @@ std::vector<Subfield> makeSubfields(const std::vector<std::string>& paths) {
   return subfields;
 }
 
-folly::F14FastMap<std::string, std::vector<const common::Subfield*>>
+folly::F14FastMap<std::string, std::vector<const velox::common::Subfield*>>
 groupSubfields(const std::vector<Subfield>& subfields) {
-  folly::F14FastMap<std::string, std::vector<const common::Subfield*>> grouped;
+  folly::F14FastMap<std::string, std::vector<const velox::common::Subfield*>> grouped;
   for (auto& subfield : subfields) {
     auto& name =
-        static_cast<const common::Subfield::NestedField&>(*subfield.path()[0])
+        static_cast<const velox::common::Subfield::NestedField&>(*subfield.path()[0])
             .name();
     grouped[name].push_back(&subfield);
   }

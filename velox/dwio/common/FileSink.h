@@ -35,7 +35,7 @@ class FileSink : public Closeable {
   struct Options {
     /// If true, allows file sink to buffer data before persist to storage.
     bool bufferWrite{true};
-    /// Connector properties are required to create a FileSink on FileSystems
+    /// connector::common::Connector properties are required to create a FileSink on FileSystems
     /// such as S3.
     const std::shared_ptr<const config::ConfigBase>& connectorProperties{
         nullptr};

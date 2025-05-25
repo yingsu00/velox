@@ -24,10 +24,10 @@ using namespace facebook;
 using namespace facebook::velox;
 
 struct TestParam {
-  common::CompressionKind compressionKind;
+  velox::common::CompressionKind compressionKind;
   bool appendRow;
 
-  TestParam(common::CompressionKind _compressionKind, bool _appendRow)
+  TestParam(velox::common::CompressionKind _compressionKind, bool _appendRow)
       : compressionKind(_compressionKind), appendRow(_appendRow) {}
 };
 
@@ -196,14 +196,14 @@ class UnsafeRowSerializerTest : public ::testing::Test,
   }
 
   bool needCompression() {
-    return compressionKind_ != common::CompressionKind::CompressionKind_NONE;
+    return compressionKind_ != velox::common::CompressionKind::CompressionKind_NONE;
   }
 
   std::shared_ptr<memory::MemoryPool> pool_;
 
  private:
   static constexpr int32_t kHeaderSize = sizeof(int32_t) * 2 + sizeof(char);
-  common::CompressionKind compressionKind_;
+  velox::common::CompressionKind compressionKind_;
   std::unique_ptr<VectorSerde::Options> options_;
   bool appendRow_;
 };

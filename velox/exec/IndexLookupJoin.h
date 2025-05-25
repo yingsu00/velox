@@ -79,8 +79,8 @@ class IndexLookupJoin : public Operator {
       "clientLookupResultSize"};
 
  private:
-  using LookupResultIter = connector::IndexSource::LookupResultIterator;
-  using LookupResult = connector::IndexSource::LookupResult;
+  using LookupResultIter = connector::common::IndexSource::LookupResultIterator;
+  using LookupResult = connector::common::IndexSource::LookupResult;
 
   // Contains the state of an input batch processing.
   struct InputBatchState {
@@ -193,14 +193,14 @@ class IndexLookupJoin : public Operator {
   const size_t numKeys_;
   const RowTypePtr probeType_;
   const RowTypePtr lookupType_;
-  const std::shared_ptr<connector::ConnectorTableHandle> lookupTableHandle_;
+  const std::shared_ptr<connector::common::ConnectorTableHandle> lookupTableHandle_;
   const std::vector<core::IndexLookupConditionPtr> lookupConditions_;
   std::unordered_map<
       std::string,
-      std::shared_ptr<connector::ConnectorColumnHandle>>
+      std::shared_ptr<connector::common::ConnectorColumnHandle>>
       lookupColumnHandles_;
-  const std::shared_ptr<connector::ConnectorQueryCtx> connectorQueryCtx_;
-  const std::shared_ptr<connector::Connector> connector_;
+  const std::shared_ptr<connector::common::ConnectorQueryCtx> connectorQueryCtx_;
+  const std::shared_ptr<connector::common::Connector> connector_;
   const size_t maxNumInputBatches_;
 
   // The lookup join plan node used to initialize this operator and reset after
@@ -230,7 +230,7 @@ class IndexLookupJoin : public Operator {
   std::vector<IdentityProjection> probeOutputProjections_;
   std::vector<IdentityProjection> lookupOutputProjections_;
 
-  std::shared_ptr<connector::IndexSource> indexSource_;
+  std::shared_ptr<connector::common::IndexSource> indexSource_;
 
   // Points to the next output row in 'lookupResult_' for processing until
   // reaches to the end of 'lookupResult_'.

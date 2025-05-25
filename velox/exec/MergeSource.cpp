@@ -314,7 +314,7 @@ BlockingReason MergeJoinSource::next(
     RowVectorPtr* data,
     bool& drained) {
   drained = false;
-  common::testutil::TestValue::adjust(
+  velox::common::testutil::TestValue::adjust(
       "facebook::velox::exec::MergeJoinSource::next", this);
   ScopedPromiseNotification notification(1);
   return state_.withWLock([&](auto& state) {
@@ -347,7 +347,7 @@ BlockingReason MergeJoinSource::next(
 BlockingReason MergeJoinSource::enqueue(
     RowVectorPtr data,
     ContinueFuture* future) {
-  common::testutil::TestValue::adjust(
+  velox::common::testutil::TestValue::adjust(
       "facebook::velox::exec::MergeJoinSource::enqueue", this);
   ScopedPromiseNotification notification(1);
   return state_.withWLock([&](auto& state) {

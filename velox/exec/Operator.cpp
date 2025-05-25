@@ -46,14 +46,14 @@ core::ExecCtx* OperatorCtx::execCtx() const {
   return execCtx_.get();
 }
 
-std::shared_ptr<connector::ConnectorQueryCtx>
+std::shared_ptr<connector::common::ConnectorQueryCtx>
 OperatorCtx::createConnectorQueryCtx(
     const std::string& connectorId,
     const std::string& planNodeId,
     memory::MemoryPool* connectorPool,
-    const common::SpillConfig* spillConfig) const {
+    const velox::common::SpillConfig* spillConfig) const {
   const auto& task = driverCtx_->task;
-  auto connectorQueryCtx = std::make_shared<connector::ConnectorQueryCtx>(
+  auto connectorQueryCtx = std::make_shared<connector::common::ConnectorQueryCtx>(
       pool_,
       connectorPool,
       task->queryCtx()->connectorSessionProperties(connectorId),
@@ -80,7 +80,7 @@ Operator::Operator(
     int32_t operatorId,
     std::string planNodeId,
     std::string operatorType,
-    std::optional<common::SpillConfig> spillConfig)
+    std::optional<velox::common::SpillConfig> spillConfig)
     : operatorCtx_(std::make_unique<OperatorCtx>(
           driverCtx,
           planNodeId,
@@ -445,7 +445,7 @@ void Operator::recordSpillStats() {
     lockedStats->addRuntimeStat(
         kSpillRuns,
         RuntimeCounter{static_cast<int64_t>(lockedSpillStats->spillRuns)});
-    common::updateGlobalSpillRunStats(lockedSpillStats->spillRuns);
+    velox::common::updateGlobalSpillRunStats(lockedSpillStats->spillRuns);
   }
 
   if (lockedSpillStats->spillMaxLevelExceededCount != 0) {
@@ -453,7 +453,7 @@ void Operator::recordSpillStats() {
         kExceededMaxSpillLevel,
         RuntimeCounter{static_cast<int64_t>(
             lockedSpillStats->spillMaxLevelExceededCount)});
-    common::updateGlobalMaxSpillLevelExceededCount(
+    velox::common::updateGlobalMaxSpillLevelExceededCount(
         lockedSpillStats->spillMaxLevelExceededCount);
   }
 

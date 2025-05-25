@@ -68,7 +68,8 @@ if(${VELOX_BUILD_RUNNER})
     velox_exec_test_lib
     velox_exec
     velox_file_test_utils
-    velox_hive_connector
+          velox_connector_common
+#    velox_hive_connector
     velox_tpch_connector
     velox_local_runner)
 

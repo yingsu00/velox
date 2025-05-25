@@ -629,7 +629,7 @@ class ReaderOptions : public io::ReaderOptions {
   bool selectiveNimbleReaderEnabled_{false};
 };
 
-struct WriterOptions {
+struct WriterOptions : public ISerializable {
   TypePtr schema{nullptr};
   velox::memory::MemoryPool* memoryPool{nullptr};
   const velox::common::SpillConfig* spillConfig{nullptr};
@@ -658,6 +658,9 @@ struct WriterOptions {
       const config::ConfigBase& session) {}
 
   virtual ~WriterOptions() = default;
+
+  folly::dynamic serialize() const override;
+  static std::unique_ptr<WriterOptions> deserialize(const folly::dynamic& obj);
 };
 
 } // namespace facebook::velox::dwio::common

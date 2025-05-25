@@ -140,13 +140,13 @@ PyPlanBuilder& PyPlanBuilder::tableScan(
   if (!subfields.empty() || !rowIndexColumnName.empty()) {
     std::unordered_map<
         std::string,
-        std::shared_ptr<connector::ConnectorColumnHandle>>
+        std::shared_ptr<connector::common::ConnectorColumnHandle>>
         assignments;
 
     for (size_t i = 0; i < outputRowSchema->size(); ++i) {
       auto name = outputRowSchema->nameOf(i);
       auto type = outputRowSchema->childAt(i);
-      std::vector<common::Subfield> requiredSubfields;
+      std::vector<velox::common::Subfield> requiredSubfields;
 
       py::object key = py::cast(name);
 
@@ -197,7 +197,7 @@ PyPlanBuilder& PyPlanBuilder::tableScan(
       .endTableScan();
 
   // Store the id of the scan and the respective splits.
-  std::vector<std::shared_ptr<connector::ConnectorSplit>> splits;
+  std::vector<std::shared_ptr<connector::common::ConnectorSplit>> splits;
   if (inputFiles.has_value()) {
     for (const auto& inputFile : *inputFiles) {
       splits.push_back(std::make_shared<connector::hive::HiveConnectorSplit>(
@@ -340,7 +340,7 @@ PyPlanBuilder& PyPlanBuilder::tpchGen(
       connectorId);
 
   // Generate one split per part.
-  std::vector<std::shared_ptr<connector::ConnectorSplit>> splits;
+  std::vector<std::shared_ptr<connector::common::ConnectorSplit>> splits;
   for (size_t i = 0; i < numParts; ++i) {
     splits.push_back(std::make_shared<connector::tpch::TpchConnectorSplit>(
         connectorId, numParts, i));

@@ -266,7 +266,7 @@ AggregationFuzzer::AggregationFuzzer(
 void AggregationFuzzer::go(const std::string& planPath) {
   Type::registerSerDe();
   connector::hive::HiveTableHandle::registerSerDe();
-  connector::hive::LocationHandle::registerSerDe();
+  connector::hive::HiveLocationHandle::registerSerDe();
   connector::hive::HiveColumnHandle::registerSerDe();
   connector::hive::HiveInsertTableHandle::registerSerDe();
   core::ITypedExpr::registerSerDe();

@@ -106,7 +106,7 @@ velox::memory::MemoryPool* DriverCtx::addOperatorPool(
       planNodeId, splitGroupId, pipelineId, driverId, operatorType);
 }
 
-std::optional<common::SpillConfig> DriverCtx::makeSpillConfig(
+std::optional<velox::common::SpillConfig> DriverCtx::makeSpillConfig(
     int32_t operatorId) const {
   const auto& queryConfig = task->queryCtx()->queryConfig();
   if (!queryConfig.spillEnabled()) {
@@ -115,17 +115,17 @@ std::optional<common::SpillConfig> DriverCtx::makeSpillConfig(
   if (task->spillDirectory().empty() && !task->hasCreateSpillDirectoryCb()) {
     return std::nullopt;
   }
-  common::GetSpillDirectoryPathCB getSpillDirPathCb =
+  velox::common::GetSpillDirectoryPathCB getSpillDirPathCb =
       [this]() -> std::string_view {
     return task->getOrCreateSpillDirectory();
   };
   const auto& spillFilePrefix =
       fmt::format("{}_{}_{}", pipelineId, driverId, operatorId);
-  common::UpdateAndCheckSpillLimitCB updateAndCheckSpillLimitCb =
+  velox::common::UpdateAndCheckSpillLimitCB updateAndCheckSpillLimitCb =
       [this](uint64_t bytes) {
         task->queryCtx()->updateSpilledBytesAndCheckLimit(bytes);
       };
-  return common::SpillConfig(
+  return velox::common::SpillConfig(
       std::move(getSpillDirPathCb),
       std::move(updateAndCheckSpillLimitCb),
       spillFilePrefix,

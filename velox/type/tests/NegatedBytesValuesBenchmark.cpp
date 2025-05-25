@@ -164,7 +164,7 @@ int32_t main(int32_t argc, char* argv[]) {
           std::make_unique<common::NegatedBytesValues>(reject_vector, false));
 
       // create MultiRange filter
-      std::vector<std::unique_ptr<common::Filter>> range_filters;
+      std::vector<std::unique_ptr<velox::common::Filter>> range_filters;
       auto front = ++(reject_vector.begin());
       auto back = reject_vector.begin();
       range_filters.emplace_back(std::make_unique<common::BytesRange>(
@@ -177,7 +177,7 @@ int32_t main(int32_t argc, char* argv[]) {
       }
       range_filters.emplace_back(std::make_unique<common::BytesRange>(
           *back, false, true, "", true, true, false));
-      multi_ranges.emplace_back(std::make_unique<common::MultiRange>(
+      multi_ranges.emplace_back(std::make_unique<velox::common::MultiRange>(
           std::move(range_filters), false));
 
       LOG(INFO) << "Generated filter for length " << len << " with size "

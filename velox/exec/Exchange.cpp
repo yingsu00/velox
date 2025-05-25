@@ -29,7 +29,7 @@ std::unique_ptr<VectorSerde::Options> getVectorSerdeOptions(
       ? std::make_unique<serializer::presto::PrestoVectorSerde::PrestoOptions>()
       : std::make_unique<VectorSerde::Options>();
   options->compressionKind =
-      common::stringToCompressionKind(queryConfig.shuffleCompressionKind());
+      velox::common::stringToCompressionKind(queryConfig.shuffleCompressionKind());
   return options;
 }
 } // namespace

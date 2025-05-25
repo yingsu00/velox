@@ -19,7 +19,7 @@
 
 #include <utility>
 
-#include "velox/connectors/Connector.h"
+#include "velox/connectors/common/Connector.h"
 #include "velox/core/Expressions.h"
 #include "velox/core/QueryConfig.h"
 #include "velox/vector/VectorStream.h"
@@ -38,7 +38,7 @@ struct InsertTableHandle {
  public:
   InsertTableHandle(
       const std::string& connectorId,
-      const std::shared_ptr<connector::ConnectorInsertTableHandle>&
+      const std::shared_ptr<connector::common::ConnectorInsertTableHandle>&
           connectorInsertTableHandle)
       : connectorId_(connectorId),
         connectorInsertTableHandle_(connectorInsertTableHandle) {}
@@ -47,17 +47,17 @@ struct InsertTableHandle {
     return connectorId_;
   }
 
-  const std::shared_ptr<connector::ConnectorInsertTableHandle>&
+  const std::shared_ptr<connector::common::ConnectorInsertTableHandle>&
   connectorInsertTableHandle() const {
     return connectorInsertTableHandle_;
   }
 
  private:
-  // Connector ID
+  // connector::common::Connector ID
   const std::string connectorId_;
 
   // Write request to a DataSink of that connector type
-  const std::shared_ptr<connector::ConnectorInsertTableHandle>
+  const std::shared_ptr<connector::common::ConnectorInsertTableHandle>
       connectorInsertTableHandle_;
 };
 
@@ -877,10 +877,10 @@ class TableScanNode : public PlanNode {
   TableScanNode(
       const PlanNodeId& id,
       RowTypePtr outputType,
-      const std::shared_ptr<connector::ConnectorTableHandle>& tableHandle,
+      const std::shared_ptr<connector::common::ConnectorTableHandle>& tableHandle,
       const std::unordered_map<
           std::string,
-          std::shared_ptr<connector::ConnectorColumnHandle>>& assignments)
+          std::shared_ptr<connector::common::ConnectorColumnHandle>>& assignments)
       : PlanNode(id),
         outputType_(std::move(outputType)),
         tableHandle_(tableHandle),
@@ -908,7 +908,7 @@ class TableScanNode : public PlanNode {
     }
 
     Builder& tableHandle(
-        std::shared_ptr<connector::ConnectorTableHandle> tableHandle) {
+        std::shared_ptr<connector::common::ConnectorTableHandle> tableHandle) {
       tableHandle_ = std::move(tableHandle);
       return *this;
     }
@@ -916,7 +916,7 @@ class TableScanNode : public PlanNode {
     Builder& assignments(
         std::unordered_map<
             std::string,
-            std::shared_ptr<connector::ConnectorColumnHandle>> assignments) {
+            std::shared_ptr<connector::common::ConnectorColumnHandle>> assignments) {
       assignments_ = std::move(assignments);
       return *this;
     }
@@ -940,11 +940,11 @@ class TableScanNode : public PlanNode {
    private:
     std::optional<PlanNodeId> id_;
     std::optional<RowTypePtr> outputType_;
-    std::optional<std::shared_ptr<connector::ConnectorTableHandle>>
+    std::optional<std::shared_ptr<connector::common::ConnectorTableHandle>>
         tableHandle_;
     std::optional<std::unordered_map<
         std::string,
-        std::shared_ptr<connector::ConnectorColumnHandle>>>
+        std::shared_ptr<connector::common::ConnectorColumnHandle>>>
         assignments_;
   };
 
@@ -965,13 +965,13 @@ class TableScanNode : public PlanNode {
     return true;
   }
 
-  const std::shared_ptr<connector::ConnectorTableHandle>& tableHandle() const {
+  const std::shared_ptr<connector::common::ConnectorTableHandle>& tableHandle() const {
     return tableHandle_;
   }
 
   const std::unordered_map<
       std::string,
-      std::shared_ptr<connector::ConnectorColumnHandle>>&
+      std::shared_ptr<connector::common::ConnectorColumnHandle>>&
   assignments() const {
     return assignments_;
   }
@@ -988,10 +988,10 @@ class TableScanNode : public PlanNode {
   void addDetails(std::stringstream& stream) const override;
 
   const RowTypePtr outputType_;
-  const std::shared_ptr<connector::ConnectorTableHandle> tableHandle_;
+  const std::shared_ptr<connector::common::ConnectorTableHandle> tableHandle_;
   const std::unordered_map<
       std::string,
-      std::shared_ptr<connector::ConnectorColumnHandle>>
+      std::shared_ptr<connector::common::ConnectorColumnHandle>>
       assignments_;
 };
 
@@ -1324,7 +1324,7 @@ class TableWriteNode : public PlanNode {
       std::shared_ptr<InsertTableHandle> insertTableHandle,
       bool hasPartitioningScheme,
       RowTypePtr outputType,
-      connector::CommitStrategy commitStrategy,
+      connector::common::CommitStrategy commitStrategy,
       const PlanNodePtr& source)
       : PlanNode(id),
         sources_{source},
@@ -1398,7 +1398,7 @@ class TableWriteNode : public PlanNode {
       return *this;
     }
 
-    Builder& commitStrategy(connector::CommitStrategy commitStrategy) {
+    Builder& commitStrategy(connector::common::CommitStrategy commitStrategy) {
       commitStrategy_ = commitStrategy;
       return *this;
     }
@@ -1451,7 +1451,7 @@ class TableWriteNode : public PlanNode {
     std::optional<std::shared_ptr<InsertTableHandle>> insertTableHandle_;
     std::optional<bool> hasPartitioningScheme_;
     std::optional<RowTypePtr> outputType_;
-    std::optional<connector::CommitStrategy> commitStrategy_;
+    std::optional<connector::common::CommitStrategy> commitStrategy_;
     std::optional<PlanNodePtr> source_;
   };
 
@@ -1491,7 +1491,7 @@ class TableWriteNode : public PlanNode {
     return hasPartitioningScheme_;
   }
 
-  connector::CommitStrategy commitStrategy() const {
+  connector::common::CommitStrategy commitStrategy() const {
     return commitStrategy_;
   }
 
@@ -1522,7 +1522,7 @@ class TableWriteNode : public PlanNode {
   const std::shared_ptr<InsertTableHandle> insertTableHandle_;
   const bool hasPartitioningScheme_;
   const RowTypePtr outputType_;
-  const connector::CommitStrategy commitStrategy_;
+  const connector::common::CommitStrategy commitStrategy_;
 };
 
 class TableWriteMergeNode : public PlanNode {
@@ -3215,7 +3215,7 @@ using BetweenIndexLookupConditionPtr =
 /// lookup table. Each join condition must use columns from both sides. For the
 /// right side, it can only use one index column. Each index column can either
 /// be a join key or a join condition once. The table scan node of the right
-/// input is translated to a connector::IndexSource within
+/// input is translated to a connector::common::IndexSource within
 /// exec::IndexLookupJoin. Only INNER and LEFT joins are supported.
 ///
 /// Take the following query for example, 't' is left table, 'u' is the right

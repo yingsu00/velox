@@ -52,7 +52,7 @@ SelectiveListColumnReader::SelectiveListColumnReader(
     const TypePtr& requestedType,
     const std::shared_ptr<const dwio::common::TypeWithId>& fileType,
     DwrfParams& params,
-    common::ScanSpec& scanSpec,
+    velox::common::ScanSpec& scanSpec,
     bool useColumnNames)
     : dwio::common::SelectiveListColumnReader(
           requestedType,
@@ -66,7 +66,7 @@ SelectiveListColumnReader::SelectiveListColumnReader(
   // count the number of selected sub-columns
   auto& childType = requestedType_->childAt(0);
   if (scanSpec_->children().empty()) {
-    scanSpec.getOrCreateChild(common::ScanSpec::kArrayElementsFieldName);
+    scanSpec.getOrCreateChild(velox::common::ScanSpec::kArrayElementsFieldName);
   }
   scanSpec_->children()[0]->setProjectOut(true);
 
@@ -88,7 +88,7 @@ SelectiveMapColumnReader::SelectiveMapColumnReader(
     const TypePtr& requestedType,
     const std::shared_ptr<const dwio::common::TypeWithId>& fileType,
     DwrfParams& params,
-    common::ScanSpec& scanSpec,
+    velox::common::ScanSpec& scanSpec,
     bool useColumnNames)
     : dwio::common::SelectiveMapColumnReader(
           requestedType,
@@ -101,8 +101,8 @@ SelectiveMapColumnReader::SelectiveMapColumnReader(
       fileType_->id(), params.flatMapContext().sequence};
   auto& stripe = params.stripeStreams();
   if (scanSpec_->children().empty()) {
-    scanSpec_->getOrCreateChild(common::ScanSpec::kMapKeysFieldName);
-    scanSpec_->getOrCreateChild(common::ScanSpec::kMapValuesFieldName);
+    scanSpec_->getOrCreateChild(velox::common::ScanSpec::kMapKeysFieldName);
+    scanSpec_->getOrCreateChild(velox::common::ScanSpec::kMapValuesFieldName);
   }
   scanSpec_->children()[0]->setProjectOut(true);
   scanSpec_->children()[1]->setProjectOut(true);

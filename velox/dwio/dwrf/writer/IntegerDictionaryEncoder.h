@@ -243,7 +243,7 @@ class IntegerDictionaryEncoder : public AbstractIntegerDictionaryEncoder {
             [dictDataWriter = dictDataWriter_.get()](
                 Integer* const buf, const uint32_t size) mutable {
               if (dictDataWriter) {
-                dictDataWriter->add(buf, common::Ranges::of(0, size), nullptr);
+                dictDataWriter->add(buf, velox::common::Ranges::of(0, size), nullptr);
                 dictDataWriter->flush();
               }
             });

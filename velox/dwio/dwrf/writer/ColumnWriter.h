@@ -38,7 +38,7 @@ class ColumnWriter {
 
   virtual uint64_t write(
       const VectorPtr& slice,
-      const common::Ranges& ranges) = 0;
+      const velox::common::Ranges& ranges) = 0;
 
   virtual void createIndexEntry() = 0;
 
@@ -175,7 +175,7 @@ class BaseColumnWriter : public ColumnWriter {
     fileStatsBuilder_ = StatisticsBuilder::create(*type.type(), options);
   }
 
-  uint64_t writeNulls(const VectorPtr& slice, const common::Ranges& ranges) {
+  uint64_t writeNulls(const VectorPtr& slice, const velox::common::Ranges& ranges) {
     if (FOLLY_UNLIKELY(ranges.size() == 0)) {
       return 0;
     }
@@ -191,7 +191,7 @@ class BaseColumnWriter : public ColumnWriter {
   /// Function used only for the cases dealing with Dictionary vectors
   uint64_t writeNulls(
       const DecodedVector& decoded,
-      const common::Ranges& ranges) {
+      const velox::common::Ranges& ranges) {
     if (FOLLY_UNLIKELY(ranges.size() == 0)) {
       return 0;
     }
@@ -256,7 +256,7 @@ class BaseColumnWriter : public ColumnWriter {
 
   WriterContext::LocalDecodedVector decode(
       const VectorPtr& slice,
-      const common::Ranges& ranges);
+      const velox::common::Ranges& ranges);
 
   const dwio::common::TypeWithId& type_;
   std::vector<std::unique_ptr<BaseColumnWriter>> children_;

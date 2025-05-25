@@ -1163,7 +1163,7 @@ TEST_F(JsonFunctionsTest, jsonStringToArrayCast) {
   auto expected = makeNullableArrayVector<StringView>(
       {{{"red"_sv, "blue"_sv}},
        {{std::nullopt, std::nullopt, "purple"_sv}},
-       common::testutil::optionalEmpty,
+       velox::common::testutil::optionalEmpty,
        std::nullopt});
 
   checkInternalFn(

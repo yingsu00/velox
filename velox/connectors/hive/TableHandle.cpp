@@ -53,7 +53,7 @@ HiveColumnHandle::ColumnType HiveColumnHandle::columnTypeFromName(
 }
 
 folly::dynamic HiveColumnHandle::serialize() const {
-  folly::dynamic obj = ConnectorColumnHandle::serializeBase("HiveColumnHandle");
+  folly::dynamic obj = connector::common::ConnectorColumnHandle::serializeBase("HiveColumnHandle");
   obj["hiveColumnHandleName"] = name_;
   obj["columnType"] = columnTypeName(columnType_);
   obj["dataType"] = dataType_->serialize();
@@ -81,14 +81,14 @@ std::string HiveColumnHandle::toString() const {
   return out.str();
 }
 
-ConnectorColumnHandlePtr HiveColumnHandle::create(const folly::dynamic& obj) {
+connector::common::ConnectorColumnHandlePtr HiveColumnHandle::create(const folly::dynamic& obj) {
   auto name = obj["hiveColumnHandleName"].asString();
   auto columnType = columnTypeFromName(obj["columnType"].asString());
   auto dataType = ISerializable::deserialize<Type>(obj["dataType"]);
   auto hiveType = ISerializable::deserialize<Type>(obj["hiveType"]);
 
   const auto& arr = obj["requiredSubfields"];
-  std::vector<common::Subfield> requiredSubfields;
+  std::vector<velox::common::Subfield> requiredSubfields;
   requiredSubfields.reserve(arr.size());
   for (auto& s : arr) {
     requiredSubfields.emplace_back(s.asString());
@@ -107,11 +107,11 @@ HiveTableHandle::HiveTableHandle(
     std::string connectorId,
     const std::string& tableName,
     bool filterPushdownEnabled,
-    common::SubfieldFilters subfieldFilters,
+    velox::common::SubfieldFilters subfieldFilters,
     const core::TypedExprPtr& remainingFilter,
     const RowTypePtr& dataColumns,
     const std::unordered_map<std::string, std::string>& tableParameters)
-    : ConnectorTableHandle(std::move(connectorId)),
+    : connector::common::ConnectorTableHandle(std::move(connectorId)),
       tableName_(tableName),
       filterPushdownEnabled_(filterPushdownEnabled),
       subfieldFilters_(std::move(subfieldFilters)),
@@ -124,7 +124,7 @@ std::string HiveTableHandle::toString() const {
   out << "table: " << tableName_;
   if (!subfieldFilters_.empty()) {
     // Sort filters by subfield for deterministic output.
-    std::map<std::string, common::Filter*> orderedFilters;
+    std::map<std::string, velox::common::Filter*> orderedFilters;
     for (const auto& [field, filter] : subfieldFilters_) {
       orderedFilters[field.toString()] = filter.get();
     }
@@ -163,7 +163,7 @@ std::string HiveTableHandle::toString() const {
 }
 
 folly::dynamic HiveTableHandle::serialize() const {
-  folly::dynamic obj = ConnectorTableHandle::serializeBase("HiveTableHandle");
+  folly::dynamic obj = connector::common::ConnectorTableHandle::serializeBase("HiveTableHandle");
   obj["tableName"] = tableName_;
   obj["filterPushdownEnabled"] = filterPushdownEnabled_;
 
@@ -191,7 +191,7 @@ folly::dynamic HiveTableHandle::serialize() const {
   return obj;
 }
 
-ConnectorTableHandlePtr HiveTableHandle::create(
+connector::common::ConnectorTableHandlePtr HiveTableHandle::create(
     const folly::dynamic& obj,
     void* context) {
   auto connectorId = obj["connectorId"].asString();
@@ -204,13 +204,13 @@ ConnectorTableHandlePtr HiveTableHandle::create(
         ISerializable::deserialize<core::ITypedExpr>(it->second, context);
   }
 
-  common::SubfieldFilters subfieldFilters;
+  velox::common::SubfieldFilters subfieldFilters;
   folly::dynamic subfieldFiltersObj = obj["subfieldFilters"];
   for (const auto& subfieldFilter : subfieldFiltersObj) {
-    common::Subfield subfield(subfieldFilter["subfield"].asString());
+    velox::common::Subfield subfield(subfieldFilter["subfield"].asString());
     auto filter =
-        ISerializable::deserialize<common::Filter>(subfieldFilter["filter"]);
-    subfieldFilters[common::Subfield(std::move(subfield.path()))] =
+        ISerializable::deserialize<velox::common::Filter>(subfieldFilter["filter"]);
+    subfieldFilters[velox::common::Subfield(std::move(subfield.path()))] =
         filter->clone();
   }
 

@@ -182,7 +182,7 @@ void OperatorTestBase::TearDown() {
 
 std::shared_ptr<Task> OperatorTestBase::assertQuery(
     const core::PlanNodePtr& plan,
-    const std::vector<std::shared_ptr<connector::ConnectorSplit>>&
+    const std::vector<std::shared_ptr<connector::common::ConnectorSplit>>&
         connectorSplits,
     const std::string& duckDbSql,
     std::optional<std::vector<uint32_t>> sortingKeys) {

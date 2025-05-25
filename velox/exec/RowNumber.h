@@ -160,8 +160,8 @@ class RowNumberHashTableSpiller : public SpillerBase {
       std::optional<SpillPartitionId> parentId,
       RowTypePtr rowType,
       HashBitRange bits,
-      const common::SpillConfig* spillConfig,
-      folly::Synchronized<common::SpillStats>* spillStats);
+      const velox::common::SpillConfig* spillConfig,
+      folly::Synchronized<velox::common::SpillStats>* spillStats);
 
   void spill();
 

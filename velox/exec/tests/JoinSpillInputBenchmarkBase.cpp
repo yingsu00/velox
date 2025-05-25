@@ -31,7 +31,7 @@ const int numSampleVectors = 100;
 
 void JoinSpillInputBenchmarkBase::setUp() {
   SpillerBenchmarkBase::setUp();
-  common::SpillConfig spillConfig;
+  velox::common::SpillConfig spillConfig;
   spillConfig.getSpillDirPathCb = [&]() -> std::string_view {
     return spillDir_;
   };

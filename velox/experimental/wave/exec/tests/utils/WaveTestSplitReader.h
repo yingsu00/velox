@@ -26,7 +26,7 @@ namespace facebook::velox::wave::test {
 class WaveTestSplitReader : public WaveSplitReader {
  public:
   WaveTestSplitReader(
-      const std::shared_ptr<connector::ConnectorSplit>& split,
+      const std::shared_ptr<connector::common::ConnectorSplit>& split,
       const SplitReaderParams& params,
       const DefinesMap* defines);
 
@@ -61,7 +61,7 @@ class WaveTestSplitReader : public WaveSplitReader {
     return stripe_->columns[0]->numValues - nextRow_;
   }
 
-  std::shared_ptr<connector::ConnectorSplit> split_;
+  std::shared_ptr<connector::common::ConnectorSplit> split_;
   SplitReaderParams params_;
   FileHandleCachedPtr fileHandleCachePtr;
   cache::AsyncDataCache* cache_{nullptr};

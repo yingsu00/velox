@@ -15,10 +15,10 @@
  */
 #pragma once
 
+#include "velox/connectors/common/Connector.h"
 #include "velox/common/base/RandomUtil.h"
 #include "velox/common/file/FileSystems.h"
 #include "velox/common/io/IoStatistics.h"
-#include "velox/connectors/Connector.h"
 #include "velox/connectors/hive/FileHandle.h"
 #include "velox/connectors/hive/HiveConnectorSplit.h"
 #include "velox/connectors/hive/HiveConnectorUtil.h"
@@ -33,27 +33,27 @@ namespace facebook::velox::connector::hive {
 
 class HiveConfig;
 
-class HiveDataSource : public DataSource {
+class HiveDataSource : public connector::common::DataSource {
  public:
   HiveDataSource(
       const RowTypePtr& outputType,
-      const std::shared_ptr<connector::ConnectorTableHandle>& tableHandle,
+      const std::shared_ptr<connector::common::ConnectorTableHandle>& tableHandle,
       const std::unordered_map<
           std::string,
-          std::shared_ptr<connector::ConnectorColumnHandle>>& columnHandles,
+          std::shared_ptr<connector::common::ConnectorColumnHandle>>& columnHandles,
       FileHandleFactory* fileHandleFactory,
       folly::Executor* executor,
-      const ConnectorQueryCtx* connectorQueryCtx,
+      const connector::common::ConnectorQueryCtx* connectorQueryCtx,
       const std::shared_ptr<HiveConfig>& hiveConfig);
 
-  void addSplit(std::shared_ptr<ConnectorSplit> split) override;
+  void addSplit(std::shared_ptr<common::ConnectorSplit> split) override;
 
   std::optional<RowVectorPtr> next(uint64_t size, velox::ContinueFuture& future)
       override;
 
   void addDynamicFilter(
       column_index_t outputChannel,
-      const std::shared_ptr<common::Filter>& filter) override;
+      const std::shared_ptr<velox::common::Filter>& filter) override;
 
   uint64_t getCompletedBytes() override {
     return ioStats_->rawBytesRead();
@@ -69,7 +69,7 @@ class HiveDataSource : public DataSource {
     return splitReader_ && splitReader_->allPrefetchIssued();
   }
 
-  void setFromDataSource(std::unique_ptr<DataSource> sourceUnique) override;
+  void setFromDataSource(std::unique_ptr<connector::common::DataSource> sourceUnique) override;
 
   int64_t estimatedRowSize() override;
 
@@ -78,23 +78,23 @@ class HiveDataSource : public DataSource {
   using WaveDelegateHookFunction =
       std::function<std::shared_ptr<wave::WaveDataSource>(
           const std::shared_ptr<HiveTableHandle>& hiveTableHandle,
-          const std::shared_ptr<common::ScanSpec>& scanSpec,
+          const std::shared_ptr<velox::common::ScanSpec>& scanSpec,
           const RowTypePtr& readerOutputType,
           std::unordered_map<std::string, std::shared_ptr<HiveColumnHandle>>*
               partitionKeys,
           FileHandleFactory* fileHandleFactory,
           folly::Executor* executor,
-          const ConnectorQueryCtx* connectorQueryCtx,
+          const connector::common::ConnectorQueryCtx* connectorQueryCtx,
           const std::shared_ptr<HiveConfig>& hiveConfig,
           const std::shared_ptr<io::IoStatistics>& ioStats,
           const exec::ExprSet* remainingFilter,
-          std::shared_ptr<common::MetadataFilter> metadataFilter)>;
+          std::shared_ptr<velox::common::MetadataFilter> metadataFilter)>;
 
   static WaveDelegateHookFunction waveDelegateHook_;
 
   static void registerWaveDelegateHook(WaveDelegateHookFunction hook);
 
-  const ConnectorQueryCtx* testingConnectorQueryCtx() const {
+  const connector::common::ConnectorQueryCtx* testingConnectorQueryCtx() const {
     return connectorQueryCtx_;
   }
 
@@ -103,13 +103,13 @@ class HiveDataSource : public DataSource {
 
   FileHandleFactory* const fileHandleFactory_;
   folly::Executor* const executor_;
-  const ConnectorQueryCtx* const connectorQueryCtx_;
+  const connector::common::ConnectorQueryCtx* const connectorQueryCtx_;
   const std::shared_ptr<HiveConfig> hiveConfig_;
   memory::MemoryPool* const pool_;
 
   std::shared_ptr<HiveConnectorSplit> split_;
   std::shared_ptr<HiveTableHandle> hiveTableHandle_;
-  std::shared_ptr<common::ScanSpec> scanSpec_;
+  std::shared_ptr<velox::common::ScanSpec> scanSpec_;
   VectorPtr output_;
   std::unique_ptr<SplitReader> splitReader_;
 
@@ -159,11 +159,11 @@ class HiveDataSource : public DataSource {
   std::unordered_map<std::string, std::shared_ptr<HiveColumnHandle>>
       infoColumns_;
   SpecialColumnNames specialColumns_{};
-  std::vector<common::Subfield> remainingFilterSubfields_;
-  folly::F14FastMap<std::string, std::vector<const common::Subfield*>>
+  std::vector<velox::common::Subfield> remainingFilterSubfields_;
+  folly::F14FastMap<std::string, std::vector<const velox::common::Subfield*>>
       subfields_;
-  common::SubfieldFilters filters_;
-  std::shared_ptr<common::MetadataFilter> metadataFilter_;
+  velox::common::SubfieldFilters filters_;
+  std::shared_ptr<velox::common::MetadataFilter> metadataFilter_;
   std::unique_ptr<exec::ExprSet> remainingFilterExprSet_;
   RowVectorPtr emptyOutput_;
   dwio::common::RuntimeStatistics runtimeStats_;

@@ -116,7 +116,7 @@ MapColumnReader::MapColumnReader(
     const TypePtr& requestedType,
     const std::shared_ptr<const dwio::common::TypeWithId>& fileType,
     ParquetParams& params,
-    common::ScanSpec& scanSpec,
+    velox::common::ScanSpec& scanSpec,
     memory::MemoryPool& pool,
     bool useColumnNames)
     : dwio::common::SelectiveMapColumnReader(
@@ -237,7 +237,7 @@ ListColumnReader::ListColumnReader(
     const TypePtr& requestedType,
     const std::shared_ptr<const dwio::common::TypeWithId>& fileType,
     ParquetParams& params,
-    common::ScanSpec& scanSpec,
+    velox::common::ScanSpec& scanSpec,
     memory::MemoryPool& pool,
     bool useColumnNames)
     : dwio::common::SelectiveListColumnReader(

@@ -130,7 +130,7 @@ class PlanBuilder {
   /// types (for all columns) in this argument as opposed to 'outputType', where
   /// you define the output types only. See 'missingColumns' test in
   /// 'TableScanTest'.
-  /// @param assignments Optional ConnectorColumnHandles.
+  /// @param assignments Optional connector::common::ConnectorColumnHandles.
   PlanBuilder& tableScan(
       const RowTypePtr& outputType,
       const std::vector<std::string>& subfieldFilters = {},
@@ -138,7 +138,7 @@ class PlanBuilder {
       const RowTypePtr& dataColumns = nullptr,
       const std::unordered_map<
           std::string,
-          std::shared_ptr<connector::ConnectorColumnHandle>>& assignments = {});
+          std::shared_ptr<connector::common::ConnectorColumnHandle>>& assignments = {});
 
   /// Add a TableScanNode to scan a Hive table.
   ///
@@ -170,7 +170,7 @@ class PlanBuilder {
       const RowTypePtr& dataColumns = nullptr,
       const std::unordered_map<
           std::string,
-          std::shared_ptr<connector::ConnectorColumnHandle>>& assignments = {});
+          std::shared_ptr<connector::common::ConnectorColumnHandle>>& assignments = {});
 
   /// Add a TableScanNode to scan a TPC-H table.
   ///
@@ -272,19 +272,19 @@ class PlanBuilder {
     /// @param tableHandle Optional tableHandle. Other builder arguments such as
     /// the `subfieldFilters` and `remainingFilter` will be ignored.
     TableScanBuilder& tableHandle(
-        std::shared_ptr<connector::ConnectorTableHandle> tableHandle) {
+        std::shared_ptr<connector::common::ConnectorTableHandle> tableHandle) {
       tableHandle_ = std::move(tableHandle);
       return *this;
     }
 
-    /// @param assignments Optional ConnectorColumnHandles.
+    /// @param assignments Optional connector::common::ConnectorColumnHandles.
     /// outputType names should match the keys in the 'assignments' map. The
     /// 'assignments' map may contain more columns than 'outputType' if some
     /// columns are only used by pushed-down filters.
     TableScanBuilder& assignments(
         std::unordered_map<
             std::string,
-            std::shared_ptr<connector::ConnectorColumnHandle>> assignments) {
+            std::shared_ptr<connector::common::ConnectorColumnHandle>> assignments) {
       assignments_ = std::move(assignments);
       return *this;
     }
@@ -307,10 +307,10 @@ class PlanBuilder {
     core::ExprPtr remainingFilter_;
     RowTypePtr dataColumns_;
     std::unordered_map<std::string, std::string> columnAliases_;
-    std::shared_ptr<connector::ConnectorTableHandle> tableHandle_;
+    std::shared_ptr<connector::common::ConnectorTableHandle> tableHandle_;
     std::unordered_map<
         std::string,
-        std::shared_ptr<connector::ConnectorColumnHandle>>
+        std::shared_ptr<connector::common::ConnectorColumnHandle>>
         assignments_;
 
     // produce filters as a FilterNode instead of pushdown.
@@ -432,7 +432,7 @@ class PlanBuilder {
     /// @param compressionKind Compression scheme to use for writing the
     /// output data files.
     TableWriterBuilder& compressionKind(
-        common::CompressionKind compressionKind) {
+        velox::common::CompressionKind compressionKind) {
       compressionKind_ = compressionKind;
       return *this;
     }
@@ -472,7 +472,7 @@ class PlanBuilder {
     std::shared_ptr<dwio::common::WriterOptions> options_;
 
     dwio::common::FileFormat fileFormat_{dwio::common::FileFormat::DWRF};
-    common::CompressionKind compressionKind_{common::CompressionKind_NONE};
+    velox::common::CompressionKind compressionKind_{common::CompressionKind_NONE};
 
     bool ensureFiles_{false};
   };
@@ -691,7 +691,7 @@ class PlanBuilder {
       const std::unordered_map<std::string, std::string>& serdeParameters = {},
       const std::shared_ptr<dwio::common::WriterOptions>& options = nullptr,
       const std::string& outputFileName = "",
-      const common::CompressionKind = common::CompressionKind_NONE,
+      const velox::common::CompressionKind = velox::common::CompressionKind_NONE,
       const RowTypePtr& schema = nullptr,
       const bool ensureFiles = false);
 

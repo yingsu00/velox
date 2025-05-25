@@ -45,10 +45,10 @@ class PlanNodeTest : public testing::Test, public test::VectorTestBase {
 TEST_F(PlanNodeTest, findFirstNode) {
   auto rowType = ROW({"name1"}, {BIGINT()});
 
-  std::shared_ptr<connector::ConnectorTableHandle> tableHandle;
+  std::shared_ptr<connector::common::ConnectorTableHandle> tableHandle;
   std::unordered_map<
       std::string,
-      std::shared_ptr<connector::ConnectorColumnHandle>>
+      std::shared_ptr<connector::common::ConnectorColumnHandle>>
       assignments;
 
   std::shared_ptr<PlanNode> tableScan3 =
@@ -135,10 +135,10 @@ TEST_F(PlanNodeTest, duplicateSortKeys) {
           "orderBy", sortingKeys, sortingOrders, false, nullptr),
       "Duplicate sorting keys are not allowed: c0");
 }
-class TestIndexTableHandle : public connector::ConnectorTableHandle {
+class TestIndexTableHandle : public connector::common::ConnectorTableHandle {
  public:
   TestIndexTableHandle()
-      : connector::ConnectorTableHandle("TestIndexConnnector") {}
+      : connector::common::ConnectorTableHandle("TestIndexConnnector") {}
 
   ~TestIndexTableHandle() override = default;
 
@@ -181,7 +181,7 @@ TEST_F(PlanNodeTest, isIndexLookupJoin) {
       nullptr,
       std::unordered_map<
           std::string,
-          std::shared_ptr<connector::ConnectorColumnHandle>>{});
+          std::shared_ptr<connector::common::ConnectorColumnHandle>>{});
   ASSERT_FALSE(isIndexLookupJoin(probeNode.get()));
   const auto buildNode = std::make_shared<TableScanNode>(
       "tableScan-build",
@@ -189,7 +189,7 @@ TEST_F(PlanNodeTest, isIndexLookupJoin) {
       indexTableHandle,
       std::unordered_map<
           std::string,
-          std::shared_ptr<connector::ConnectorColumnHandle>>{});
+          std::shared_ptr<connector::common::ConnectorColumnHandle>>{});
   ASSERT_FALSE(isIndexLookupJoin(buildNode.get()));
   const std::vector<FieldAccessTypedExprPtr> leftKeys{
       std::make_shared<FieldAccessTypedExpr>(BIGINT(), "c0")};

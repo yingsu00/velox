@@ -3197,7 +3197,7 @@ TEST_F(VectorTest, containsNullAtArrays) {
   auto data = makeNullableArrayVector<int32_t>({
       {{1, 2}},
       {{1, 2, std::nullopt, 3}},
-      common::testutil::optionalEmpty,
+      velox::common::testutil::optionalEmpty,
       std::nullopt,
       {{1, 2, 3, 4}},
   });
@@ -3214,7 +3214,7 @@ TEST_F(VectorTest, containsNullAtMaps) {
       {{{1, 10}, {2, 20}}},
       {{{3, 30}}},
       {{{1, 10}, {2, 20}, {3, std::nullopt}, {4, 40}}},
-      common::testutil::optionalEmpty,
+      velox::common::testutil::optionalEmpty,
       std::nullopt,
       {{{1, 10}, {2, 20}, {3, 30}, {4, 40}}},
   });
@@ -3250,7 +3250,7 @@ TEST_F(VectorTest, containsNullAtStructs) {
           makeNullableArrayVector<int64_t>({
               {{1, 2}},
               {{1, 2, std::nullopt, 3}},
-              common::testutil::optionalEmpty,
+              velox::common::testutil::optionalEmpty,
               {{1, 2, 3}},
               std::nullopt,
               {{1, 2, 3, 4, 5}},
@@ -3728,7 +3728,7 @@ TEST_F(VectorTest, getLargeStringBuffer) {
 TEST_F(VectorTest, mapUpdate) {
   auto base = makeNullableMapVector<int64_t, int64_t>({
       {{{1, 1}, {2, 1}}},
-      common::testutil::optionalEmpty,
+      velox::common::testutil::optionalEmpty,
       {{{3, 1}}},
       std::nullopt,
       {{{4, 1}}},
@@ -3736,7 +3736,7 @@ TEST_F(VectorTest, mapUpdate) {
   auto update = makeNullableMapVector<int64_t, int64_t>({
       {{{2, 2}, {3, 2}}},
       {{{4, 2}}},
-      common::testutil::optionalEmpty,
+      velox::common::testutil::optionalEmpty,
       {{{5, 2}}},
       std::nullopt,
   });
@@ -3803,7 +3803,7 @@ TEST_F(VectorTest, mapUpdateNullMapValue) {
 TEST_F(VectorTest, mapUpdateMultipleUpdates) {
   auto base = makeNullableMapVector<int64_t, int64_t>({
       {{{1, 1}, {2, 1}}},
-      common::testutil::optionalEmpty,
+      velox::common::testutil::optionalEmpty,
       {{{3, 1}}},
       std::nullopt,
       {{{4, 1}}},
@@ -3812,16 +3812,16 @@ TEST_F(VectorTest, mapUpdateMultipleUpdates) {
       makeNullableMapVector<int64_t, int64_t>({
           {{{2, 2}, {3, 2}}},
           {{{4, 2}}},
-          common::testutil::optionalEmpty,
+          velox::common::testutil::optionalEmpty,
           {{{5, 2}}},
           std::nullopt,
       }),
       makeNullableMapVector<int64_t, int64_t>({
           {{{3, 3}, {4, 3}}},
           std::nullopt,
-          common::testutil::optionalEmpty,
-          common::testutil::optionalEmpty,
-          common::testutil::optionalEmpty,
+          velox::common::testutil::optionalEmpty,
+          velox::common::testutil::optionalEmpty,
+          velox::common::testutil::optionalEmpty,
       }),
   };
   auto expected = makeNullableMapVector<int64_t, int64_t>({
@@ -3841,7 +3841,7 @@ TEST_F(VectorTest, mapUpdateMultipleUpdates) {
 TEST_F(VectorTest, mapUpdateConstant) {
   auto base = makeNullableMapVector<int64_t, int64_t>({
       {{{1, 1}, {2, 1}}},
-      common::testutil::optionalEmpty,
+      velox::common::testutil::optionalEmpty,
       {{{3, 1}}},
       std::nullopt,
       {{{4, 1}}},
@@ -3863,7 +3863,7 @@ TEST_F(VectorTest, mapUpdateConstant) {
 TEST_F(VectorTest, mapUpdateDictionary) {
   auto base = makeNullableMapVector<int64_t, int64_t>({
       {{{1, 1}, {2, 1}}},
-      common::testutil::optionalEmpty,
+      velox::common::testutil::optionalEmpty,
       {{{3, 1}}},
       std::nullopt,
       {{{4, 1}}},

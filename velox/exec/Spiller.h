@@ -46,7 +46,7 @@ class SpillerBase {
     return finalized_;
   }
 
-  common::SpillStats stats() const;
+  velox::common::SpillStats stats() const;
 
   std::string toString() const;
 
@@ -59,8 +59,8 @@ class SpillerBase {
       uint64_t targetFileSize,
       uint64_t maxSpillRunRows,
       std::optional<SpillPartitionId> parentId,
-      const common::SpillConfig* spillConfig,
-      folly::Synchronized<common::SpillStats>* spillStats);
+      const velox::common::SpillConfig* spillConfig,
+      folly::Synchronized<velox::common::SpillStats>* spillStats);
 
   // Invoked to spill. If 'startRowIter' is not null, then we only spill rows
   // from row container starting at the offset pointed by 'startRowIter'.
@@ -148,7 +148,7 @@ class SpillerBase {
 
   const std::optional<SpillPartitionId> parentId_;
 
-  folly::Synchronized<common::SpillStats>* const spillStats_;
+  folly::Synchronized<velox::common::SpillStats>* const spillStats_;
 
   const std::vector<CompareFlags> compareFlags_;
 
@@ -207,15 +207,15 @@ class NoRowContainerSpiller : public SpillerBase {
       std::optional<SpillPartitionId> parentId,
       HashBitRange bits,
       const std::vector<SpillSortKey>& sortingKeys,
-      const common::SpillConfig* spillConfig,
-      folly::Synchronized<common::SpillStats>* spillStats);
+      const velox::common::SpillConfig* spillConfig,
+      folly::Synchronized<velox::common::SpillStats>* spillStats);
 
   NoRowContainerSpiller(
       RowTypePtr rowType,
       std::optional<SpillPartitionId> parentId,
       HashBitRange bits,
-      const common::SpillConfig* spillConfig,
-      folly::Synchronized<common::SpillStats>* spillStats);
+      const velox::common::SpillConfig* spillConfig,
+      folly::Synchronized<velox::common::SpillStats>* spillStats);
 
   void spill(
       const SpillPartitionId& partitionId,
@@ -245,8 +245,8 @@ class SortInputSpiller : public SpillerBase {
       RowContainer* container,
       RowTypePtr rowType,
       const std::vector<SpillSortKey>& sortingKeys,
-      const common::SpillConfig* spillConfig,
-      folly::Synchronized<common::SpillStats>* spillStats)
+      const velox::common::SpillConfig* spillConfig,
+      folly::Synchronized<velox::common::SpillStats>* spillStats)
       : SpillerBase(
             container,
             std::move(rowType),
@@ -277,8 +277,8 @@ class SortOutputSpiller : public SpillerBase {
   SortOutputSpiller(
       RowContainer* container,
       RowTypePtr rowType,
-      const common::SpillConfig* spillConfig,
-      folly::Synchronized<common::SpillStats>* spillStats);
+      const velox::common::SpillConfig* spillConfig,
+      folly::Synchronized<velox::common::SpillStats>* spillStats);
 
   void spill(SpillRows& rows);
 

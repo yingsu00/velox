@@ -47,12 +47,12 @@ class HiveConnectorUtilTest : public exec::test::HiveConnectorTestBase {
 
 TEST_F(HiveConnectorUtilTest, configureReaderOptions) {
   config::ConfigBase sessionProperties({});
-  auto connectorQueryCtx = std::make_unique<connector::ConnectorQueryCtx>(
+  auto connectorQueryCtx = std::make_unique<connector::common::ConnectorQueryCtx>(
       pool_.get(),
       pool_.get(),
       &sessionProperties,
       nullptr,
-      common::PrefixSortConfig(),
+      velox::common::PrefixSortConfig(),
       nullptr,
       nullptr,
       "query.HiveConnectorUtilTest",
@@ -79,7 +79,7 @@ TEST_F(HiveConnectorUtilTest, configureReaderOptions) {
         "testConnectorId",
         "testTable",
         false,
-        common::SubfieldFilters{},
+        velox::common::SubfieldFilters{},
         nullptr,
         nullptr,
         tableParameters);
@@ -285,12 +285,12 @@ TEST_F(HiveConnectorUtilTest, cacheRetention) {
         std::make_shared<hive::HiveConfig>(std::make_shared<config::ConfigBase>(
             std::unordered_map<std::string, std::string>()));
 
-    auto connectorQueryCtx = std::make_unique<connector::ConnectorQueryCtx>(
+    auto connectorQueryCtx = std::make_unique<connector::common::ConnectorQueryCtx>(
         pool_.get(),
         pool_.get(),
         &sessionProperties,
         nullptr,
-        common::PrefixSortConfig(),
+        velox::common::PrefixSortConfig(),
         nullptr,
         nullptr,
         "query.HiveConnectorUtilTest",
@@ -305,7 +305,7 @@ TEST_F(HiveConnectorUtilTest, cacheRetention) {
         "testConnectorId",
         "testTable",
         false,
-        common::SubfieldFilters{},
+        velox::common::SubfieldFilters{},
         nullptr,
         nullptr,
         std::unordered_map<std::string, std::string>{});
@@ -341,11 +341,11 @@ TEST_F(HiveConnectorUtilTest, configureRowReaderOptions) {
   auto split =
       std::make_shared<hive::HiveConnectorSplit>("", "", FileFormat::UNKNOWN);
   auto rowType = ROW({{"float_features", MAP(INTEGER(), REAL())}});
-  auto spec = std::make_shared<common::ScanSpec>("<root>");
+  auto spec = std::make_shared<velox::common::ScanSpec>("<root>");
   spec->addAllChildFields(*rowType);
   auto* float_features = spec->childByName("float_features");
-  float_features->childByName(common::ScanSpec::kMapKeysFieldName)
-      ->setFilter(common::createBigintValues({1, 3}, false));
+  float_features->childByName(velox::common::ScanSpec::kMapKeysFieldName)
+      ->setFilter(velox::common::createBigintValues({1, 3}, false));
   float_features->setFlatMapFeatureSelection({"1", "3"});
 }
 

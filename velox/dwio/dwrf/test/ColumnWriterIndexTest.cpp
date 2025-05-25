@@ -338,7 +338,7 @@ class WriterEncodingIndexTest2 {
     // Indices are captured the same way for all stripes in the derived tests.
     for (size_t j = 0; j != stripeCount; ++j) {
       for (size_t i = 0; i != pageCount; ++i) {
-        columnWriter->write(batch, common::Ranges::of(0, 1000));
+        columnWriter->write(batch, velox::common::Ranges::of(0, 1000));
         for (auto n = 0; n < mocks.size(); ++n) {
           EXPECT_CALL(*mocks.at(n), addEntry(_))
               .WillOnce(Invoke([&, k = n](const StatisticsBuilder& builder) {
@@ -774,7 +774,7 @@ class IntegerColumnWriterDirectEncodingIndexTest : public testing::Test {
               break;
             }
           }
-          columnWriter->write(batch, common::Ranges::of(0, 1000));
+          columnWriter->write(batch, velox::common::Ranges::of(0, 1000));
           EXPECT_CALL(*mockIndexBuilderPtr, addEntry(_))
               .WillOnce(Invoke([&](const StatisticsBuilder& builder) {
                 auto stats = builder.build();
@@ -789,7 +789,7 @@ class IntegerColumnWriterDirectEncodingIndexTest : public testing::Test {
 
         // The rest of the strides are all written directly in direct encoding.
         for (size_t i = currentPage + 1; i < pageCount; ++i) {
-          columnWriter->write(batch, common::Ranges::of(0, 1000));
+          columnWriter->write(batch, velox::common::Ranges::of(0, 1000));
           if (abandonDict_) {
             if (callAbandonDict(j, i)) {
               // These calls should essentially be no-ops.
@@ -827,7 +827,7 @@ class IntegerColumnWriterDirectEncodingIndexTest : public testing::Test {
             });
       } else {
         for (size_t i = 0; i != pageCount; ++i) {
-          columnWriter->write(batch, common::Ranges::of(0, 1000));
+          columnWriter->write(batch, velox::common::Ranges::of(0, 1000));
           if (abandonDict_) {
             if (callAbandonDict(j, i)) {
               // These calls should essentially be no-ops.
@@ -950,7 +950,7 @@ class StringColumnWriterDictionaryEncodingIndexTest : public testing::Test {
     // encoding.
     for (size_t j = 0; j != stripeCount; ++j) {
       for (size_t i = 0; i != pageCount; ++i) {
-        columnWriter->write(batch, common::Ranges::of(0, 1000));
+        columnWriter->write(batch, velox::common::Ranges::of(0, 1000));
         EXPECT_CALL(*mockIndexBuilderPtr, addEntry(_))
             .WillOnce(Invoke([&](const StatisticsBuilder& builder) {
               auto stats = builder.build();
@@ -1081,7 +1081,7 @@ class StringColumnWriterDirectEncodingIndexTest : public testing::Test {
               break;
             }
           }
-          columnWriter->write(batch, common::Ranges::of(0, 1000));
+          columnWriter->write(batch, velox::common::Ranges::of(0, 1000));
           EXPECT_CALL(*mockIndexBuilderPtr, addEntry(_))
               .WillOnce(Invoke([&](const StatisticsBuilder& builder) {
                 auto stats = builder.build();
@@ -1096,7 +1096,7 @@ class StringColumnWriterDirectEncodingIndexTest : public testing::Test {
 
         // The rest of the strides are all written directly in direct encoding.
         for (size_t i = currentPage + 1; i < pageCount; ++i) {
-          columnWriter->write(batch, common::Ranges::of(0, 1000));
+          columnWriter->write(batch, velox::common::Ranges::of(0, 1000));
           if (abandonDict_) {
             if (callAbandonDict(j, i)) {
               // These calls should essentially be no-ops.
@@ -1134,7 +1134,7 @@ class StringColumnWriterDirectEncodingIndexTest : public testing::Test {
             });
       } else {
         for (size_t i = 0; i != pageCount; ++i) {
-          columnWriter->write(batch, common::Ranges::of(0, 1000));
+          columnWriter->write(batch, velox::common::Ranges::of(0, 1000));
           if (abandonDict_) {
             if (callAbandonDict(j, i)) {
               // These calls should essentially be no-ops.

@@ -79,25 +79,25 @@ int main(int argc, char** argv) {
   }
 
   // In order to read and write data and files from storage, we need to use a
-  // Connector. Let's instantiate and register a HiveConnector for this
+  // connector::common::Connector. Let's instantiate and register a HiveConnector for this
   // example:
 
   // We need a connector id string to identify the connector.
   const std::string kHiveConnectorId = "test-hive";
 
-  // Register the Hive Connector Factory.
-  connector::registerConnectorFactory(
+  // Register the Hive connector::common::Connector Factory.
+  connector::common::registerConnectorFactory(
       std::make_shared<connector::hive::HiveConnectorFactory>());
   // Create a new connector instance from the connector factory and register
   // it:
   auto hiveConnector =
-      connector::getConnectorFactory(
+      connector::common::getConnectorFactory(
           connector::hive::HiveConnectorFactory::kHiveConnectorName)
           ->newConnector(
               kHiveConnectorId,
               std::make_shared<config::ConfigBase>(
                   std::unordered_map<std::string, std::string>()));
-  connector::registerConnector(hiveConnector);
+  connector::common::registerConnector(hiveConnector);
 
   // To be able to read local files, we need to register the local file
   // filesystem. We also need to register the dwrf reader factory as well as a

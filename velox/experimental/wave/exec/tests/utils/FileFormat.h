@@ -15,8 +15,8 @@
  */
 #pragma once
 
+#include "../../../../../connectors/common/Connector.h"
 #include "velox/common/file/Region.h"
-#include "velox/connectors/Connector.h"
 #include "velox/connectors/hive/HiveConnectorSplit.h"
 #include "velox/dwio/common/TypeWithId.h"
 #include "velox/type/StringView.h"
@@ -60,7 +60,7 @@ struct Column {
   std::unique_ptr<Column> nulls;
 
   /// Location of raw data in the backing file, or 0,0 if no backing file.
-  common::Region region;
+  velox::common::Region region;
 
   std::vector<std::unique_ptr<Column>> children;
 };
@@ -218,7 +218,7 @@ class Writer {
   std::vector<std::unique_ptr<EncoderBase>> encoders_;
 };
 
-using SplitVector = std::vector<std::shared_ptr<connector::ConnectorSplit>>;
+using SplitVector = std::vector<std::shared_ptr<connector::common::ConnectorSplit>>;
 
 class Table {
  public:

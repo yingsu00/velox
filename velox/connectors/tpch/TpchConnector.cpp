@@ -59,10 +59,10 @@ std::string TpchTableHandle::toString() const {
 
 TpchDataSource::TpchDataSource(
     const std::shared_ptr<const RowType>& outputType,
-    const std::shared_ptr<connector::ConnectorTableHandle>& tableHandle,
+    const std::shared_ptr<connector::common::ConnectorTableHandle>& tableHandle,
     const std::unordered_map<
         std::string,
-        std::shared_ptr<connector::ConnectorColumnHandle>>& columnHandles,
+        std::shared_ptr<connector::common::ConnectorColumnHandle>>& columnHandles,
     velox::memory::MemoryPool* pool)
     : pool_(pool) {
   auto tpchTableHandle =
@@ -121,7 +121,7 @@ RowVectorPtr TpchDataSource::projectOutputColumns(RowVectorPtr inputVector) {
       std::move(children));
 }
 
-void TpchDataSource::addSplit(std::shared_ptr<ConnectorSplit> split) {
+void TpchDataSource::addSplit(std::shared_ptr<connector::common::ConnectorSplit> split) {
   VELOX_CHECK_EQ(
       currentSplit_,
       nullptr,

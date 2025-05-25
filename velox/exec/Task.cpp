@@ -13,10 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#include "velox/exec/Task.h"
+
+#include <string>
+
 #include <boost/lexical_cast.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
-#include <string>
 
 #include "velox/common/base/Counters.h"
 #include "velox/common/base/StatsReporter.h"
@@ -31,7 +34,6 @@
 #include "velox/exec/OperatorUtils.h"
 #include "velox/exec/OutputBufferManager.h"
 #include "velox/exec/PlanNodeStats.h"
-#include "velox/exec/Task.h"
 #include "velox/exec/TraceUtil.h"
 
 using facebook::velox::common::testutil::TestValue;
@@ -579,8 +581,9 @@ velox::memory::MemoryPool* Task::addOperatorPool(
   } else {
     nodePool = getOrAddNodePool(planNodeId);
   }
-  childPools_.push_back(nodePool->addLeafChild(fmt::format(
-      "op.{}.{}.{}.{}", planNodeId, pipelineId, driverId, operatorType)));
+  childPools_.push_back(nodePool->addLeafChild(
+      fmt::format(
+          "op.{}.{}.{}.{}", planNodeId, pipelineId, driverId, operatorType)));
   return childPools_.back().get();
 }
 
@@ -591,13 +594,14 @@ velox::memory::MemoryPool* Task::addConnectorPoolLocked(
     const std::string& operatorType,
     const std::string& connectorId) {
   auto* nodePool = getOrAddNodePool(planNodeId);
-  childPools_.push_back(nodePool->addAggregateChild(fmt::format(
-      "op.{}.{}.{}.{}.{}",
-      planNodeId,
-      pipelineId,
-      driverId,
-      operatorType,
-      connectorId)));
+  childPools_.push_back(nodePool->addAggregateChild(
+      fmt::format(
+          "op.{}.{}.{}.{}.{}",
+          planNodeId,
+          pipelineId,
+          driverId,
+          operatorType,
+          connectorId)));
   return childPools_.back().get();
 }
 
@@ -2221,7 +2225,7 @@ template <class TBridgeType, typename MemberType>
 std::shared_ptr<TBridgeType> Task::getJoinBridgeInternalLocked(
     uint32_t splitGroupId,
     const core::PlanNodeId& planNodeId,
-    MemberType SplitGroupState::*bridges_member) {
+    MemberType SplitGroupState::* bridges_member) {
   const auto& splitGroupState = splitGroupStates_[splitGroupId];
 
   auto it = (splitGroupState.*bridges_member).find(planNodeId);
@@ -2881,8 +2885,9 @@ void Task::createLocalExchangeQueuesLocked(
       queryCtx_->queryConfig().maxLocalExchangeBufferSize());
   exchange.queues.reserve(numPartitions);
   for (auto i = 0; i < numPartitions; ++i) {
-    exchange.queues.emplace_back(std::make_shared<LocalExchangeQueue>(
-        exchange.memoryManager, exchange.vectorPool, i));
+    exchange.queues.emplace_back(
+        std::make_shared<LocalExchangeQueue>(
+            exchange.memoryManager, exchange.vectorPool, i));
   }
 
   const auto partitionNode =
@@ -2890,7 +2895,7 @@ void Task::createLocalExchangeQueuesLocked(
   VELOX_CHECK_NOT_NULL(partitionNode);
   if (partitionNode->scaleWriter()) {
     exchange.scaleWriterPartitionBalancer =
-        std::make_shared<common::SkewedPartitionRebalancer>(
+        std::make_shared<velox::common::SkewedPartitionRebalancer>(
             queryCtx_->queryConfig().scaleWriterMaxPartitionsPerWriter() *
                 numPartitions,
             numPartitions,
@@ -2942,7 +2947,7 @@ Task::getLocalExchangeQueues(
   return it->second.queues;
 }
 
-const std::shared_ptr<common::SkewedPartitionRebalancer>&
+const std::shared_ptr<velox::common::SkewedPartitionRebalancer>&
 Task::getScaleWriterPartitionBalancer(
     uint32_t splitGroupId,
     const core::PlanNodeId& planNodeId) {
@@ -3574,8 +3579,8 @@ bool Task::DriverBlockingState::blocked(ContinueFuture* future) {
     VELOX_CHECK(promises_.empty());
     return false;
   }
-  auto [blockPromise, blockFuture] =
-      makeVeloxContinuePromiseContract(fmt::format(
+  auto [blockPromise, blockFuture] = makeVeloxContinuePromiseContract(
+      fmt::format(
           "DriverBlockingState {} from task {}",
           driver_->driverCtx()->driverId,
           driver_->task()->taskId()));
