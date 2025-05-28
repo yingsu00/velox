@@ -1,0 +1,186 @@
+@startuml BeforeConnectorDesign
+'--- Connector interfaces and coupling in the current monolithic design
+package velox {
+    package connector {
+        class connectorFactories <<Singleton>> {
+            static factories
+        }
+        connectorFactories --> ConnectorFactory : holds registered factories
+
+        class connectors <<Singleton>> {
+            static connectors
+        }
+        connectors --> Connector : holds registered connectors
+
+        class ConnectorRegistryFunctions <<Global>> {
+            +registerConnectorFactory(...) : bool
+            +unregisterConnectorFactory(...) : bool
+            +getConnectorFactory()
+            +registerConnector(...)  : bool
+            +unregisterConnector(...)  : bool
+            +getConnector(...) : shared_ptr<Connector>
+        }
+
+        interface ConnectorFactory {
+            +newConnector(...) <<virtual>>
+        }
+        ConnectorFactory --> Connector : newConnector
+
+        interface ConnectorSplit
+        interface ColumnHandle
+        interface ConnectorTableHandle
+        interface ConnectorInsertTableHandle
+        interface Connector
+        interface DataSource
+        interface DataSink
+        Connector --> DataSource : createDataSource()
+        Connector --> DataSink : createDataSink()
+
+
+
+
+
+        package hive {
+            class HiveConnector
+            Connector <|.. HiveConnector
+
+            class HiveConnectorFactory
+            ConnectorFactory <|.. HiveConnectorFactory
+
+            class HiveConnectorSplit
+            ConnectorSplit <|.. HiveConnectorSplit
+
+            class HiveColumnHandle
+            ColumnHandle <|.. HiveColumnHandle
+
+            class HiveTableHandle
+            ConnectorTableHandle <|.. HiveTableHandle
+
+            class HiveInsertTableHandle
+            ConnectorInsertTableHandle <|.. HiveInsertTableHandle
+
+            class HiveDataSource
+            DataSource <|.. HiveDataSource
+
+            class HiveDataSink{
+              class HiveLocationHandle
+            }
+            DataSink <|.. HiveDataSink
+
+            class SplitReader
+
+            package iceberg {
+                class IcebergSplitReader
+                SplitReader <|- IcebergSplitReader
+
+                class HiveIcebergSplit
+                HiveConnectorSplit <|- HiveIcebergSplit
+
+                class IcebergInsertTableHandle
+                HiveInsertTableHandle <|- IcebergInsertTableHandle
+            }
+
+            SplitReader -[hidden]down-> iceberg
+            HiveConnectorSplit -[hidden]down-> iceberg
+            HiveInsertTableHandle -[hidden]down-> iceberg
+        }
+
+
+
+
+        package tpch {
+            class TpchConnector
+            Connector <|.. TpchConnector
+
+            class TpchConnectorFactory
+            ConnectorFactory <|.. TpchConnectorFactory
+
+            class TpchTableHandle
+            ConnectorTableHandle <|.. TpchTableHandle
+
+        }
+
+        package fuzzer {
+            class FuzzerConnector
+            Connector <|.. FuzzerConnector
+
+            class FuzzerConnectorFactory
+            ConnectorFactory <|.. FuzzerConnectorFactory
+
+        }
+
+        ConnectorSplit -[hidden]down-> hive
+        ColumnHandle -[hidden]down-> hive
+        ConnectorTableHandle -[hidden]down-> hive
+        ConnectorInsertTableHandle -[hidden]down-> hive
+
+        ConnectorSplit -[hidden]down-> tpch
+                ColumnHandle -[hidden]down-> tpch
+                ConnectorTableHandle -[hidden]down-> tpch
+                ConnectorInsertTableHandle -[hidden]down-> tpch
+
+        ConnectorSplit -[hidden]down-> fuzzer
+'                ColumnHandle -[hidden]down-> hive
+'                ConnectorTableHandle -[hidden]down-> hive
+
+    }
+
+
+    package exec {
+        class HiveConnectorTestBase {
+            +makeHiveConnectorSplits()
+            +makeHiveConnectorSplit()
+            +makeTableHandle()
+            +makeHiveInsertTableHandle()
+            +makeColumnHandle()
+            +makeLocationHandle()
+            ConnectorObjectFactory* objectFactory_
+        }
+        HiveConnectorTestBase --> connectorFactories : getConnectorFactory("hive")
+        HiveConnectorTestBase --> connectorFactories : unregisterConnectorFactory("hive")
+        HiveConnectorTestBase --> HiveConnectorSplit : makeHiveConnectorSplit()
+        HiveConnectorTestBase --> HiveColumnHandle : makeColumnHandle()
+        HiveConnectorTestBase --> HiveTableHandle : makeTableHandle()
+        HiveConnectorTestBase --> HiveInsertTableHandle : makeInsertTableHandle()
+        HiveConnectorTestBase --> HiveDataSink : makeLocationHandle()
+
+        class XXXTest
+        XXXTest --> connectorFactories : getConnectorFactory("hive")
+        XXXTest --> ConnectorFactory : newConnector(Hive)
+'
+
+        HiveConnectorTestBase <|-XXXTest
+        HiveConnectorTestBase -[hidden]down-> XXXTest
+
+        class TableScan
+        TableScan -->  connectors : getConnector
+
+        class TableWriter
+        TableWriter -->  connectors : getConnector
+
+        TableScan -[hidden]down-> XXXTest
+'        TableWriter -[hidden]down-> XXXTest
+    }
+
+    exec -[hidden]down-> hive
+
+}
+exec -[hidden]down-> connector
+
+
+package presto {
+    class PrestoServer {
+        + registerVeloxConnectors(const fs::path&) : vector<string> <<virtual>>
+        + registerSystemConnector() <<virtual>>
+        + unregisterConnectors() <<virtual>>
+    }
+
+    class SystemConnector {
+    }
+
+}
+Connector <|..  SystemConnector
+PrestoServer --> ConnectorRegistryFunctions : getConnectorFactory(connectorName)
+PrestoServer --> ConnectorRegistryFunctions : registerConnector
+
+@enduml

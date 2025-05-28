@@ -1,0 +1,243 @@
+@startuml BeforeConnectorDesign
+'--- Connector interfaces and coupling in the current monolithic design
+package velox {
+    package connector {
+    '--- New plugin‐based design with common factory/registry
+
+
+
+        package common {
+            class connectorObjectFactories <<Singleton>> {
+                static factories
+            }
+            connectorObjectFactories --> ConnectorObjectFactory : holds registered factories
+            connectorObjectFactories -[hidden]down-> ConnectorObjectFactory
+
+            class connectors <<Singleton>> {
+                static connectors
+            }
+            connectors --> Connector : holds registered connectors
+            connectors -[hidden]down-> ConnectorFactory
+
+            class connectorFactories <<Singleton>> {
+                static factories
+            }
+            connectorFactories --> ConnectorFactory : holds registered factories
+            connectorFactories -[hidden]down-> ConnectorObjectFactory
+'            connectorFactories -[hidden]down-> Connector
+            connectorFactories -[hidden]down-> ConnectorSplit
+            connectorFactories -[hidden]down-> ConnectorColumnHandle
+            connectorFactories -[hidden]down-> ConnectorTableHandle
+            connectorFactories -[hidden]down-> ConnectorInsertTableHandle
+            connectorFactories -[hidden]down-> DataSource
+            connectorFactories -[hidden]down-> DataSink
+
+            class ConnectorRegistryFunctions <<Global>> {
+                +registerConnectorFactory(...) : bool
+                +unregisterConnectorFactory(...) : bool
+                +getConnectorFactory()
+                +registerConnector(...)  : bool
+                +unregisterConnector(...)  : bool
+                +getConnector(...) : shared_ptr<Connector>
+            }
+
+
+
+            interface ConnectorFactory {
+                +newConnector(...) <<virtual>>
+            }
+            ConnectorFactory --> Connector : newConnector
+            ConnectorFactory -[hidden]down-> Connector
+            ConnectorFactory -[hidden]down-> ConnectorSplit
+            ConnectorFactory -[hidden]down-> ConnectorColumnHandle
+'            ConnectorFactory -[hidden]down-> ConnectorTableHandle
+            ConnectorFactory -[hidden]down-> DataSource
+            ConnectorFactory -[hidden]down-> DataSink
+
+
+            interface ConnectorObjectFactory {
+              +makeConnectorSplit(...)
+              +makeTableHandle(...)
+              +makeInsertTableHandle(...)
+              +makeColumnHandle(...)
+              +makeLocationHandle(...)
+            }
+            ConnectorObjectFactory --> ConnectorSplit : makeConnectorSplit
+            ConnectorObjectFactory --> ConnectorTableHandle : makeTableHandle
+            ConnectorObjectFactory --> ConnectorInsertTableHandle : makeInsertTableHandle
+            ConnectorObjectFactory --> ConnectorColumnHandle : makeColumnHandle
+            ConnectorObjectFactory --> ConnectorLocationHandle : makeLocationHandle
+            ConnectorObjectFactory -[hidden]down-> ConnectorSplit
+            ConnectorObjectFactory -[hidden]down-> ConnectorColumnHandle
+            ConnectorObjectFactory -[hidden]down-> ConnectorTableHandle
+            ConnectorObjectFactory -[hidden]down-> ConnectorLocationHandle
+
+
+
+            interface ConnectorSplit
+            interface ConnectorColumnHandle
+            interface ConnectorLocationHandle
+            interface ConnectorTableHandle
+            interface ConnectorInsertTableHandle
+            interface ConnectorLocationHandle
+            interface Connector
+            interface DataSource
+            interface DataSink
+            Connector --> DataSource : createDataSource
+            Connector --> DataSink : createDataSink
+
+
+
+        }
+
+        package readers {
+            class SplitReader
+        }
+
+        package hive {
+            class HiveConnector
+            Connector <|.. HiveConnector
+
+            class HiveConnectorFactory
+            ConnectorFactory <|.. HiveConnectorFactory
+
+            class HiveConnectorSplit
+            ConnectorSplit <|.. HiveConnectorSplit
+
+            class HiveColumnHandle
+            ConnectorColumnHandle <|.. HiveColumnHandle
+
+            class HiveTableHandle
+            ConnectorTableHandle <|.. HiveTableHandle
+
+            class HiveInsertTableHandle
+            ConnectorInsertTableHandle <|.. HiveInsertTableHandle
+
+            class HiveDataSource
+            DataSource <|.. HiveDataSource
+
+            class HiveDataSink
+            DataSink <|.. HiveDataSink
+
+            class HiveSplitReader
+            SplitReader <|- HiveSplitReader
+
+            HiveTableHandle -[hidden]right-> HiveSplitReader
+            HiveConnector -[hidden]right-> HiveSplitReader
+        }
+
+        ConnectorSplit -[hidden]down-> hive
+'
+'        package iceberg {
+'            class IcebergConnector
+'            Connector <|.. HiveConnector
+'
+'            class IcebergConnectorFactory
+'            ConnectorFactory <|.. IcebergConnectorFactory
+'
+'            class IcebergConnectorSplit
+'            ConnectorSplit <|.. IcebergConnectorSplit
+'
+'            class IcebergColumnHandle
+'            ConnectorColumnHandle <|.. IcebergColumnHandle
+'
+'            class IcebergTableHandle
+'            ConnectorTableHandle <|.. IcebergTableHandle
+'
+'            class IcebergInsertTableHandle
+'            ConnectorInsertTableHandle <|.. IcebergInsertTableHandle
+'
+'            class IcebergDataSource
+'            DataSource <|.. IcebergDataSource
+'
+'            class IcebergDataSink
+'            DataSink <|.. IcebergDataSink
+'
+'            class IcebergSplitReader
+'            SplitReader <|- IcebergSplitReader
+'        }
+'        SplitReader -[hidden]down-> iceberg
+'        HiveConnectorSplit -[hidden]down-> iceberg
+
+
+        package tpch {
+            class TpchConnector
+            Connector <|.. TpchConnector
+
+            class TpchConnectorFactory
+            ConnectorFactory <|.. TpchConnectorFactory
+
+            class TpchTableHandle
+            ConnectorTableHandle <|.. TpchTableHandle
+
+        }
+
+        package fuzzer {
+            class FuzzerConnector
+            Connector <|.. FuzzerConnector
+
+            class FuzzerConnectorFactory
+            ConnectorFactory <|.. FuzzerConnectorFactory
+
+        }
+    }
+
+
+    package exec {
+        class HiveConnectorTestBase {
+            +makeConnectorSplits()
+            +makeConnectorSplit()
+            +makeTableHandle()
+            +makeInsertTableHandle()
+            +makeColumnHandle()
+            +makeLocationHandle()
+            ConnectorObjectFactory* objectFactory_
+        }
+        HiveConnectorTestBase --> connectorFactories : getConnectorFactory("hive")
+        HiveConnectorTestBase --> connectorFactories : unregisterConnectorFactory("hive")
+        HiveConnectorTestBase --> connectorObjectFactories : getConnectorObjectFactory("hive")
+'        HiveConnectorTestBase --> HiveConnectorSplit : makeHiveConnectorSplit()
+'        HiveConnectorTestBase --> HiveColumnHandle : makeColumnHandle()
+'        HiveConnectorTestBase --> HiveTableHandle : makeTableHandle()
+'        HiveConnectorTestBase --> HiveInsertTableHandle : makeInsertTableHandle()
+
+        class XXXTest
+        XXXTest --> connectorFactories : getConnectorFactory("hive")
+        XXXTest --> connectorObjectFactories : getConnectorObjectFactory("hive")
+        XXXTest --> ConnectorFactory : newConnector(Hive)
+        XXXTest --> ConnectorFactory : newConnector(Hive)
+
+        HiveConnectorTestBase <|-XXXTest
+        HiveConnectorTestBase -[hidden]down-> XXXTest
+
+        class TableScan
+        TableScan -->  connectors : getConnector
+
+        class TableWriter
+        TableWriter -->  connectors : getConnector
+
+        TableScan -[hidden]down-> XXXTest
+'        TableWriter -[hidden]down-> XXXTest
+    }
+
+    exec -[hidden]down-> hive
+
+}
+
+
+package presto {
+    class PrestoServer {
+        + registerVeloxConnectors(const fs::path&) : vector<string> <<virtual>>
+        + registerSystemConnector() <<virtual>>
+        + unregisterConnectors() <<virtual>>
+    }
+
+    class SystemConnector {
+    }
+
+}
+Connector <|..  SystemConnector
+PrestoServer --> ConnectorRegistryFunctions : getConnectorFactory(connectorName)
+PrestoServer --> ConnectorRegistryFunctions : registerConnector
+
+@enduml

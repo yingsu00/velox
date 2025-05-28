@@ -1,0 +1,151 @@
+@startuml BeforeConnectorDesign
+'--- Connector interfaces and coupling in the current monolithic design
+package velox {
+    package connector {
+
+
+        interface ConnectorFactory {
+            +newConnector(...) <<virtual>>
+        }
+
+        interface Connector {
+            +createDataSource(...) : unique_ptr<DataSource> <<virtual>>
+'            +createIndexSource(...) : shared_ptr<IndexSource> <<virtual>>
+            +createDataSink(...) : unique_ptr<DataSink> <<virtual>>
+            +connectorConfig() : const shared_ptr<const config::ConfigBase>& <<virtual>>
+            +canAddDynamicFilter() : bool
+        }
+
+        interface ConnectorSplit
+        interface ColumnHandle
+        interface ConnectorTableHandle
+
+        interface DataSource {
+            +addSplit(std::shared_ptr<ConnectorSplit> split) : void <<virtual>>
+            +next(std::shared_ptr<ConnectorSplit> split) : std::optional<RowVectorPtr> <<virtual>>
+        }
+
+        interface DataSink {
+           +appendData(RowVectorPtr input) : void <<virtual>>
+           +finish() : bool <<virtual>>
+           +close() : bool <<virtual>>
+           +abort() : void <<virtual>>
+           +stats() : Stats <<virtual>>
+       }
+
+
+
+       package hive {
+            class HiveConnector {
+                +createDataSource(...) : unique_ptr<DataSource> <<override>>
+                +createDataSink(...) : unique_ptr<DataSink>  <<override>>
+                const std::shared_ptr<HiveConfig> hiveConfig_
+                FileHandleFactory fileHandleFactory_
+                std::shared_ptr<ConnectorMetadata> metadata_
+            }
+            Connector <|.. HiveConnector
+
+            class HiveConnectorFactory
+            ConnectorFactory <|.. HiveConnectorFactory
+
+            class HiveConnectorSplit
+            ConnectorSplit <|.. HiveConnectorSplit
+
+            class HiveDataSource {
+                std::shared_ptr<HiveConnectorSplit> split_;
+                std::shared_ptr<HiveTableHandle> hiveTableHandle_;
+                std::shared_ptr<common::ScanSpec> scanSpec_;
+                std::unique_ptr<SplitReader> splitReader_;
+            }
+            DataSource <|- HiveDataSource
+
+            class HiveDataSink
+            DataSink <|- HiveDataSink
+
+            class SplitReader {
+                +create(...) : unique_ptr<SplitReader> <<static>>
+                +prepareSplit() : void  <<virtual>>
+                +next(...) : uint64_t <<virtual>>
+            }
+
+            package iceberg {
+                class IcebergSplitReader
+                SplitReader <|- IcebergSplitReader
+
+                class HiveIcebergSplit
+                HiveConnectorSplit <|- HiveIcebergSplit
+
+            }
+        }
+
+        package tpch {
+            class TpchConnector {
+                +createDataSource(...) : unique_ptr<DataSource> <<override>>
+                +createDataSink(...) : unique_ptr<DataSink>  <<override>>
+            }
+            Connector <|.. TpchConnector
+
+            class TpchConnectorFactory
+            ConnectorFactory <|.. TpchConnectorFactory
+
+        }
+
+        package fuzzer {
+            class FuzzerConnector {
+                +createDataSource(...) : unique_ptr<DataSource> <<override>>
+                +createDataSink(...) : unique_ptr<DataSink>  <<override>>
+            }
+            Connector <|.. FuzzerConnector
+
+            class FuzzerConnectorFactory
+            ConnectorFactory <|.. FuzzerConnectorFactory
+
+        }
+
+
+        class ConnectorRegistry <<Singleton>> {
+          +registerConnectorFactory(name, factory)
+          +getConnectorFactory(name) : ConnectorFactory
+        }
+
+        class GlobalFunctions {
+            +registerConnectorFactory(shared_ptr<ConnectorFactory>) : bool
+            +unregisterConnectorFactory(const string& connectorName) : bool
+            +registerConnector(shared_ptr<Connector> connector)  : bool
+            +unregisterConnector(shared_ptr<Connector> connector)  : bool
+            +getConnector(const std::string& connectorId) : shared_ptr<Connector>
+        }
+
+        ConnectorRegistry --> ConnectorFactory : holds registered factories
+
+    }
+
+
+    package exec {
+        class HiveConnectorTestBase {
+        +serialize(): folly::dynamic <<virtual>>
+        }
+        HiveConnectorTestBase --> HiveConnectorFactory : makeXXX(TableHandle, ColumnHandle, etc)
+
+
+        class ExecCode
+        ExecCode --> ConnectorRegistry : getConnectorFactory("hive")
+        ExecCode --> HiveConnectorFactory : newConnector(...)
+        }
+
+}
+
+package presto {
+    class PrestoServer {
+        + registerVeloxConnectors(const fs::path&) : vector<string> <<virtual>>
+        + registerSystemConnector() <<virtual>>
+        + unregisterConnectors() <<virtual>>
+    }
+
+    class SystemConnector {
+    }
+
+}
+Connector <|-  SystemConnector
+
+@enduml
