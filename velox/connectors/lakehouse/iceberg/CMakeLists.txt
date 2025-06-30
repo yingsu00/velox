@@ -11,21 +11,24 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-velox_add_library(velox_connector Connector.cpp)
 
-velox_link_libraries(velox_connector velox_common_config velox_vector)
+velox_add_library(
+  velox_lakehouse_iceberg_connector
+        EqualityDeleteFileReader.cpp
+        FilterUtil.cpp
+        IcebergConnector.cpp
+        IcebergConnectorSplit.cpp
+        IcebergConnectorUtil.cpp
+#  IcebergDataSink.cpp
+        IcebergDeleteFile.cpp
+        IcebergSplitReader.cpp
+        IcebergTableHandle.cpp
+        PositionalDeleteFileReader.cpp
+  )
 
-add_subdirectory(fuzzer)
-
-add_subdirectory(lakehouse)
-
-if(${VELOX_ENABLE_HIVE_CONNECTOR})
-  add_subdirectory(hive)
-endif()
-
-if(${VELOX_ENABLE_TPCH_CONNECTOR})
-  add_subdirectory(tpch)
-endif()
+velox_link_libraries(
+        velox_lakehouse_iceberg_connector PRIVATE  velox_connector
+         velox_lakehouse_common velox_common_io velox_dwio_catalog_fbhive )
 
 if(${VELOX_BUILD_TESTING})
   add_subdirectory(tests)
