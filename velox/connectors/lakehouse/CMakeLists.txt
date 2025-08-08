@@ -13,3 +13,4 @@
 # limitations under the License.
 
 add_subdirectory(storage_adapters)
+add_subdirectory(common)
