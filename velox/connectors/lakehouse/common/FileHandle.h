@@ -87,7 +87,9 @@ struct FileHandleKey {
 namespace std {
 template <>
 struct hash<facebook::velox::connector::lakehouse::common::FileHandleKey> {
-  size_t operator()(const facebook::velox::connector::lakehouse::common::FileHandleKey& key) const noexcept {
+  size_t operator()(
+      const facebook::velox::connector::lakehouse::common::FileHandleKey& key)
+      const noexcept {
     size_t filenameHash = std::hash<std::string>()(key.filename);
     return key.tokenProvider ? facebook::velox::bits::hashMix(
                                    filenameHash, key.tokenProvider->hash())
@@ -97,8 +99,9 @@ struct hash<facebook::velox::connector::lakehouse::common::FileHandleKey> {
 } // namespace std
 
 namespace facebook::velox::connector::lakehouse::common {
-using FileHandleCache =
-    SimpleLRUCache<facebook::velox::connector::lakehouse::common::FileHandleKey, FileHandle>;
+using FileHandleCache = SimpleLRUCache<
+    facebook::velox::connector::lakehouse::common::FileHandleKey,
+    FileHandle>;
 
 // Creates FileHandles via the Generator interface the CachedFactory requires.
 class FileHandleGenerator {

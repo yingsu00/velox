@@ -368,6 +368,7 @@ class HiveIcebergTest : public HiveConnectorTestBase {
 
  protected:
   std::shared_ptr<dwrf::Config> config_;
+  dwio::common::FileFormat fileFomat_{dwio::common::FileFormat::DWRF};
   std::function<std::unique_ptr<dwrf::DWRFFlushPolicy>()> flushPolicyFactory_;
 
   std::vector<std::shared_ptr<ConnectorSplit>> makeIcebergSplits(
