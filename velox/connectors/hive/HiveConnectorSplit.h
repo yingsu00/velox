@@ -42,7 +42,7 @@ struct RowIdProperties {
   std::string tableGuid;
 };
 
-struct HiveConnectorSplit : public connector::ConnectorSplit {
+struct ConnectorSplitBase : public connector::ConnectorSplit {
   const std::string filePath;
   dwio::common::FileFormat fileFormat;
   const uint64_t start;
@@ -72,7 +72,7 @@ struct HiveConnectorSplit : public connector::ConnectorSplit {
 
   std::optional<HiveBucketConversion> bucketConversion;
 
-  HiveConnectorSplit(
+  ConnectorSplitBase(
       const std::string& connectorId,
       const std::string& _filePath,
       dwio::common::FileFormat _fileFormat,
@@ -106,7 +106,7 @@ struct HiveConnectorSplit : public connector::ConnectorSplit {
         rowIdProperties(_rowIdProperties),
         bucketConversion(_bucketConversion) {}
 
-  ~HiveConnectorSplit() = default;
+  ~ConnectorSplitBase() = default;
 
   uint64_t size() const override;
 

@@ -16,7 +16,7 @@
 
 #include "velox/common/base/tests/GTestUtils.h"
 #include "velox/common/file/FileSystems.h"
-#include "velox/connectors/lakehouse/common/HiveConnectorSplit.h"
+#include "velox/connectors/lakehouse/common/ConnectorSplitBase.h"
 #include "velox/connectors/lakehouse/common/tests/HiveConnectorTestBase.h"
 #include "velox/connectors/lakehouse/common/tests/PlanBuilder.h"
 #include "velox/connectors/lakehouse/iceberg/IcebergDeleteFile.h"

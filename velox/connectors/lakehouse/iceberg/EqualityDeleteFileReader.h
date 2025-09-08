@@ -17,9 +17,9 @@
 #pragma once
 
 #include "velox/connectors/Connector.h"
+#include "velox/connectors/lakehouse/common/ConnectorSplitBase.h"
 #include "velox/connectors/lakehouse/common/FileHandle.h"
 #include "velox/connectors/lakehouse/common/HiveConfig.h"
-#include "velox/connectors/lakehouse/common/HiveConnectorSplit.h"
 #include "velox/dwio/common/Reader.h"
 #include "velox/expression/Expr.h"
 

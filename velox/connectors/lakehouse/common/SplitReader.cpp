@@ -17,8 +17,8 @@
 #include "velox/connectors/lakehouse/common/SplitReader.h"
 
 #include "velox/common/caching/CacheTTLController.h"
+#include "velox/connectors/lakehouse/common/ConnectorSplitBase.h"
 #include "velox/connectors/lakehouse/common/HiveConfig.h"
-#include "velox/connectors/lakehouse/common/HiveConnectorSplit.h"
 #include "velox/connectors/lakehouse/common/HiveConnectorUtil.h"
 #include "velox/connectors/lakehouse/common/TableHandleBase.h"
 #include "velox/connectors/lakehouse/iceberg/IcebergSplitReader.h"

@@ -15,7 +15,7 @@
  */
 #pragma once
 
-#include "velox/connectors/lakehouse/common/HiveConnectorSplit.h"
+#include "velox/connectors/lakehouse/common/ConnectorSplitBase.h"
 #include "velox/connectors/lakehouse/common/HiveDataSink.h"
 #include "velox/connectors/lakehouse/common/TableHandleBase.h"
 #include "velox/dwio/dwrf/common/Config.h"

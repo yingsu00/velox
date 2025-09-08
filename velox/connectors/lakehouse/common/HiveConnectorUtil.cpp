@@ -16,8 +16,8 @@
 
 #include "velox/connectors/lakehouse/common/HiveConnectorUtil.h"
 
+#include "velox/connectors/lakehouse/common/ConnectorSplitBase.h"
 #include "velox/connectors/lakehouse/common/HiveConfig.h"
-#include "velox/connectors/lakehouse/common/HiveConnectorSplit.h"
 #include "velox/dwio/common/CachedBufferedInput.h"
 #include "velox/dwio/common/DirectBufferedInput.h"
 #include "velox/expression/Expr.h"

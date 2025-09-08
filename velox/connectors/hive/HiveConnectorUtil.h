@@ -28,7 +28,7 @@ namespace facebook::velox::connector::hive {
 class HiveColumnHandle;
 class HiveTableHandle;
 class HiveConfig;
-struct HiveConnectorSplit;
+struct ConnectorSplitBase;
 
 const std::string& getColumnName(const common::Subfield& subfield);
 

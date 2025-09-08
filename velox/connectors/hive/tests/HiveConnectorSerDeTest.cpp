@@ -66,7 +66,7 @@ class HiveConnectorSerDeTest : public exec::test::HiveConnectorTestBase {
     }
   }
 
-  static void testSerde(const HiveConnectorSplit& split) {
+  static void testSerde(const ConnectorSplitBase& split) {
     const auto str = split.toString();
     const auto obj = split.serialize();
     const auto clone = ISerializable::deserialize<HiveConnectorSplit>(obj);

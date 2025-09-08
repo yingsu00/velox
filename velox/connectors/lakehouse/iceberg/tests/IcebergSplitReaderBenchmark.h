@@ -16,7 +16,7 @@
 #pragma once
 
 #include "velox/common/file/FileSystems.h"
-#include "velox/connectors/lakehouse/common/HiveConnectorSplit.h"
+#include "velox/connectors/lakehouse/common/ConnectorSplitBase.h"
 #include "velox/connectors/lakehouse/iceberg/IcebergDeleteFile.h"
 #include "velox/connectors/lakehouse/iceberg/IcebergMetadataColumns.h"
 #include "velox/connectors/lakehouse/iceberg/IcebergSplit.h"

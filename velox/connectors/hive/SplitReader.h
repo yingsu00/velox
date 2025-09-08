@@ -47,7 +47,7 @@ class MemoryPool;
 
 namespace facebook::velox::connector::hive {
 
-struct HiveConnectorSplit;
+struct ConnectorSplitBase;
 class HiveTableHandle;
 class HiveColumnHandle;
 class HiveConfig;

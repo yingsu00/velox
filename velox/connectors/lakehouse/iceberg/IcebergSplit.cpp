@@ -14,78 +14,40 @@
  * limitations under the License.
  */
 
-#include "velox/connectors/lakehouse/iceberg/IcebergSplit.h"
+#include "IcebergSplit.h"
 
-#include "velox/connectors/lakehouse/iceberg/IcebergDeleteFile.h"
+#include "IcebergDeleteFile.h"
+#include "velox/connectors/lakehouse/common/FileProperties.h"
 
 namespace facebook::velox::connector::lakehouse::iceberg {
 
-HiveIcebergSplit::HiveIcebergSplit(
-    const std::string& connectorId,
-    const std::string& filePath,
-    dwio::common::FileFormat fileFormat,
-    uint64_t start,
-    uint64_t length,
+IcebergSplit::IcebergSplit(
+    const std::string& _connectorId,
+    const std::string& _filePath,
+    dwio::common::FileFormat _fileFormat,
+    uint64_t _start,
+    uint64_t _length,
+    int64_t _splitWeight,
+    bool _cacheable,
     const std::unordered_map<std::string, std::optional<std::string>>&
-        partitionKeys,
-    std::optional<int32_t> tableBucketNumber,
-    const std::unordered_map<std::string, std::string>& customSplitInfo,
-    const std::shared_ptr<std::string>& extraFileInfo,
-    bool cacheable,
-    const std::unordered_map<std::string, std::string>& infoColumns,
-    std::optional<common::FileProperties> properties)
-    : common::HiveConnectorSplit(
-          connectorId,
-          filePath,
-          fileFormat,
-          start,
-          length,
-          partitionKeys,
-          tableBucketNumber,
-          customSplitInfo,
-          extraFileInfo,
-          /*serdeParameters=*/{},
-          /*splitWeight=*/0,
-          cacheable,
-          infoColumns,
-          properties,
-          std::nullopt,
-          std::nullopt) {
-  // TODO: Deserialize _extraFileInfo to get deleteFiles;
-}
-
-// For tests only
-HiveIcebergSplit::HiveIcebergSplit(
-    const std::string& connectorId,
-    const std::string& filePath,
-    dwio::common::FileFormat fileFormat,
-    uint64_t start,
-    uint64_t length,
-    const std::unordered_map<std::string, std::optional<std::string>>&
-        partitionKeys,
-    std::optional<int32_t> tableBucketNumber,
-    const std::unordered_map<std::string, std::string>& customSplitInfo,
-    const std::shared_ptr<std::string>& extraFileInfo,
-    bool cacheable,
-    std::vector<IcebergDeleteFile> deletes,
-    const std::unordered_map<std::string, std::string>& infoColumns,
-    std::optional<common::FileProperties> properties)
-    : common::HiveConnectorSplit(
-          connectorId,
-          filePath,
-          fileFormat,
-          start,
-          length,
-          partitionKeys,
-          tableBucketNumber,
-          customSplitInfo,
-          extraFileInfo,
-          /*serdeParameters=*/{},
-          0,
-          cacheable,
-          infoColumns,
-          properties,
-          std::nullopt,
-          std::nullopt),
-      deleteFiles(std::move(deletes)) {}
+        _partitionKeys,
+    const std::unordered_map<std::string, std::string>& _serdeParameters,
+    const std::unordered_map<std::string, std::string>& _storageParameters,
+    const std::vector<IcebergDeleteFile>& _deletes,
+    const std::unordered_map<std::string, std::string>& _infoColumns,
+    std::optional<common::FileProperties> _properties)
+    : ConnectorSplitBase(
+          _connectorId,
+          _filePath,
+          _fileFormat,
+          _start,
+          _length,
+          _splitWeight,
+          _cacheable,
+          _partitionKeys,
+          _serdeParameters,
+          _storageParameters,
+          _infoColumns,
+          _properties),
+      deleteFiles(_deletes) {}
 } // namespace facebook::velox::connector::lakehouse::iceberg

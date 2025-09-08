@@ -15,47 +15,77 @@
  */
 #pragma once
 
-#include <string>
+#include "IcebergDeleteFile.h"
+#include "velox/connectors/lakehouse/common/ConnectorSplitBase.h"
 
-#include "velox/connectors/lakehouse/common/HiveConnectorSplit.h"
-#include "velox/connectors/lakehouse/iceberg/IcebergDeleteFile.h"
+#include <string>
 
 namespace facebook::velox::connector::lakehouse::iceberg {
 
-struct HiveIcebergSplit : public connector::lakehouse::common::HiveConnectorSplit {
+struct IcebergSplit : public common::ConnectorSplitBase {
   std::vector<IcebergDeleteFile> deleteFiles;
 
-  HiveIcebergSplit(
-      const std::string& connectorId,
-      const std::string& filePath,
-      dwio::common::FileFormat fileFormat,
-      uint64_t start = 0,
-      uint64_t length = std::numeric_limits<uint64_t>::max(),
+  IcebergSplit(
+      const std::string& _connectorId,
+      const std::string& _filePath,
+      dwio::common::FileFormat _fileFormat,
+      uint64_t _start = 0,
+      uint64_t _length = std::numeric_limits<uint64_t>::max(),
       const std::unordered_map<std::string, std::optional<std::string>>&
-          partitionKeys = {},
-      std::optional<int32_t> tableBucketNumber = std::nullopt,
-      const std::unordered_map<std::string, std::string>& customSplitInfo = {},
-      const std::shared_ptr<std::string>& extraFileInfo = {},
-      bool cacheable = true,
-      const std::unordered_map<std::string, std::string>& infoColumns = {},
-      std::optional<common::FileProperties> fileProperties = std::nullopt);
+          _partitionKeys = {},
+      const std::unordered_map<std::string, std::string>& _serdeParameters = {},
+      const std::unordered_map<std::string, std::string>& _storageParameters =
+          {},
+      int64_t _splitWeight = 0,
+      bool _cacheable = true,
+      const std::vector<IcebergDeleteFile>& _deletes = {},
+      const std::unordered_map<std::string, std::string>& _infoColumns = {},
+      std::optional<common::FileProperties> _properties = std::nullopt);
+};
 
-  // For tests only
-  HiveIcebergSplit(
-      const std::string& connectorId,
-      const std::string& filePath,
-      dwio::common::FileFormat fileFormat,
-      uint64_t start = 0,
-      uint64_t length = std::numeric_limits<uint64_t>::max(),
-      const std::unordered_map<std::string, std::optional<std::string>>&
-          partitionKeys = {},
-      std::optional<int32_t> tableBucketNumber = std::nullopt,
-      const std::unordered_map<std::string, std::string>& customSplitInfo = {},
-      const std::shared_ptr<std::string>& extraFileInfo = {},
-      bool cacheable = true,
-      std::vector<IcebergDeleteFile> deletes = {},
-      const std::unordered_map<std::string, std::string>& infoColumns = {},
-      std::optional<common::FileProperties> fileProperties = std::nullopt);
+class IcebergSplitBuilder
+    : public common::ConnectorSplitBuilder<IcebergSplitBuilder> {
+ public:
+  explicit IcebergSplitBuilder(std::string filePath)
+      : IcebergSplitBuilder{std::move(filePath)} {
+    infoColumns_["$path"] = filePath_;
+  }
+
+  IcebergSplitBuilder& infoColumn(
+      const std::string& name,
+      const std::string& value) {
+    infoColumns_.emplace(std::move(name), std::move(value));
+    return *this;
+  }
+
+  IcebergSplitBuilder& fileProperties(common::FileProperties fileProperties) {
+    fileProperties_ = fileProperties;
+    return *this;
+  }
+
+  std::shared_ptr<IcebergSplit> build() const {
+    return std::make_shared<IcebergSplit>(
+        connectorId_,
+        filePath_,
+        fileFormat_, // dwio::common::FileFormat
+        start_,
+        length_,
+        partitionKeyValues_,
+//        serdeParameters_,
+        storageParameters_,
+        splitWeight_,
+        cacheable_,
+        deleteFiles_,
+        infoColumns_,
+        fileProperties_);
+  }
+
+ private:
+
+//  std::unordered_map<std::string, std::string> serdeParameters_ = {};
+  std::unordered_map<std::string, std::string> storageParameters_ = {};
+
+  std::vector<IcebergDeleteFile> deleteFiles_;
 };
 
 } // namespace facebook::velox::connector::lakehouse::iceberg
