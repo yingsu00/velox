@@ -15,18 +15,20 @@
  */
 
 #pragma once
+
 #include <folly/Executor.h>
 #include <folly/container/F14Map.h>
 
 #include "velox/connectors/Connector.h"
 #include "velox/connectors/lakehouse/common/FileHandle.h"
+#include "velox/connectors/lakehouse/common/TableHandleBase.h"
 #include "velox/dwio/common/BufferedInput.h"
 #include "velox/dwio/common/Reader.h"
 
 namespace facebook::velox::connector::lakehouse::common {
 
-class HiveColumnHandle;
-class HiveTableHandle;
+class ColumnHandleBase;
+class TableHandleBase;
 class HiveConfig;
 struct HiveConnectorSplit;
 
@@ -38,7 +40,7 @@ void checkColumnNameLowerCase(
     const velox::common::SubfieldFilters& filters,
     const std::unordered_map<
         std::string,
-        std::shared_ptr<const HiveColumnHandle>>& infoColumns);
+        std::shared_ptr<const ColumnHandleBase>>& infoColumns);
 
 void checkColumnNameLowerCase(const core::TypedExprPtr& typeExpr);
 
@@ -55,10 +57,10 @@ std::shared_ptr<velox::common::ScanSpec> makeScanSpec(
     const RowTypePtr& dataColumns,
     const std::unordered_map<
         std::string,
-        std::shared_ptr<const HiveColumnHandle>>& partitionKeys,
+        std::shared_ptr<const ColumnHandleBase>>& partitionKeys,
     const std::unordered_map<
         std::string,
-        std::shared_ptr<const HiveColumnHandle>>& infoColumns,
+        std::shared_ptr<const ColumnHandleBase>>& infoColumns,
     const SpecialColumnNames& specialColumns,
     bool disableStatsBasedFilterReorder,
     memory::MemoryPool* pool);
@@ -66,7 +68,7 @@ std::shared_ptr<velox::common::ScanSpec> makeScanSpec(
 void configureReaderOptions(
     const std::shared_ptr<const common::HiveConfig>& config,
     const ConnectorQueryCtx* connectorQueryCtx,
-    const std::shared_ptr<const HiveTableHandle>& hiveTableHandle,
+    const TableHandleBasePtr& tableHandle,
     const std::shared_ptr<const HiveConnectorSplit>& hiveSplit,
     dwio::common::ReaderOptions& readerOptions);
 
@@ -96,7 +98,7 @@ bool testFilters(
         partitionKey,
     const std::unordered_map<
         std::string,
-        std::shared_ptr<const HiveColumnHandle>>& partitionKeysHandle,
+        std::shared_ptr<const ColumnHandleBase>>& partitionKeysHandle,
     bool asLocalTime);
 
 std::unique_ptr<dwio::common::BufferedInput> createBufferedInput(

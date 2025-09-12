@@ -17,11 +17,11 @@
 
 #include "velox/common/file/FileSystems.h"
 #include "velox/connectors/lakehouse/common/HiveConnectorSplit.h"
-#include "velox/connectors/lakehouse/common/TableHandle.h"
 #include "velox/connectors/lakehouse/iceberg/IcebergDeleteFile.h"
 #include "velox/connectors/lakehouse/iceberg/IcebergMetadataColumns.h"
 #include "velox/connectors/lakehouse/iceberg/IcebergSplit.h"
 #include "velox/connectors/lakehouse/iceberg/IcebergSplitReader.h"
+#include "velox/connectors/lakehouse/iceberg/IcebergTableHandle.h"
 #include "velox/dwio/common/tests/utils/DataSetBuilder.h"
 #include "velox/dwio/dwrf/RegisterDwrfReader.h"
 #include "velox/dwio/dwrf/writer/Writer.h"

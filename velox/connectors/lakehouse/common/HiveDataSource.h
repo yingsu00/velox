@@ -23,7 +23,7 @@
 #include "velox/connectors/lakehouse/common/HiveConnectorSplit.h"
 #include "velox/connectors/lakehouse/common/HiveConnectorUtil.h"
 #include "velox/connectors/lakehouse/common/SplitReader.h"
-#include "velox/connectors/lakehouse/common/TableHandle.h"
+#include "velox/connectors/lakehouse/common/TableHandleBase.h"
 #include "velox/dwio/common/Statistics.h"
 #include "velox/exec/OperatorUtils.h"
 #include "velox/expression/Expr.h"
@@ -78,10 +78,10 @@ class HiveDataSource : public DataSource {
 
   using WaveDelegateHookFunction =
       std::function<std::shared_ptr<wave::WaveDataSource>(
-          const HiveTableHandlePtr& hiveTableHandle,
+          const TableHandleBasePtr& tableHandle,
           const std::shared_ptr<velox::common::ScanSpec>& scanSpec,
           const RowTypePtr& readerOutputType,
-          std::unordered_map<std::string, HiveColumnHandlePtr>* partitionKeys,
+          ColumnHandleBaseMap* partitionKeys,
           FileHandleFactory* fileHandleFactory,
           folly::Executor* executor,
           const ConnectorQueryCtx* connectorQueryCtx,
@@ -108,7 +108,7 @@ class HiveDataSource : public DataSource {
   memory::MemoryPool* const pool_;
 
   std::shared_ptr<HiveConnectorSplit> split_;
-  HiveTableHandlePtr hiveTableHandle_;
+  TableHandleBasePtr tableHandle_;
   std::shared_ptr<velox::common::ScanSpec> scanSpec_;
   VectorPtr output_;
   std::unique_ptr<SplitReader> splitReader_;
@@ -120,7 +120,7 @@ class HiveDataSource : public DataSource {
 
   // Column handles for the partition key columns keyed on partition key column
   // name.
-  std::unordered_map<std::string, HiveColumnHandlePtr> partitionKeys_;
+  ColumnHandleBaseMap partitionKeys_;
 
   std::shared_ptr<io::IoStatistics> ioStats_;
   std::shared_ptr<filesystems::File::IoStats> fsStats_;
@@ -152,7 +152,7 @@ class HiveDataSource : public DataSource {
   core::ExpressionEvaluator* const expressionEvaluator_;
 
   // Column handles for the Split info columns keyed on their column names.
-  std::unordered_map<std::string, HiveColumnHandlePtr> infoColumns_;
+  ColumnHandleBaseMap infoColumns_;
   SpecialColumnNames specialColumns_{};
   std::vector<velox::common::Subfield> remainingFilterSubfields_;
   folly::F14FastMap<std::string, std::vector<const velox::common::Subfield*>>

@@ -95,7 +95,7 @@ std::string IcebergFileNameGenerator::toString() const {
 } // namespace
 
 IcebergInsertTableHandle::IcebergInsertTableHandle(
-    std::vector<std::shared_ptr<const common::HiveColumnHandle>> inputColumns,
+    std::vector<ColumnHandlePtr> inputColumns,
     std::shared_ptr<const common::LocationHandle> locationHandle,
     std::shared_ptr<const IcebergPartitionSpec> partitionSpec,
     dwio::common::FileFormat tableStorageFormat,

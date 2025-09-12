@@ -19,7 +19,7 @@
 #include "velox/connectors/Connector.h"
 #include "velox/connectors/lakehouse/common/HiveConfig.h"
 #include "velox/connectors/lakehouse/common/PartitionIdGenerator.h"
-#include "velox/connectors/lakehouse/common/TableHandle.h"
+#include "velox/connectors/lakehouse/common/TableHandleBase.h"
 #include "velox/dwio/common/Options.h"
 #include "velox/dwio/common/Writer.h"
 #include "velox/dwio/common/WriterFactory.h"
@@ -237,7 +237,7 @@ class HiveInsertFileNameGenerator : public FileNameGenerator {
 class HiveInsertTableHandle : public ConnectorInsertTableHandle {
  public:
   HiveInsertTableHandle(
-      std::vector<std::shared_ptr<const HiveColumnHandle>> inputColumns,
+      std::vector<ColumnHandlePtr> inputColumns,
       std::shared_ptr<const LocationHandle> locationHandle,
       dwio::common::FileFormat storageFormat = dwio::common::FileFormat::DWRF,
       std::shared_ptr<const HiveBucketProperty> bucketProperty = nullptr,
@@ -275,8 +275,14 @@ class HiveInsertTableHandle : public ConnectorInsertTableHandle {
           "ensureFiles is not supported with bucketing");
 
       for (const auto& inputColumn : inputColumns_) {
+        auto inputColumnBase =
+            std::dynamic_pointer_cast<const ColumnHandleBase>(inputColumn);
         VELOX_CHECK(
-            !inputColumn->isPartitionKey(),
+            inputColumnBase,
+            "{}} is not ColumnHandleBase",
+            inputColumn->name());
+        VELOX_CHECK(
+            !inputColumnBase->isPartitionKey(),
             "ensureFiles is not supported with partition keys in the data");
       }
     }
@@ -284,8 +290,7 @@ class HiveInsertTableHandle : public ConnectorInsertTableHandle {
 
   virtual ~HiveInsertTableHandle() = default;
 
-  const std::vector<std::shared_ptr<const HiveColumnHandle>>& inputColumns()
-      const {
+  const std::vector<ColumnHandlePtr>& inputColumns() const {
     return inputColumns_;
   }
 
@@ -338,7 +343,7 @@ class HiveInsertTableHandle : public ConnectorInsertTableHandle {
   std::string toString() const override;
 
  private:
-  const std::vector<std::shared_ptr<const HiveColumnHandle>> inputColumns_;
+  const std::vector<ColumnHandlePtr> inputColumns_;
   const std::shared_ptr<const LocationHandle> locationHandle_;
   const dwio::common::FileFormat storageFormat_;
   const std::shared_ptr<const HiveBucketProperty> bucketProperty_;
@@ -440,7 +445,8 @@ struct HiveWriterInfo {
       std::shared_ptr<memory::MemoryPool> _sortPool)
       : writerParameters(std::move(parameters)),
         nonReclaimableSectionHolder(new tsan_atomic<bool>(false)),
-        spillStats(std::make_unique<folly::Synchronized<velox::common::SpillStats>>()),
+        spillStats(
+            std::make_unique<folly::Synchronized<velox::common::SpillStats>>()),
         writerPool(std::move(_writerPool)),
         sinkPool(std::move(_sinkPool)),
         sortPool(std::move(_sortPool)) {}
@@ -449,7 +455,8 @@ struct HiveWriterInfo {
   const std::unique_ptr<tsan_atomic<bool>> nonReclaimableSectionHolder;
   /// Collects the spill stats from sort writer if the spilling has been
   /// triggered.
-  const std::unique_ptr<folly::Synchronized<velox::common::SpillStats>> spillStats;
+  const std::unique_ptr<folly::Synchronized<velox::common::SpillStats>>
+      spillStats;
   const std::shared_ptr<memory::MemoryPool> writerPool;
   const std::shared_ptr<memory::MemoryPool> sinkPool;
   const std::shared_ptr<memory::MemoryPool> sortPool;
@@ -733,13 +740,16 @@ FOLLY_ALWAYS_INLINE std::ostream& operator<<(
 } // namespace facebook::velox::connector::lakehouse::common
 
 template <>
-struct fmt::formatter<facebook::velox::connector::lakehouse::common::HiveDataSink::State>
+struct fmt::formatter<
+    facebook::velox::connector::lakehouse::common::HiveDataSink::State>
     : formatter<std::string> {
   auto format(
       facebook::velox::connector::lakehouse::common::HiveDataSink::State s,
       format_context& ctx) const {
     return formatter<std::string>::format(
-        facebook::velox::connector::lakehouse::common::HiveDataSink::stateString(s), ctx);
+        facebook::velox::connector::lakehouse::common::HiveDataSink::
+            stateString(s),
+        ctx);
   }
 };
 
@@ -748,7 +758,8 @@ struct fmt::formatter<
     facebook::velox::connector::lakehouse::common::LocationHandle::TableType>
     : formatter<int> {
   auto format(
-      facebook::velox::connector::lakehouse::common::LocationHandle::TableType s,
+      facebook::velox::connector::lakehouse::common::LocationHandle::TableType
+          s,
       format_context& ctx) const {
     return formatter<int>::format(static_cast<int>(s), ctx);
   }

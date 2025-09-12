@@ -25,7 +25,7 @@ namespace facebook::velox::connector::lakehouse::iceberg {
 class IcebergInsertTableHandle final : public common::HiveInsertTableHandle {
  public:
   IcebergInsertTableHandle(
-      std::vector<std::shared_ptr<const common::HiveColumnHandle>> inputColumns,
+      std::vector<ColumnHandlePtr> inputColumns,
       std::shared_ptr<const common::LocationHandle> locationHandle,
       std::shared_ptr<const IcebergPartitionSpec> partitionSpec,
       dwio::common::FileFormat tableStorageFormat =

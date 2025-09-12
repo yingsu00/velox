@@ -995,25 +995,20 @@ TEST_F(HiveIcebergTest, testPartitionedRead) {
   connector::ColumnHandleMap assignments;
   assignments.insert(
       {"c0",
-       std::make_shared<common::HiveColumnHandle>(
+       std::make_shared<common::ColumnHandleBase>(
            "c0",
-           common::HiveColumnHandle::ColumnType::kRegular,
-           rowType->childAt(0),
+           common::ColumnHandleBase::ColumnType::kRegular,
            rowType->childAt(0))});
 
   std::vector<velox::common::Subfield> requiredSubFields;
-  common::HiveColumnHandle::ColumnParseParameters columnParseParameters;
-  columnParseParameters.partitionDateValueFormat =
-      common::HiveColumnHandle::ColumnParseParameters::kDaysSinceEpoch;
+
   assignments.insert(
       {"ds",
-       std::make_shared<common::HiveColumnHandle>(
+       std::make_shared<common::ColumnHandleBase>(
            "ds",
-           common::HiveColumnHandle::ColumnType::kPartitionKey,
+           common::ColumnHandleBase::ColumnType::kPartitionKey,
            rowType->childAt(1),
-           rowType->childAt(1),
-           std::move(requiredSubFields),
-           columnParseParameters)});
+           std::move(requiredSubFields))});
 
   auto plan = PlanBuilder(pool_.get())
                   .tableScan(rowType, {}, "", nullptr, assignments)

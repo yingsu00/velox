@@ -23,7 +23,7 @@
 #include "velox/connectors/lakehouse/common/HiveConfig.h"
 #include "velox/connectors/lakehouse/common/HiveConnectorUtil.h"
 #include "velox/connectors/lakehouse/common/HivePartitionFunction.h"
-#include "velox/connectors/lakehouse/common/TableHandle.h"
+#include "velox/connectors/lakehouse/common/TableHandleBase.h"
 #include "velox/core/ITypedExpr.h"
 #include "velox/dwio/common/Options.h"
 #include "velox/dwio/common/SortingWriter.h"
@@ -81,7 +81,10 @@ std::vector<column_index_t> getPartitionChannels(
 
   for (column_index_t i = 0; i < insertTableHandle->inputColumns().size();
        i++) {
-    if (insertTableHandle->inputColumns()[i]->isPartitionKey()) {
+    auto inputColumnBase =
+        std::dynamic_pointer_cast<const ColumnHandleBase>(insertTableHandle->inputColumns()[i]);
+    VELOX_CHECK(inputColumnBase);
+    if (inputColumnBase->isPartitionKey()) {
       channels.push_back(i);
     }
   }
@@ -96,7 +99,10 @@ std::vector<column_index_t> getNonPartitionChannels(
 
   for (column_index_t i = 0; i < insertTableHandle->inputColumns().size();
        i++) {
-    if (!insertTableHandle->inputColumns()[i]->isPartitionKey()) {
+    auto inputColumnBase =
+        std::dynamic_pointer_cast<const ColumnHandleBase>(insertTableHandle->inputColumns()[i]);
+    VELOX_CHECK(inputColumnBase);
+    if (inputColumnBase->isPartitionKey()) {
       dataChannels.push_back(i);
     }
   }
@@ -1078,7 +1084,10 @@ HiveWriterParameters::UpdateMode HiveDataSink::getUpdateMode() const {
 bool HiveInsertTableHandle::isPartitioned() const {
   return std::any_of(
       inputColumns_.begin(), inputColumns_.end(), [](auto column) {
-        return column->isPartitionKey();
+        auto inputColumnBase =
+            std::dynamic_pointer_cast<const ColumnHandleBase>(column);
+        VELOX_CHECK(inputColumnBase);
+        return inputColumnBase->isPartitionKey();
       });
 }
 
@@ -1126,7 +1135,7 @@ folly::dynamic HiveInsertTableHandle::serialize() const {
 
 HiveInsertTableHandlePtr HiveInsertTableHandle::create(
     const folly::dynamic& obj) {
-  auto inputColumns = ISerializable::deserialize<std::vector<HiveColumnHandle>>(
+  auto inputColumns = ISerializable::deserialize<std::vector<ColumnHandle>>(
       obj["inputColumns"]);
   auto locationHandle =
       ISerializable::deserialize<LocationHandle>(obj["locationHandle"]);
@@ -1180,8 +1189,11 @@ std::string HiveInsertTableHandle::toString() const {
     out << " none";
   }
   out << "], [inputColumns: [";
-  for (const auto& i : inputColumns_) {
-    out << " " << i->toString();
+  for (const auto& column : inputColumns_) {
+    auto columnBase =
+        std::dynamic_pointer_cast<const ColumnHandleBase>(column);
+    VELOX_CHECK(columnBase);
+    out << " " << columnBase->toString();
   }
   out << " ], locationHandle: " << locationHandle_->toString();
   if (bucketProperty_) {

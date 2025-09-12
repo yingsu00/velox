@@ -28,7 +28,8 @@ velox_add_library(
   HivePartitionUtil.cpp
   PartitionIdGenerator.cpp
   SplitReader.cpp
-  TableHandle.cpp)
+  TableHandleBase.cpp
+)
 
 velox_link_libraries(
   velox_connector_lakehouse_common

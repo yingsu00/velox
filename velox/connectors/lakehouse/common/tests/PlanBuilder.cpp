@@ -18,7 +18,7 @@
 
 #include "velox/common/base/Status.h"
 #include "velox/connectors/lakehouse/common/HiveConnector.h"
-#include "velox/connectors/lakehouse/common/TableHandle.h"
+#include "velox/connectors/lakehouse/common/TableHandleBase.h"
 #include "velox/connectors/tpcds/TpcdsConnector.h"
 #include "velox/core/FilterToExpression.h"
 #include "velox/duckdb/conversion/DuckParser.h"
@@ -211,11 +211,8 @@ core::PlanNodePtr PlanBuilder::TableScanBuilder::build(core::PlanNodeId id) {
     if (!hasAssignments) {
       assignments_.insert(
           {name,
-           std::make_shared<HiveColumnHandle>(
-               hiveColumnName,
-               HiveColumnHandle::ColumnType::kRegular,
-               type,
-               type)});
+           std::make_shared<ColumnHandleBase>(
+               hiveColumnName, ColumnHandleBase::ColumnType::kRegular, type)});
     }
   }
 
@@ -246,7 +243,7 @@ core::PlanNodePtr PlanBuilder::TableScanBuilder::build(core::PlanNodeId id) {
   }
 
   if (!tableHandle_) {
-    tableHandle_ = std::make_shared<HiveTableHandle>(
+    tableHandle_ = std::make_shared<TableHandleBase>(
         connectorId_,
         tableName_,
         true,
@@ -277,22 +274,19 @@ core::PlanNodePtr PlanBuilder::TableWriterBuilder::build(core::PlanNodeId id) {
   // columnHandles, bucketProperty and locationHandle.
   if (!insertHandle_) {
     // Create column handles.
-    std::vector<
-        std::shared_ptr<const connector::lakehouse::common::HiveColumnHandle>>
-        columnHandles;
+    std::vector<ColumnHandlePtr> columnHandles;
     for (auto i = 0; i < outputType->size(); ++i) {
       const auto column = outputType->nameOf(i);
       const bool isPartitionKey =
           std::find(partitionBy_.begin(), partitionBy_.end(), column) !=
           partitionBy_.end();
       columnHandles.push_back(
-          std::make_shared<connector::lakehouse::common::HiveColumnHandle>(
+          std::make_shared<connector::lakehouse::common::ColumnHandleBase>(
               column,
-              isPartitionKey ? connector::lakehouse::common::HiveColumnHandle::
+              isPartitionKey ? connector::lakehouse::common::ColumnHandleBase::
                                    ColumnType::kPartitionKey
-                             : connector::lakehouse::common::HiveColumnHandle::
+                             : connector::lakehouse::common::ColumnHandleBase::
                                    ColumnType::kRegular,
-              outputType->childAt(i),
               outputType->childAt(i)));
     }
 
@@ -765,8 +759,8 @@ core::PlanNodePtr PlanBuilder::createIntermediateOrFinalAggregation(
       aggregate.rawInputTypes.push_back(rawInput->type());
     }
 
-    auto type =
-        exec::test::resolveAggregateType(name, step, aggregate.rawInputTypes, false);
+    auto type = exec::test::resolveAggregateType(
+        name, step, aggregate.rawInputTypes, false);
     std::vector<core::TypedExprPtr> inputs = {field(numGroupingKeys + i)};
 
     // Add lambda inputs.
@@ -1125,9 +1119,8 @@ PlanBuilder& PlanBuilder::expand(
               dynamic_cast<const core::ConstantExpr*>(untypedExpression.get());
           VELOX_CHECK_NOT_NULL(constantExpr);
           VELOX_CHECK(constantExpr->value().isNull());
-          projectExpr.push_back(
-              std::make_shared<core::ConstantTypedExpr>(
-                  expectedType, variant::null(expectedType->kind())));
+          projectExpr.push_back(std::make_shared<core::ConstantTypedExpr>(
+              expectedType, variant::null(expectedType->kind())));
         }
       }
     }

@@ -117,10 +117,9 @@ TEST_F(IcebergInsertTest, testSingleColumnAsPartition) {
       if (i != colIndex) {
         assignments.insert(
             {name,
-             std::make_shared<common::HiveColumnHandle>(
+             std::make_shared<common::ColumnHandleBase>(
                  name,
-                 common::HiveColumnHandle::ColumnType::kRegular,
-                 rowType_->childAt(i),
+                 common::ColumnHandleBase::ColumnType::kRegular,
                  rowType_->childAt(i))});
       }
     }
@@ -128,10 +127,9 @@ TEST_F(IcebergInsertTest, testSingleColumnAsPartition) {
     // Add partition column.
     assignments.insert(
         {colName,
-         std::make_shared<common::HiveColumnHandle>(
+         std::make_shared<common::ColumnHandleBase>(
              colName,
-             common::HiveColumnHandle::ColumnType::kPartitionKey,
-             rowType_->childAt(colIndex),
+             common::ColumnHandleBase::ColumnType::kPartitionKey,
              rowType_->childAt(colIndex))});
 
     auto plan = common::test::PlanBuilder(pool_.get())
@@ -248,13 +246,13 @@ TEST_F(IcebergInsertTest, testColumnCombinationsAsPartition) {
     for (auto i = 0; i < rowType_->size(); i++) {
       const auto& name = rowType_->nameOf(i);
       auto columnType = partitionColumns.count(i) > 0
-          ? common::HiveColumnHandle::ColumnType::kPartitionKey
-          : common::HiveColumnHandle::ColumnType::kRegular;
+          ? common::ColumnHandleBase::ColumnType::kPartitionKey
+          : common::ColumnHandleBase::ColumnType::kRegular;
 
       assignments.insert(
           {name,
-           std::make_shared<common::HiveColumnHandle>(
-               name, columnType, rowType_->childAt(i), rowType_->childAt(i))});
+           std::make_shared<common::ColumnHandleBase>(
+               name, columnType, rowType_->childAt(i))});
     }
 
     auto plan = common::test::PlanBuilder(pool_.get())
