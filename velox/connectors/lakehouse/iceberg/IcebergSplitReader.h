@@ -29,14 +29,15 @@ class IcebergSplitReader : public common::SplitReader {
  public:
   IcebergSplitReader(
       const std::shared_ptr<const common::HiveConnectorSplit>& hiveSplit,
-      const common::HiveTableHandlePtr& hiveTableHandle,
-      const std::unordered_map<std::string, common::HiveColumnHandlePtr>* partitionKeys,
+      const common::TableHandleBasePtr& icebergTableHandle,
+      const std::unordered_map<std::string, common::ColumnHandleBasePtr>*
+          partitionKeys,
       const ConnectorQueryCtx* connectorQueryCtx,
       const std::shared_ptr<const common::HiveConfig>& hiveConfig,
       const RowTypePtr& readerOutputType,
       const std::shared_ptr<io::IoStatistics>& ioStats,
       const std::shared_ptr<filesystems::File::IoStats>& fsStats,
-      common::FileHandleFactory* fileHandleFactory,
+      common::FileHandleFactory* const fileHandleFactory,
       folly::Executor* executor,
       const std::shared_ptr<velox::common::ScanSpec>& scanSpec,
       core::ExpressionEvaluator* expressionEvaluator,

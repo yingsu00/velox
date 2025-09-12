@@ -17,7 +17,7 @@
 #include "velox/connectors/lakehouse/iceberg/PositionalDeleteFileReader.h"
 
 #include "velox/connectors/lakehouse/common/HiveConnectorUtil.h"
-#include "velox/connectors/lakehouse/common/TableHandle.h"
+#include "velox/connectors/lakehouse/common/TableHandleBase.h"
 #include "velox/connectors/lakehouse/iceberg/IcebergDeleteFile.h"
 #include "velox/connectors/lakehouse/iceberg/IcebergMetadataColumns.h"
 #include "velox/dwio/common/ReaderFactory.h"

@@ -27,8 +27,9 @@ namespace facebook::velox::connector::lakehouse::iceberg {
 
 IcebergSplitReader::IcebergSplitReader(
     const std::shared_ptr<const common::HiveConnectorSplit>& hiveSplit,
-    const common::HiveTableHandlePtr& hiveTableHandle,
-    const std::unordered_map<std::string, common::HiveColumnHandlePtr>* partitionKeys,
+    const common::TableHandleBasePtr& icebergTableHandle,
+    const std::unordered_map<std::string, common::ColumnHandleBasePtr>*
+        partitionKeys,
     const ConnectorQueryCtx* connectorQueryCtx,
     const std::shared_ptr<const common::HiveConfig>& hiveConfig,
     const RowTypePtr& readerOutputType,
@@ -41,7 +42,7 @@ IcebergSplitReader::IcebergSplitReader(
     std::atomic<uint64_t>& totalRemainingFilterTime)
     : SplitReader(
           hiveSplit,
-          hiveTableHandle,
+          icebergTableHandle,
           partitionKeys,
           connectorQueryCtx,
           hiveConfig,

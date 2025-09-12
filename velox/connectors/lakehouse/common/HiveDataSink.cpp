@@ -23,7 +23,7 @@
 #include "velox/connectors/lakehouse/common/HiveConfig.h"
 #include "velox/connectors/lakehouse/common/HiveConnectorUtil.h"
 #include "velox/connectors/lakehouse/common/HivePartitionFunction.h"
-#include "velox/connectors/lakehouse/common/TableHandle.h"
+#include "velox/connectors/lakehouse/common/TableHandleBase.h"
 #include "velox/core/ITypedExpr.h"
 #include "velox/dwio/common/Options.h"
 #include "velox/dwio/common/SortingWriter.h"
@@ -1126,7 +1126,7 @@ folly::dynamic HiveInsertTableHandle::serialize() const {
 
 HiveInsertTableHandlePtr HiveInsertTableHandle::create(
     const folly::dynamic& obj) {
-  auto inputColumns = ISerializable::deserialize<std::vector<HiveColumnHandle>>(
+  auto inputColumns = ISerializable::deserialize<std::vector<ColumnHandleBase>>(
       obj["inputColumns"]);
   auto locationHandle =
       ISerializable::deserialize<LocationHandle>(obj["locationHandle"]);

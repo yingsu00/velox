@@ -246,7 +246,7 @@ inline uint8_t parseDelimiter(const std::string& delim) {
 
 inline bool isSynthesizedColumn(
     const std::string& name,
-    const std::unordered_map<std::string, HiveColumnHandlePtr>& infoColumns) {
+    const ColumnHandleBaseMap& infoColumns) {
   return infoColumns.count(name) != 0;
 }
 
@@ -292,7 +292,7 @@ void checkColumnNameLowerCase(const TypePtr& type) {
 
 void checkColumnNameLowerCase(
     const velox::common::SubfieldFilters& filters,
-    const std::unordered_map<std::string, HiveColumnHandlePtr>& infoColumns) {
+    const ColumnHandleBaseMap& infoColumns) {
   for (const auto& filterIt : filters) {
     const auto name = filterIt.first.toString();
     if (isSynthesizedColumn(name, infoColumns)) {
@@ -357,8 +357,8 @@ std::shared_ptr<velox::common::ScanSpec> makeScanSpec(
         outputSubfields,
     const velox::common::SubfieldFilters& filters,
     const RowTypePtr& dataColumns,
-    const std::unordered_map<std::string, HiveColumnHandlePtr>& partitionKeys,
-    const std::unordered_map<std::string, HiveColumnHandlePtr>& infoColumns,
+    const ColumnHandleBaseMap& partitionKeys,
+    const ColumnHandleBaseMap& infoColumns,
     const SpecialColumnNames& specialColumns,
     bool disableStatsBasedFilterReorder,
     memory::MemoryPool* pool) {
@@ -532,15 +532,15 @@ std::unique_ptr<dwio::common::SerDeOptions> parseSerdeParameters(
 void configureReaderOptions(
     const std::shared_ptr<const common::HiveConfig>& hiveConfig,
     const ConnectorQueryCtx* connectorQueryCtx,
-    const std::shared_ptr<const HiveTableHandle>& hiveTableHandle,
+    const TableHandleBasePtr& tableHandle,
     const std::shared_ptr<const HiveConnectorSplit>& hiveSplit,
     dwio::common::ReaderOptions& readerOptions) {
   configureReaderOptions(
       hiveConfig,
       connectorQueryCtx,
-      hiveTableHandle->dataColumns(),
+      tableHandle->dataColumns(),
       hiveSplit,
-      hiveTableHandle->tableParameters(),
+      tableHandle->tableParameters(),
       readerOptions);
 }
 
@@ -608,8 +608,6 @@ void configureReaderOptions(
     }
 
     readerOptions.setFileFormat(hiveSplit->fileFormat);
-//    readerOptions.setEnableRequestedTypeCheck(
-//        hiveConfig->isRequestedTypeCheckEnabled(sessionProperties));
   }
 }
 
@@ -692,14 +690,14 @@ bool applyPartitionFilter(
 
 } // namespace
 
+// TODO: This function will be moved to DataSource or SplitReader
 bool testFilters(
     const velox::common::ScanSpec* scanSpec,
     const dwio::common::Reader* reader,
     const std::string& filePath,
     const std::unordered_map<std::string, std::optional<std::string>>&
         partitionKeys,
-    const std::unordered_map<std::string, HiveColumnHandlePtr>&
-        partitionKeysHandle,
+    const ColumnHandleBaseMap& partitionKeysHandle,
     bool asLocalTime) {
   const auto totalRows = reader->numberOfRows();
   const auto& fileTypeWithId = reader->typeWithId();
@@ -720,7 +718,7 @@ bool testFilters(
           return applyPartitionFilter(
               handlesIter->second->dataType(),
               iter->second.value(),
-              handlesIter->second->isPartitionDateValueDaysSinceEpoch(),
+              true, // isPartitionDateValueDaysSinceEpoch is true for Iceberg.
               child->filter(),
               asLocalTime);
         }

@@ -40,9 +40,11 @@ endif()
 if(VELOX_BUILD_TESTING AND (NOT VELOX_DISABLE_GOOGLETEST))
   add_executable(
     velox_lakehouse_iceberg_test
+    IcebergColumnHandleTest.cpp
     IcebergInsertTest.cpp
     IcebergReadTest.cpp
     IcebergSplitReaderBenchmarkTest.cpp
+    IcebergTableHandleTest.cpp
     IcebergTestBase.cpp
     Main.cpp)
   add_test(velox_lakehouse_iceberg_test velox_lakehouse_iceberg_test)
@@ -69,5 +71,4 @@ if(VELOX_BUILD_TESTING AND (NOT VELOX_DISABLE_GOOGLETEST))
     target_link_libraries(velox_lakehouse_iceberg_test velox_dwio_parquet_writer
                           velox_dwio_parquet_reader)
   endif()
-
 endif()

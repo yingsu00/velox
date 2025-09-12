@@ -17,7 +17,7 @@
 
 #include "velox/connectors/lakehouse/common/HiveConnectorSplit.h"
 #include "velox/connectors/lakehouse/common/HiveDataSink.h"
-#include "velox/connectors/lakehouse/common/TableHandle.h"
+#include "velox/connectors/lakehouse/common/TableHandleBase.h"
 #include "velox/dwio/dwrf/common/Config.h"
 #include "velox/dwio/dwrf/writer/FlushPolicy.h"
 #include "velox/exec/tests/utils/OperatorTestBase.h"
@@ -124,7 +124,7 @@ class HiveConnectorTestBase : public exec::test::OperatorTestBase {
       const std::optional<std::unordered_map<std::string, std::string>>&
           infoColumns = {});
 
-  static std::shared_ptr<HiveTableHandle> makeTableHandle(
+  static std::shared_ptr<TableHandleBase> makeTableHandle(
       velox::common::SubfieldFilters subfieldFilters = {},
       const core::TypedExprPtr& remainingFilter = nullptr,
       const std::string& tableName = "hive_table",
@@ -132,7 +132,7 @@ class HiveConnectorTestBase : public exec::test::OperatorTestBase {
       bool filterPushdownEnabled = true,
       const std::unordered_map<std::string, std::string>& tableParameters =
           {}) {
-    return std::make_shared<HiveTableHandle>(
+    return std::make_shared<TableHandleBase>(
         kHiveConnectorId,
         tableName,
         filterPushdownEnabled,
@@ -145,7 +145,7 @@ class HiveConnectorTestBase : public exec::test::OperatorTestBase {
   /// @param name Column name.
   /// @param type Column type.
   /// @param Required subfields of this column.
-  static std::unique_ptr<HiveColumnHandle> makeColumnHandle(
+  static std::unique_ptr<ColumnHandleBase> makeColumnHandle(
       const std::string& name,
       const TypePtr& type,
       const std::vector<std::string>& requiredSubfields);
@@ -154,13 +154,13 @@ class HiveConnectorTestBase : public exec::test::OperatorTestBase {
   /// @param type Column type.
   /// @param type Hive type.
   /// @param Required subfields of this column.
-  static std::unique_ptr<HiveColumnHandle> makeColumnHandle(
+  static std::unique_ptr<ColumnHandleBase> makeColumnHandle(
       const std::string& name,
       const TypePtr& dataType,
       const TypePtr& hiveType,
       const std::vector<std::string>& requiredSubfields,
-      HiveColumnHandle::ColumnType columnType =
-          HiveColumnHandle::ColumnType::kRegular);
+      ColumnHandleBase::ColumnType columnType =
+          ColumnHandleBase::ColumnType::kRegular);
 
   /// @param targetDirectory Final directory of the target table after commit.
   /// @param writeDirectory Write directory of the target table before commit.
@@ -214,15 +214,15 @@ class HiveConnectorTestBase : public exec::test::OperatorTestBase {
           nullptr,
       const bool ensureFiles = false);
 
-  static std::shared_ptr<HiveColumnHandle> regularColumn(
+  static std::shared_ptr<ColumnHandleBase> regularColumn(
       const std::string& name,
       const TypePtr& type);
 
-  static std::shared_ptr<HiveColumnHandle> partitionKey(
+  static std::shared_ptr<ColumnHandleBase> partitionKey(
       const std::string& name,
       const TypePtr& type);
 
-  static std::shared_ptr<HiveColumnHandle> synthesizedColumn(
+  static std::shared_ptr<ColumnHandleBase> synthesizedColumn(
       const std::string& name,
       const TypePtr& type);
 
