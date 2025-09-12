@@ -285,8 +285,8 @@ void IcebergSplitReaderBenchmark::readSingleColumn(
 
   core::TypedExprPtr remainingFilterExpr;
 
-  std::shared_ptr<common::HiveTableHandle> hiveTableHandle =
-      std::make_shared<common::HiveTableHandle>(
+  std::shared_ptr<common::TableHandleBase> tableHandle =
+      std::make_shared<common::TableHandleBase>(
           "kHiveConnectorId",
           "tableName",
           false,
@@ -348,7 +348,7 @@ void IcebergSplitReaderBenchmark::readSingleColumn(
     std::unique_ptr<IcebergSplitReader> icebergSplitReader =
         std::make_unique<IcebergSplitReader>(
             split,
-            hiveTableHandle,
+            tableHandle,
             nullptr,
             connectorQueryCtx_.get(),
             hiveConfig,

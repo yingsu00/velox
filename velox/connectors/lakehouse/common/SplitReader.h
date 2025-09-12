@@ -20,6 +20,7 @@
 #include "velox/common/file/FileSystems.h"
 #include "velox/connectors/lakehouse/common/FileHandle.h"
 #include "velox/connectors/lakehouse/common/HivePartitionFunction.h"
+#include "velox/connectors/lakehouse/common/TableHandleBase.h"
 #include "velox/dwio/common/Options.h"
 #include "velox/dwio/common/Reader.h"
 
@@ -48,18 +49,16 @@ class MemoryPool;
 namespace facebook::velox::connector::lakehouse::common {
 
 struct HiveConnectorSplit;
-class HiveTableHandle;
-class HiveColumnHandle;
+class TableHandleBase;
+class ColumnHandleBase;
 class HiveConfig;
 
 class SplitReader {
  public:
   static std::unique_ptr<SplitReader> create(
       const std::shared_ptr<HiveConnectorSplit>& hiveSplit,
-      const std::shared_ptr<const HiveTableHandle>& hiveTableHandle,
-      const std::unordered_map<
-          std::string,
-          std::shared_ptr<const HiveColumnHandle>>* partitionKeys,
+      const TableHandleBasePtr& tableHandle,
+      const ColumnHandleBaseMap* partitionKeys,
       const ConnectorQueryCtx* connectorQueryCtx,
       const std::shared_ptr<const common::HiveConfig>& hiveConfig,
       const RowTypePtr& readerOutputType,
@@ -111,10 +110,8 @@ class SplitReader {
  protected:
   SplitReader(
       const std::shared_ptr<const HiveConnectorSplit>& hiveSplit,
-      const std::shared_ptr<const HiveTableHandle>& hiveTableHandle,
-      const std::unordered_map<
-          std::string,
-          std::shared_ptr<const HiveColumnHandle>>* partitionKeys,
+      const TableHandleBasePtr& tableHandle,
+      const ColumnHandleBaseMap* partitionKeys,
       const ConnectorQueryCtx* connectorQueryCtx,
       const std::shared_ptr<const common::HiveConfig>& hiveConfig,
       const RowTypePtr& readerOutputType,
@@ -176,10 +173,10 @@ class SplitReader {
 
  protected:
   std::shared_ptr<const HiveConnectorSplit> hiveSplit_;
-  const std::shared_ptr<const HiveTableHandle> hiveTableHandle_;
+  const TableHandleBasePtr tableHandle_;
   const std::unordered_map<
       std::string,
-      std::shared_ptr<const HiveColumnHandle>>* const partitionKeys_;
+      std::shared_ptr<const ColumnHandleBase>>* const partitionKeys_;
   const ConnectorQueryCtx* connectorQueryCtx_;
   const std::shared_ptr<const common::HiveConfig> hiveConfig_;
 

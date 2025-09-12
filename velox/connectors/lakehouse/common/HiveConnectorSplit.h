@@ -19,7 +19,7 @@
 #include <unordered_map>
 #include "velox/connectors/Connector.h"
 #include "velox/connectors/lakehouse/common/FileProperties.h"
-#include "velox/connectors/lakehouse/common/TableHandle.h"
+#include "velox/connectors/lakehouse/common/TableHandleBase.h"
 #include "velox/dwio/common/Options.h"
 
 namespace facebook::velox::connector::lakehouse::common {
@@ -33,7 +33,7 @@ namespace facebook::velox::connector::lakehouse::common {
 struct HiveBucketConversion {
   int32_t tableBucketCount;
   int32_t partitionBucketCount;
-  std::vector<std::shared_ptr<HiveColumnHandle>> bucketColumnHandles;
+  std::vector<std::shared_ptr<ColumnHandleBase>> bucketColumnHandles;
 };
 
 struct RowIdProperties {

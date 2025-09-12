@@ -145,11 +145,11 @@ std::shared_ptr<HiveConnectorSplit> HiveConnectorSplit::create(
   std::optional<HiveBucketConversion> bucketConversion = std::nullopt;
   if (obj.count("bucketConversion") && !obj["bucketConversion"].isNull()) {
     const auto& bucketConversionObj = obj["bucketConversion"];
-    std::vector<std::shared_ptr<HiveColumnHandle>> bucketColumnHandles;
+    std::vector<std::shared_ptr<ColumnHandleBase>> bucketColumnHandles;
     for (const auto& bucketColumnHandleObj :
          bucketConversionObj["bucketColumnHandles"]) {
-      bucketColumnHandles.push_back(std::const_pointer_cast<HiveColumnHandle>(
-          ISerializable::deserialize<HiveColumnHandle>(bucketColumnHandleObj)));
+      bucketColumnHandles.push_back(std::const_pointer_cast<ColumnHandleBase>(
+          ISerializable::deserialize<ColumnHandleBase>(bucketColumnHandleObj)));
     }
     bucketConversion = HiveBucketConversion{
         .tableBucketCount = static_cast<int32_t>(

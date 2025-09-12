@@ -16,9 +16,11 @@ velox_add_library(
   velox_lakehouse_iceberg_splitreader
   EqualityDeleteFileReader.cpp
   FilterUtil.cpp
+  IcebergColumnHandle.cpp
   IcebergDeleteFile.cpp
   IcebergSplitReader.cpp
   IcebergSplit.cpp
+  IcebergTableHandle.cpp
   PositionalDeleteFileReader.cpp
   IcebergDataSink.cpp)
 

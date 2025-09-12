@@ -20,7 +20,7 @@
 #include "velox/connectors/lakehouse/common/HiveConfig.h"
 #include "velox/connectors/lakehouse/common/HiveConnectorSplit.h"
 #include "velox/connectors/lakehouse/common/HiveConnectorUtil.h"
-#include "velox/connectors/lakehouse/common/TableHandle.h"
+#include "velox/connectors/lakehouse/common/TableHandleBase.h"
 #include "velox/connectors/lakehouse/iceberg/IcebergSplitReader.h"
 #include "velox/dwio/common/ReaderFactory.h"
 
@@ -75,8 +75,8 @@ VectorPtr newConstantFromString(
 
 std::unique_ptr<SplitReader> SplitReader::create(
     const std::shared_ptr<HiveConnectorSplit>& hiveSplit,
-    const HiveTableHandlePtr& hiveTableHandle,
-    const std::unordered_map<std::string, HiveColumnHandlePtr>* partitionKeys,
+    const TableHandleBasePtr& tableHandle,
+    const ColumnHandleBaseMap* partitionKeys,
     const ConnectorQueryCtx* connectorQueryCtx,
     const std::shared_ptr<const common::HiveConfig>& hiveConfig,
     const RowTypePtr& readerOutputType,
@@ -92,7 +92,7 @@ std::unique_ptr<SplitReader> SplitReader::create(
       hiveSplit->customSplitInfo["table_format"] == "hive-iceberg") {
     return std::make_unique<iceberg::IcebergSplitReader>(
         hiveSplit,
-        hiveTableHandle,
+        tableHandle,
         partitionKeys,
         connectorQueryCtx,
         hiveConfig,
@@ -107,7 +107,7 @@ std::unique_ptr<SplitReader> SplitReader::create(
   } else {
     return std::unique_ptr<SplitReader>(new SplitReader(
         hiveSplit,
-        hiveTableHandle,
+        tableHandle,
         partitionKeys,
         connectorQueryCtx,
         hiveConfig,
@@ -122,8 +122,8 @@ std::unique_ptr<SplitReader> SplitReader::create(
 
 SplitReader::SplitReader(
     const std::shared_ptr<const HiveConnectorSplit>& hiveSplit,
-    const HiveTableHandlePtr& hiveTableHandle,
-    const std::unordered_map<std::string, HiveColumnHandlePtr>* partitionKeys,
+    const TableHandleBasePtr& tableHandle,
+    const ColumnHandleBaseMap* partitionKeys,
     const ConnectorQueryCtx* connectorQueryCtx,
     const std::shared_ptr<const common::HiveConfig>& hiveConfig,
     const RowTypePtr& readerOutputType,
@@ -133,7 +133,7 @@ SplitReader::SplitReader(
     folly::Executor* executor,
     const std::shared_ptr<velox::common::ScanSpec>& scanSpec)
     : hiveSplit_(hiveSplit),
-      hiveTableHandle_(hiveTableHandle),
+      tableHandle_(tableHandle),
       partitionKeys_(partitionKeys),
       connectorQueryCtx_(connectorQueryCtx),
       hiveConfig_(hiveConfig),
@@ -152,7 +152,7 @@ void SplitReader::configureReaderOptions(
   lakehouse::common::configureReaderOptions(
       hiveConfig_,
       connectorQueryCtx_,
-      hiveTableHandle_,
+      tableHandle_,
       hiveSplit_,
       baseReaderOpts_);
   baseReaderOpts_.setRandomSkip(std::move(randomSkip));
@@ -375,7 +375,7 @@ void SplitReader::createRowReader(
     RowTypePtr rowType) {
   VELOX_CHECK_NULL(baseRowReader_);
   configureRowReaderOptions(
-      hiveTableHandle_->tableParameters(),
+      tableHandle_->tableParameters(),
       scanSpec_,
       std::move(metadataFilter),
       std::move(rowType),
@@ -476,7 +476,7 @@ void SplitReader::setPartitionValue(
       connectorQueryCtx_->sessionTimezone(),
       hiveConfig_->readTimestampPartitionValueAsLocalTime(
           connectorQueryCtx_->sessionProperties()),
-      it->second->isPartitionDateValueDaysSinceEpoch());
+      true);
   spec->setConstantValue(constant);
 }
 

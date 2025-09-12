@@ -29,8 +29,8 @@ using facebook::velox::common::testutil::TestValue;
 
 namespace facebook::velox::connector::lakehouse::common {
 
-class HiveTableHandle;
-class HiveColumnHandle;
+class TableHandleBase;
+class ColumnHandleBase;
 
 namespace {
 
@@ -74,25 +74,19 @@ HiveDataSource::HiveDataSource(
   // Column handled keyed on the column alias, the name used in the query.
   for (const auto& [canonicalizedName, columnHandle] : columnHandles) {
     auto handle =
-        std::dynamic_pointer_cast<const HiveColumnHandle>(columnHandle);
+        std::dynamic_pointer_cast<const ColumnHandleBase>(columnHandle);
     VELOX_CHECK_NOT_NULL(
         handle,
-        "ColumnHandle must be an instance of HiveColumnHandle for {}",
+        "ColumnHandle must be an instance of ColumnHandleBase for {}",
         canonicalizedName);
     switch (handle->columnType()) {
-      case HiveColumnHandle::ColumnType::kRegular:
+      case ColumnHandleBase::ColumnType::kRegular:
         break;
-      case HiveColumnHandle::ColumnType::kPartitionKey:
+      case ColumnHandleBase::ColumnType::kPartitionKey:
         partitionKeys_.emplace(handle->name(), handle);
         break;
-      case HiveColumnHandle::ColumnType::kSynthesized:
+      case ColumnHandleBase::ColumnType::kSynthesized:
         infoColumns_.emplace(handle->name(), handle);
-        break;
-      case HiveColumnHandle::ColumnType::kRowIndex:
-        specialColumns_.rowIndex = handle->name();
-        break;
-      case HiveColumnHandle::ColumnType::kRowId:
-        specialColumns_.rowId = handle->name();
         break;
     }
   }
@@ -106,7 +100,7 @@ HiveDataSource::HiveDataSource(
         "ColumnHandle is missing for output column: {}",
         outputName);
 
-    auto* handle = static_cast<const HiveColumnHandle*>(it->second.get());
+    auto* handle = static_cast<const ColumnHandleBase*>(it->second.get());
     readColumnNames.push_back(handle->name());
     for (auto& subfield : handle->requiredSubfields()) {
       VELOX_USER_CHECK_EQ(
@@ -117,23 +111,22 @@ HiveDataSource::HiveDataSource(
     }
   }
 
-  hiveTableHandle_ =
-      std::dynamic_pointer_cast<const HiveTableHandle>(tableHandle);
+  tableHandle_ = std::dynamic_pointer_cast<const TableHandleBase>(tableHandle);
   VELOX_CHECK_NOT_NULL(
-      hiveTableHandle_, "TableHandle must be an instance of HiveTableHandle");
+      tableHandle_, "TableHandle must be an instance of TableHandleBase");
   if (hiveConfig_->isFileColumnNamesReadAsLowerCase(
           connectorQueryCtx->sessionProperties())) {
     checkColumnNameLowerCase(outputType_);
-    checkColumnNameLowerCase(hiveTableHandle_->subfieldFilters(), infoColumns_);
-    checkColumnNameLowerCase(hiveTableHandle_->remainingFilter());
+    checkColumnNameLowerCase(tableHandle_->subfieldFilters(), infoColumns_);
+    checkColumnNameLowerCase(tableHandle_->remainingFilter());
   }
 
-  for (const auto& [k, v] : hiveTableHandle_->subfieldFilters()) {
+  for (const auto& [k, v] : tableHandle_->subfieldFilters()) {
     filters_.emplace(k.clone(), v);
   }
   double sampleRate = 1;
   auto remainingFilter = extractFiltersFromRemainingFilter(
-      hiveTableHandle_->remainingFilter(),
+      tableHandle_->remainingFilter(),
       expressionEvaluator_,
       false,
       filters_,
@@ -190,7 +183,7 @@ HiveDataSource::HiveDataSource(
       readerOutputType_,
       subfields_,
       filters_,
-      hiveTableHandle_->dataColumns(),
+      tableHandle_->dataColumns(),
       partitionKeys_,
       infoColumns_,
       specialColumns_,
@@ -209,7 +202,7 @@ HiveDataSource::HiveDataSource(
 std::unique_ptr<SplitReader> HiveDataSource::createSplitReader() {
   return SplitReader::create(
       split_,
-      hiveTableHandle_,
+      tableHandle_,
       &partitionKeys_,
       connectorQueryCtx_,
       hiveConfig_,
@@ -228,14 +221,14 @@ std::vector<column_index_t> HiveDataSource::setupBucketConversion() {
       split_->bucketConversion->tableBucketCount,
       split_->bucketConversion->partitionBucketCount);
   VELOX_CHECK(split_->tableBucketNumber.has_value());
-  VELOX_CHECK_NOT_NULL(hiveTableHandle_->dataColumns());
+  VELOX_CHECK_NOT_NULL(tableHandle_->dataColumns());
   ++numBucketConversion_;
   bool rebuildScanSpec = false;
   std::vector<std::string> names;
   std::vector<TypePtr> types;
   std::vector<column_index_t> bucketChannels;
   for (auto& handle : split_->bucketConversion->bucketColumnHandles) {
-    VELOX_CHECK(handle->columnType() == HiveColumnHandle::ColumnType::kRegular);
+    VELOX_CHECK(handle->columnType() == ColumnHandleBase::ColumnType::kRegular);
     if (subfields_.erase(handle->name()) > 0) {
       rebuildScanSpec = true;
     }
@@ -247,8 +240,7 @@ std::vector<column_index_t> HiveDataSource::setupBucketConversion() {
       }
       index = names.size();
       names.push_back(handle->name());
-      types.push_back(
-          hiveTableHandle_->dataColumns()->findChild(handle->name()));
+      types.push_back(tableHandle_->dataColumns()->findChild(handle->name()));
       rebuildScanSpec = true;
     }
     bucketChannels.push_back(*index);
@@ -261,7 +253,7 @@ std::vector<column_index_t> HiveDataSource::setupBucketConversion() {
         readerOutputType_,
         subfields_,
         filters_,
-        hiveTableHandle_->dataColumns(),
+        tableHandle_->dataColumns(),
         partitionKeys_,
         infoColumns_,
         specialColumns_,
@@ -338,7 +330,8 @@ std::optional<RowVectorPtr> HiveDataSource::next(
   VELOX_CHECK_NOT_NULL(splitReader_, "No split reader present");
 
   TestValue::adjust(
-      "facebook::velox::connector::lakehouse::common::HiveDataSource::next", this);
+      "facebook::velox::connector::lakehouse::common::HiveDataSource::next",
+      this);
 
   if (splitReader_->emptySplit()) {
     resetSplit();
@@ -548,7 +541,7 @@ std::shared_ptr<wave::WaveDataSource> HiveDataSource::toWaveDataSource() {
   VELOX_CHECK_NOT_NULL(waveDelegateHook_);
   if (!waveDataSource_) {
     waveDataSource_ = waveDelegateHook_(
-        hiveTableHandle_,
+        tableHandle_,
         scanSpec_,
         readerOutputType_,
         &partitionKeys_,

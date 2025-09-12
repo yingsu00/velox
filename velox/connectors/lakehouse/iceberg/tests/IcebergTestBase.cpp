@@ -130,19 +130,18 @@ IcebergTestBase::createIcebergInsertTableHandle(
     const RowTypePtr& rowType,
     const std::string& outputDirectoryPath,
     const std::vector<std::string>& partitionTransforms) {
-  std::vector<std::shared_ptr<const common::HiveColumnHandle>> columnHandles;
+  std::vector<ColumnHandlePtr> columnHandles;
   for (auto i = 0; i < rowType->size(); ++i) {
     auto columnName = rowType->nameOf(i);
-    auto columnType = common::HiveColumnHandle::ColumnType::kRegular;
+    auto columnType = common::ColumnHandleBase::ColumnType::kRegular;
     for (auto transform : partitionTransforms) {
       if (columnName == transform) {
-        columnType = common::HiveColumnHandle::ColumnType::kPartitionKey;
+        columnType = common::ColumnHandleBase::ColumnType::kPartitionKey;
         break;
       }
     }
-    columnHandles.push_back(
-        std::make_shared<common::HiveColumnHandle>(
-            columnName, columnType, rowType->childAt(i), rowType->childAt(i)));
+    columnHandles.push_back(std::make_shared<common::ColumnHandleBase>(
+        columnName, columnType, rowType->childAt(i)));
   }
 
   auto locationHandle = std::make_shared<common::LocationHandle>(
