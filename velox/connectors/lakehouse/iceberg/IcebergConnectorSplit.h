@@ -97,6 +97,14 @@ class IcebergConnectorSplitBuilder {
     return *this;
   }
 
+  IcebergConnectorSplitBuilder& partitionKeys(
+      const std::unordered_map<std::string, std::optional<std::string>>& partitionKeys) {
+    for (const auto& partitionKey : partitionKeys) {
+      this->partitionKey(partitionKey.first, partitionKey.second);
+    }
+    return *this;
+  }
+
   IcebergConnectorSplitBuilder& partitionKey(
       std::string name,
       std::optional<std::string> value) {
@@ -131,6 +139,12 @@ class IcebergConnectorSplitBuilder {
     fileProperties_ = fileProperties;
     return *this;
   }
+
+  IcebergConnectorSplitBuilder& deleteFiles(std::vector<IcebergDeleteFile> deleteFiles) {
+    deleteFiles_ = std::move(deleteFiles);
+    return *this;
+  }
+
 
   std::shared_ptr<IcebergConnectorSplit> build() const {
     return std::make_shared<IcebergConnectorSplit>(

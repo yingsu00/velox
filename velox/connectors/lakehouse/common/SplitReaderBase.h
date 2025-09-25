@@ -38,7 +38,7 @@ class SplitReaderBase {
   SplitReaderBase(
       const std::shared_ptr<const ConnectorSplitBase>& split,
       const std::shared_ptr<const TableHandleBase>& tableHandle,
-      const std::unordered_map<std::string, std::shared_ptr<ColumnHandleBase>>*
+      const std::unordered_map<std::string, std::shared_ptr<const ColumnHandleBase>>*
           partitionColumnHandles,
       const ConnectorQueryCtx* connectorQueryCtx,
       const std::shared_ptr<const ConnectorConfigBase>& ConnectorConfigBase,
@@ -125,7 +125,7 @@ class SplitReaderBase {
 
   std::shared_ptr<const ConnectorSplitBase> split_;
   const std::shared_ptr<const TableHandleBase> tableHandle_;
-  const std::unordered_map<std::string, std::shared_ptr<ColumnHandleBase>>*
+  const std::unordered_map<std::string, std::shared_ptr<const ColumnHandleBase>>*
       partitionColumnHandles_;
   const ConnectorQueryCtx* connectorQueryCtx_;
   const std::shared_ptr<const ConnectorConfigBase> connectorConfig_;

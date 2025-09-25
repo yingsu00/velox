@@ -19,13 +19,13 @@
 #include "velox/common/file/FileSystems.h"
 #include "velox/common/file/tests/FaultyFileSystem.h"
 #include "velox/connectors/lakehouse/common/ConnectorSplitBase.h"
+#include "velox/connectors/lakehouse/iceberg/IcebergConnector.h"
 #include "velox/dwio/common/tests/utils/BatchMaker.h"
 #include "velox/dwio/dwrf/RegisterDwrfReader.h"
 #include "velox/dwio/dwrf/RegisterDwrfWriter.h"
 #include "velox/dwio/dwrf/reader/DwrfReader.h"
 #include "velox/dwio/dwrf/writer/FlushPolicy.h"
 #include "velox/dwio/dwrf/writer/Writer.h"
-//#include "velox/exec/tests/utils/AssertQueryBuilder.h"
 
 namespace facebook::velox::connector::lakehouse::common::test {
 
@@ -41,17 +41,17 @@ ConnectorTestBase::ConnectorTestBase() {
 
 void ConnectorTestBase::SetUp() {
   OperatorTestBase::SetUp();
-  //  connector::registerConnectorFactory(
-  //      std::make_shared<hive::HiveConnectorFactory>());
-  //  auto hiveConnector =
-  //      connector::getConnectorFactory(
-  //          connector::hive::HiveConnectorFactory::kHiveConnectorName)
-  //          ->newConnector(
-  //              kHiveConnectorId,
-  //              std::make_shared<config::ConfigBase>(
-  //                  std::unordered_map<std::string, std::string>()),
-  //              ioExecutor_.get());
-  //  connector::registerConnector(hiveConnector);
+    connector::registerConnectorFactory(
+        std::make_shared<iceberg::IcebergConnectorFactory>());
+    auto icebergConnector =
+        connector::getConnectorFactory(
+            iceberg::IcebergConnectorFactory::kIcebergConnectorName)
+            ->newConnector(
+                kIcebergConnectorId,
+                std::make_shared<config::ConfigBase>(
+                    std::unordered_map<std::string, std::string>()),
+                ioExecutor_.get());
+    connector::registerConnector(icebergConnector);
   dwio::common::registerFileSinks();
   dwrf::registerDwrfReaderFactory();
   dwrf::registerDwrfWriterFactory();
@@ -63,21 +63,21 @@ void ConnectorTestBase::TearDown() {
   ioExecutor_.reset();
   dwrf::unregisterDwrfReaderFactory();
   dwrf::unregisterDwrfWriterFactory();
-  //  connector::unregisterConnector(kHiveConnectorId);
-  //  connector::unregisterConnectorFactory(
-  //      connector::hive::HiveConnectorFactory::kHiveConnectorName);
+  connector::unregisterConnector(kIcebergConnectorId);
+  connector::unregisterConnectorFactory(
+      iceberg::IcebergConnectorFactory::kIcebergConnectorName);
   OperatorTestBase::TearDown();
 }
 
-// void ConnectorTestBase::resetHiveConnector(
-//     const std::shared_ptr<const config::ConfigBase>& config) {
-//   connector::unregisterConnector(kHiveConnectorId);
-//   auto hiveConnector =
-//       connector::getConnectorFactory(
-//           connector::hive::HiveConnectorFactory::kHiveConnectorName)
-//           ->newConnector(kHiveConnectorId, config, ioExecutor_.get());
-//   connector::registerConnector(hiveConnector);
-// }
+ void ConnectorTestBase::resetHiveConnector(
+     const std::shared_ptr<const config::ConfigBase>& config) {
+   connector::unregisterConnector(kIcebergConnectorId);
+   auto hiveConnector =
+       connector::getConnectorFactory(
+           iceberg::IcebergConnectorFactory::kIcebergConnectorName)
+           ->newConnector(kIcebergConnectorId, config, ioExecutor_.get());
+   connector::registerConnector(hiveConnector);
+ }
 
 void ConnectorTestBase::writeToFiles(
     const std::vector<std::string>& filePaths,

@@ -31,7 +31,7 @@ class IcebergSplitReader : public lakehouse::common::SplitReaderBase {
       const std::shared_ptr<const lakehouse::common::TableHandleBase>& tableHandle,
       const std::unordered_map<
           std::string,
-          std::shared_ptr<lakehouse::common::ColumnHandleBase>>* partitionKeys,
+          std::shared_ptr<const lakehouse::common::ColumnHandleBase>>* partitionKeys,
       const ConnectorQueryCtx* connectorQueryCtx,
       const std::shared_ptr<const lakehouse::common::ConnectorConfigBase>& ConnectorConfigBase,
       const RowTypePtr& readerOutputType,

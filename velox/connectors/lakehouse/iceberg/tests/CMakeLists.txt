@@ -40,7 +40,7 @@ endif()
 
   add_executable(
     velox_lakehouse_iceberg_test IcebergReadTest.cpp
-          IcebergSplitReaderBenchmarkTest.cpp)
+          IcebergSplitReaderBenchmarkTest.cpp IcebergConnectorTestBase.cpp PlanBuilder.cpp)
   add_test(velox_lakehouse_iceberg_test velox_lakehouse_iceberg_test)
 
   target_link_libraries(
@@ -48,6 +48,7 @@ endif()
     velox_lakehouse_iceberg_reader_benchmark_lib
 #    velox_hiveV2_connector
     velox_lakehouse_iceberg_connector
+    velox_lakehouse_common_test_lib
 #    velox_hiveV2_partition_function
     velox_dwio_common_exception
     velox_dwio_common_test_utils

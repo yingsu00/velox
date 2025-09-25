@@ -18,7 +18,7 @@
 #include "IcebergTableHandle.h"
 #include "velox/connectors/Connector.h"
 //#include "velox/connectors/Connector.h"
-//#include "velox/connectors/hive/IcebergConfig.h"
+#include "velox/connectors/lakehouse/iceberg/IcebergConfig.h"
 //#include "velox/connectors/hive/IcebergTableHandle.h"
 //#include "velox/connectors/hive/PartitionIdGenerator.h"
 //#include "velox/core/PlanNode.h"

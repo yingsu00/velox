@@ -85,7 +85,7 @@ bool filterSplit(
         partitionData,
     const std::unordered_map<
         std::string,
-        std::shared_ptr<lakehouse::common::ColumnHandleBase>>& partitionKeysHandle,
+        std::shared_ptr<const lakehouse::common::ColumnHandleBase>>& partitionKeysHandle,
     bool asLocalTime) {
   const auto totalRows = reader->numberOfRows();
   const auto& fileTypeWithId = reader->typeWithId();
@@ -102,7 +102,7 @@ bool filterSplit(
           VELOX_CHECK(handlesIter != partitionKeysHandle.end());
 
           auto icebergPartitionColumnHandle =
-              std::dynamic_pointer_cast<IcebergColumnHandle>(
+              std::dynamic_pointer_cast<const IcebergColumnHandle>(
                   handlesIter->second);
           VELOX_CHECK_NOT_NULL(icebergPartitionColumnHandle);
 

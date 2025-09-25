@@ -41,7 +41,7 @@ std::shared_ptr<exec::Task> IcebergConnectorTestBase::assertQuery(
       .assertResults(duckDbSql);
 }
 
-std::vector<std::shared_ptr<IcebergConnectorSplit>>
+std::vector<std::shared_ptr<ConnectorSplit>>
 IcebergConnectorTestBase::makeIcebergConnectorSplits(
     const std::string& filePath,
     uint32_t splitCount,
@@ -56,7 +56,7 @@ IcebergConnectorTestBase::makeIcebergConnectorSplits(
   const uint64_t fileSize = file->size();
   // Take the upper bound.
   const uint64_t splitSize = std::ceil((fileSize) / splitCount);
-  std::vector<std::shared_ptr<IcebergConnectorSplit>> splits;
+  std::vector<std::shared_ptr<ConnectorSplit>> splits;
   // Add all the splits.
   for (uint32_t i = 0; i < splitCount; i++) {
     auto splitBuilder = IcebergConnectorSplitBuilder(filePath)
@@ -76,6 +76,20 @@ IcebergConnectorTestBase::makeIcebergConnectorSplits(
 
     auto split = splitBuilder.build();
     splits.push_back(std::move(split));
+  }
+  return splits;
+}
+
+std::vector<std::shared_ptr<ConnectorSplit>>
+IcebergConnectorTestBase::makeIcebergConnectorSplits(
+    const std::vector<std::shared_ptr<exec::test::TempFilePath>>& filePaths) {
+  std::vector<std::shared_ptr<ConnectorSplit>> splits;
+  splits.reserve(filePaths.size());
+  for (const auto& filePath : filePaths) {
+    IcebergConnectorSplitBuilder icebergConnectorSplitBuilder(filePath->getPath());
+    icebergConnectorSplitBuilder.start(0)
+        .length(std::numeric_limits<uint64_t>::max());
+    splits.push_back(icebergConnectorSplitBuilder.build());
   }
   return splits;
 }

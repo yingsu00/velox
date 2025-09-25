@@ -24,15 +24,14 @@ target_link_libraries(
         #  velox_dwio_common_exception
         #  velox_vector_fuzzer
         velox_vector_test_lib
-        #  velox_exec
-        #  velox_exec_test_lib
+        velox_exec
+        velox_exec_test_lib
         GTest::gtest
         GTest::gtest_main)
 
 add_executable(
   velox_lakehouse_common_test
         FileHandleTest.cpp)
-
 
 target_link_libraries(
         velox_lakehouse_common_test

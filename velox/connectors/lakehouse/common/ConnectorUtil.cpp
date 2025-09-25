@@ -240,7 +240,7 @@ std::unique_ptr<dwio::common::SerDeOptions> parseSerdeParameters(
 
 bool isSynthesizedColumn(
     const std::string& name,
-    const std::unordered_map<std::string, std::shared_ptr<ColumnHandleBase>>&
+    const std::unordered_map<std::string, std::shared_ptr<const ColumnHandleBase>>&
         infoColumns) {
   return infoColumns.count(name) != 0;
 }
@@ -308,7 +308,7 @@ void checkColumnNameLowerCase(const std::shared_ptr<const Type>& type) {
 
 void checkColumnNameLowerCase(
     const velox::common::SubfieldFilters& filters,
-    const std::unordered_map<std::string, std::shared_ptr<ColumnHandleBase>>&
+    const std::unordered_map<std::string, std::shared_ptr<const ColumnHandleBase>>&
         infoColumns) {
   for (const auto& filterIt : filters) {
     const auto name = filterIt.first.toString();

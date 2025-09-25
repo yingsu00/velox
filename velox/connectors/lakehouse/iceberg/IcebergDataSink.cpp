@@ -18,4 +18,10 @@
 
 namespace facebook::velox::connector::lakehouse::iceberg  {
   // TODO: to be finished
+IcebergDataSink::IcebergDataSink(
+    RowTypePtr inputType,
+    std::shared_ptr<const ConnectorInsertTableHandle> insertTableHandle,
+    const ConnectorQueryCtx* connectorQueryCtx,
+    CommitStrategy commitStrategy,
+    const std::shared_ptr<const IcebergConfig>& icebergConfig) {}
 } // namespace facebook::velox::connector::lakehouse::iceberg

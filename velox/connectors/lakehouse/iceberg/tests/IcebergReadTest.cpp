@@ -16,15 +16,12 @@
 
 #include "velox/common/base/tests/GTestUtils.h"
 #include "velox/common/file/FileSystems.h"
+#include "velox/connectors/lakehouse/common/ConnectorSplitBase.h"
 #include "velox/connectors/lakehouse/iceberg/tests/IcebergConnectorTestBase.h"
-#include "velox/connectors/lakehouse/iceberg/IcebergConnectorSplit.h"
-#include "velox/connectors/lakehouse/iceberg/IcebergDeleteFile.h"
+#include "velox/connectors/lakehouse/iceberg/tests/PlanBuilder.h"
 #include "velox/connectors/lakehouse/iceberg/IcebergMetadataColumns.h"
 #include "velox/connectors/lakehouse/iceberg/IcebergTableHandle.h"
-#include "velox/dwio/dwrf/common/Config.h"
-#include "velox/dwio/dwrf/writer/FlushPolicy.h"
 #include "velox/exec/PlanNodeStats.h"
-#include "velox/exec/tests/utils/PlanBuilder.h"
 
 #include <folly/Singleton.h>
 
@@ -36,8 +33,6 @@ using namespace facebook::velox::dwio::common;
 using namespace facebook::velox::test;
 
 namespace facebook::velox::connector::lakehouse::iceberg::test {
-
-static const std::string kIcebergConnectorId = "test-iceberg";
 
 class IcebergReadTest : public IcebergConnectorTestBase {
  public:
@@ -365,7 +360,7 @@ class IcebergReadTest : public IcebergConnectorTestBase {
   std::shared_ptr<dwrf::Config> config_;
   std::function<std::unique_ptr<dwrf::DWRFFlushPolicy>()> flushPolicyFactory_;
 
-  std::vector<std::shared_ptr<ConnectorSplit>> makeIcebergSplits(
+  std::vector<std::shared_ptr<common::ConnectorSplitBase>> makeIcebergSplits(
       const std::string& dataFilePath,
       const std::vector<IcebergDeleteFile>& deleteFiles = {},
       const std::unordered_map<std::string, std::optional<std::string>>&
@@ -377,23 +372,20 @@ class IcebergReadTest : public IcebergConnectorTestBase {
     auto file = filesystems::getFileSystem(dataFilePath, nullptr)
                     ->openFileForRead(dataFilePath);
     const int64_t fileSize = file->size();
-    std::vector<std::shared_ptr<ConnectorSplit>> splits;
+    std::vector<std::shared_ptr<common::ConnectorSplitBase>> splits;
     const uint64_t splitSize = std::floor((fileSize) / splitCount);
 
     for (int i = 0; i < splitCount; ++i) {
-      splits.emplace_back(
-          std::make_shared<IcebergConnectorSplit>(
-              kIcebergConnectorId,
-              dataFilePath,
-              fileFomat_,
-              i * splitSize,
-              splitSize,
-              partitionKeys,
-              std::nullopt,
-              std::nullopt,
-              0,
-              /*cacheable=*/true,
-              deleteFiles));
+      IcebergConnectorSplitBuilder icebergConnectorSplitBuilder(dataFilePath);
+      icebergConnectorSplitBuilder.connectorId(common::test::kIcebergConnectorId)
+          .fileFormat(fileFomat_)
+          .start(i * splitSize)
+          .length(splitSize)
+          .partitionKeys(partitionKeys)
+          .splitWeight(0)
+          .cacheable(true)
+          .deleteFiles(deleteFiles);
+      splits.emplace_back(icebergConnectorSplitBuilder.build());
     }
 
     return splits;

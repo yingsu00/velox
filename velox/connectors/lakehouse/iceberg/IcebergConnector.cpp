@@ -17,7 +17,7 @@
 #include "IcebergConnector.h"
 
 #include "IcebergConfig.h"
-#include "IcebergDataSink.h"
+//#include "IcebergDataSink.h"
 #include "IcebergDataSource.h"
 #include "IcebergPartitionFunction.h"
 #include "velox/common/base/Fs.h"
@@ -80,6 +80,7 @@ std::unique_ptr<DataSource> IcebergConnector::createDataSource(
     const ConnectorTableHandlePtr& tableHandle,
     const connector::ColumnHandleMap& columnHandles,
     ConnectorQueryCtx* connectorQueryCtx) {
+  std::cout << "TableHandle is " << tableHandle->toString() << "\n";
   return std::make_unique<IcebergDataSource>(
       outputType,
       tableHandle,
@@ -95,12 +96,13 @@ std::unique_ptr<DataSink> IcebergConnector::createDataSink(
     ConnectorInsertTableHandlePtr connectorInsertTableHandle,
     ConnectorQueryCtx* connectorQueryCtx,
     CommitStrategy commitStrategy) {
-  return std::make_unique<IcebergDataSink>(
-      inputType,
-      connectorInsertTableHandle,
-      connectorQueryCtx,
-      commitStrategy,
-      icebergConfig_);
+//  return std::make_unique<IcebergDataSink>(
+//      inputType,
+//      connectorInsertTableHandle,
+//      connectorQueryCtx,
+//      commitStrategy,
+//      icebergConfig_);
+  VELOX_NYI("IcbergDataSink not implemented yet");
 }
 
 // static

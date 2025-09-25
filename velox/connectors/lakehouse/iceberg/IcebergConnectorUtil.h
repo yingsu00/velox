@@ -39,7 +39,7 @@ bool filterSplit(
         partitionData,
     const std::unordered_map<
         std::string,
-        std::shared_ptr<lakehouse::common::ColumnHandleBase>>& partitionKeysHandle,
+        std::shared_ptr<const lakehouse::common::ColumnHandleBase>>& partitionKeysHandle,
     bool asLocalTime);
 
 } // namespace facebook::velox::connector::lakehouse::iceberg

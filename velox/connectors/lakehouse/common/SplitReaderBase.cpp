@@ -31,7 +31,7 @@ namespace facebook::velox::connector::lakehouse::common {
 SplitReaderBase::SplitReaderBase(
     const std::shared_ptr<const ConnectorSplitBase>& split,
     const std::shared_ptr<const TableHandleBase>& tableHandle,
-    const std::unordered_map<std::string, std::shared_ptr<ColumnHandleBase>>*
+    const std::unordered_map<std::string, std::shared_ptr<const ColumnHandleBase>>*
         partitionColumnHandles,
     const ConnectorQueryCtx* connectorQueryCtx,
     const std::shared_ptr<const ConnectorConfigBase>& ConnectorConfigBase,

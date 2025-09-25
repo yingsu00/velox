@@ -27,6 +27,8 @@
 
 namespace facebook::velox::connector::lakehouse::common::test {
 
+static const std::string kIcebergConnectorId = "test-hive";
+
 using ColumnHandleMap =
     std::unordered_map<std::string, std::shared_ptr<connector::ColumnHandle>>;
 

@@ -35,7 +35,7 @@ struct SubfieldSpec {
 
 bool isSynthesizedColumn(
     const std::string& name,
-    const std::unordered_map<std::string, std::shared_ptr<ColumnHandleBase>>&
+    const std::unordered_map<std::string, std::shared_ptr<const ColumnHandleBase>>&
         infoColumns);
 
 bool isSpecialColumn(
@@ -57,7 +57,7 @@ void checkColumnNameLowerCase(
     const velox::common::SubfieldFilters& filters,
     const std::unordered_map<
         std::string,
-        std::shared_ptr<ColumnHandleBase>>&
+        std::shared_ptr<const ColumnHandleBase>>&
         infoColumns);
 
 void checkColumnNameLowerCase(

@@ -34,32 +34,32 @@ class IcebergConnectorTestBase : public common::test::ConnectorTestBase {
       const core::PlanNodePtr& plan,
       const std::vector<std::shared_ptr<ConnectorSplit>>& splits,
       const std::string& duckDbSql,
-      const int32_t numPrefetchSplit);
+      const int32_t numPrefetchSplit = 0);
 
-  static std::vector<std::shared_ptr<connector::ConnectorSplit>>
+  std::vector<std::shared_ptr<ConnectorSplit>>
   makeIcebergConnectorSplits(
       const std::vector<std::shared_ptr<exec::test::TempFilePath>>& filePaths);
 
-  static std::shared_ptr<connector::lakehouse::iceberg::IcebergConnectorSplit>
-  makeIcebergConnectorSplit(
-      const std::string& filePath,
-      uint64_t start = 0,
-      uint64_t length = std::numeric_limits<uint64_t>::max(),
-      int64_t splitWeight = 0,
-      bool cacheable = true);
-
-  static std::shared_ptr<connector::lakehouse::iceberg::IcebergConnectorSplit>
-  makeIcebergConnectorSplit(
-      const std::string& filePath,
-      int64_t fileSize,
-      int64_t fileModifiedTime,
-      uint64_t start,
-      uint64_t length);
+//  static std::shared_ptr<ConnectorSplit>
+//  makeIcebergConnectorSplit(
+//      const std::string& filePath,
+//      uint64_t start = 0,
+//      uint64_t length = std::numeric_limits<uint64_t>::max(),
+//      int64_t splitWeight = 0,
+//      bool cacheable = true);
+//
+//  static std::shared_ptr<ConnectorSplit>
+//  makeIcebergConnectorSplit(
+//      const std::string& filePath,
+//      int64_t fileSize,
+//      int64_t fileModifiedTime,
+//      uint64_t start,
+//      uint64_t length);
 
   /// Split file at path 'filePath' into 'splitCount' splits. If not local file,
   /// file size can be given as 'externalSize'.
   static std::vector<
-      std::shared_ptr<connector::lakehouse::iceberg::IcebergConnectorSplit>>
+      std::shared_ptr<ConnectorSplit>>
   makeIcebergConnectorSplits(
       const std::string& filePath,
       uint32_t splitCount,
