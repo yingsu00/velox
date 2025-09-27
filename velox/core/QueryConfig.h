@@ -716,6 +716,9 @@ class QueryConfig {
   static constexpr const char* kRowSizeTrackingEnabled =
       "row_size_tracking_enabled";
 
+  static constexpr const char* kPushdownIntegerUpcastsToScan =
+      "pushdown_integer_upcasts_to_scan";
+
   bool selectiveNimbleReaderEnabled() const {
     return get<bool>(kSelectiveNimbleReaderEnabled, false);
   }
@@ -1289,6 +1292,10 @@ class QueryConfig {
 
   std::string clientTags() const {
     return get<std::string>(kClientTags, "");
+  }
+
+  bool pushdownIntegerUpcastsToScan() const {
+    return get<bool>(kPushdownIntegerUpcastsToScan, false);
   }
 
   template <typename T>
