@@ -832,10 +832,15 @@ class QueryConfig {
   /// estimates.
   static constexpr const char* kRowSizeTrackingMode = "row_size_tracking_mode";
 
+<<<<<<< HEAD
   /// Maximum number of distinct values to keep when merging vector hashers in
   /// join HashBuild.
   static constexpr const char* kJoinBuildVectorHasherMaxNumDistinct =
       "join_build_vector_hasher_max_num_distinct";
+=======
+  static constexpr const char* kPushdownIntegerUpcastsToSource =
+      "pushdown_integer_upcasts_to_source";
+>>>>>>> b627700d2 (Pushdown integer upcasts to source operators in LocalPlanner)
 
   enum class RowSizeTrackingMode {
     DISABLED = 0,
@@ -1490,8 +1495,13 @@ class QueryConfig {
     return get<std::string>(kClientTags, "");
   }
 
+
   uint32_t joinBuildVectorHasherMaxNumDistinct() const {
     return get<uint32_t>(kJoinBuildVectorHasherMaxNumDistinct, 1'000'000);
+  }
+
+  bool pushdownIntegerUpcastsToSource() const {
+    return get<bool>(kPushdownIntegerUpcastsToSource, false);
   }
 
   template <typename T>

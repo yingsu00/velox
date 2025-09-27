@@ -349,6 +349,14 @@ RowVectorPtr HashAggregation::getOutput() {
   // - running in partial streaming mode and have some output ready.
   if (!noMoreInput_ && !partialFull_ && !newDistincts_ &&
       !groupingSet_->hasOutput()) {
+//    VLOG(2) << "HashAggregation::getOutput no output ready yet. groupingSet_:"
+//              << groupingSet_.get() << " noMoreInput_:" << noMoreInput_
+//              << " partialFull_:" << partialFull_
+//              << " newDistincts_:" << newDistincts_
+//              << " hasOutput():" << groupingSet_->hasOutput()
+//              << " groupingSet_->noMoreInput_:" << groupingSet_->noMoreInput_
+//              << " groupingSet_->remainingInput_:"
+//              << groupingSet_->remainingInput_;
     input_ = nullptr;
     return nullptr;
   }
@@ -377,6 +385,10 @@ RowVectorPtr HashAggregation::getOutput() {
     return nullptr;
   }
   numOutputRows_ += output_->size();
+
+//  VLOG(2) << "HashAggregation::getOutput produced " << output_->size()
+//            << " rows"
+//            << output_->childAt(0)->asFlatVector<int64_t>()->valueAt(0);
   return output_;
 }
 
@@ -440,6 +452,7 @@ RowVectorPtr HashAggregation::getDistinctOutput() {
 }
 
 void HashAggregation::noMoreInput() {
+  VLOG(google::INFO) << "HashAggregation::noMoreInput called";
   updateEstimatedOutputRowSize();
   groupingSet_->noMoreInput();
   Operator::noMoreInput();
