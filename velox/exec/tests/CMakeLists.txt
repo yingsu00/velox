@@ -37,6 +37,26 @@ target_link_libraries(
 )
 
 add_executable(
+        local_planner_test
+        LocalPlannerTest.cpp
+)
+
+add_test(
+        NAME local_planner_test
+        COMMAND local_planner_test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+target_link_libraries(
+        local_planner_test
+        velox_exec
+        velox_exec_test_lib
+        velox_presto_types
+        GTest::gtest
+        GTest::gtest_main
+)
+
+add_executable(
   velox_exec_test
   AddressableNonNullValueListTest.cpp
   AggregationTest.cpp

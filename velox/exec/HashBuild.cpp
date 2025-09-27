@@ -114,7 +114,6 @@ HashBuild::HashBuild(
   }
 
   tableType_ = hashJoinTableType(joinNode_);
-
   stateCleared_ = false;
 }
 
@@ -415,6 +414,11 @@ void HashBuild::addInput(RowVectorPtr input) {
       (cacheEntry_->builderTaskId == taskId() && !cacheEntry_->buildComplete));
 
   ensureInputFits(input);
+
+//  // Log input data type and size for debugging.
+//  VLOG(2) << "HashBuild addInput: "
+//          << " input data type: " << input->type()->toString()
+//          << " input size: " << input->size();
 
   TestValue::adjust("facebook::velox::exec::HashBuild::addInput", this);
 

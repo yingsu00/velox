@@ -27,7 +27,9 @@
 #include "velox/exec/fuzzer/ReferenceQueryRunner.h"
 #include "velox/expression/tests/ExpressionVerifier.h"
 #include "velox/functions/prestosql/registration/RegistrationFunctions.h"
+#ifdef VELOX_ENABLE_SPARK_FUNCTIONS
 #include "velox/functions/sparksql/registration/Register.h"
+#endif
 #include "velox/vector/VectorSaver.h"
 
 using namespace facebook::velox;
@@ -140,15 +142,27 @@ static bool validateMode(const char* flagName, const std::string& value) {
 
 static bool validateRegistry(const char* flagName, const std::string& value) {
   static const std::unordered_set<std::string> kRegistries = {
-      "presto", "spark"};
+      "presto"
+#ifdef VELOX_ENABLE_SPARK_FUNCTIONS
+      , "spark"
+#endif
+  };
+
   if (kRegistries.count(value) != 1) {
     std::cerr << "Invalid value for --" << flagName << ": " << value << ". ";
     std::cerr << "Valid values are: " << folly::join(", ", kRegistries) << "."
               << std::endl;
     return false;
   }
+
   if (value == "spark") {
+#ifdef VELOX_ENABLE_SPARK_FUNCTIONS
     functions::sparksql::registerFunctions("");
+#else
+    VELOX_FAIL("Spark function registry requested, "
+                 "but VELOX_ENABLE_SPARK_FUNCTIONS=OFF.");
+    return false;
+#endif
   } else if (value == "presto") {
     functions::prestosql::registerAllScalarFunctions();
   }

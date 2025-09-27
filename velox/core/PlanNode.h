@@ -152,6 +152,9 @@ struct PlanSummaryOptions {
   AggregateOptions aggregate = {};
 };
 
+class PlanNode;
+using PlanNodePtr = std::shared_ptr<const PlanNode>;
+
 class PlanNode : public ISerializable {
  public:
   explicit PlanNode(PlanNodeId id) : id_{std::move(id)} {}
@@ -170,6 +173,9 @@ class PlanNode : public ISerializable {
 
   virtual const std::vector<std::shared_ptr<const PlanNode>>& sources()
       const = 0;
+
+  virtual PlanNodePtr copyWithNewSources(
+      std::vector<std::shared_ptr<const PlanNode>> newSources) const;
 
   /// Accepts a visitor to visit this plan node.
   /// Implementations of this class should implement it as
@@ -320,8 +326,6 @@ class PlanNode : public ISerializable {
 
   const PlanNodeId id_;
 };
-
-using PlanNodePtr = std::shared_ptr<const PlanNode>;
 
 class ValuesNode : public PlanNode {
  public:
@@ -695,6 +699,9 @@ class FilterNode : public PlanNode {
     return sources_;
   }
 
+  PlanNodePtr copyWithNewSources(
+      std::vector<PlanNodePtr> newSources) const override;
+
   void accept(const PlanNodeVisitor& visitor, PlanNodeVisitorContext& context)
       const override;
 
@@ -886,6 +893,9 @@ class ProjectNode : public AbstractProjectNode {
       const override;
 
   static PlanNodePtr create(const folly::dynamic& obj, void* context);
+
+  PlanNodePtr copyWithNewSources(
+      std::vector<PlanNodePtr> newSources) const override;
 };
 
 using ProjectNodePtr = std::shared_ptr<const ProjectNode>;
@@ -911,6 +921,47 @@ class ParallelProjectNode : public core::AbstractProjectNode {
       std::vector<std::string> noLoadIdentities,
       core::PlanNodePtr input);
 
+  class Builder
+      : public AbstractProjectNode::Builder<ParallelProjectNode, Builder> {
+   public:
+    Builder() : AbstractProjectNode::Builder<ParallelProjectNode, Builder>() {}
+
+    explicit Builder(const ParallelProjectNode& other)
+        : AbstractProjectNode::Builder<ParallelProjectNode, Builder>(other) {}
+
+    Builder& exprNames(std::vector<std::string> exprNames) {
+      exprNames_ = std::move(exprNames);
+      return static_cast<Builder&>(*this);
+    }
+
+    Builder& exprGroups(
+        std::vector<std::vector<core::TypedExprPtr>> exprGroups) {
+      exprGroups_ = std::move(exprGroups);
+      return static_cast<Builder&>(*this);
+    }
+
+    Builder& noLoadIdentities(std::vector<std::string> noLoadIdentities) {
+      noLoadIdentities_ = std::move(noLoadIdentities);
+      return static_cast<Builder&>(*this);
+    }
+
+    std::shared_ptr<ProjectNode> build() const {
+      VELOX_USER_CHECK(id_.has_value(), "ProjectNode id is not set");
+      VELOX_USER_CHECK(names_.has_value(), "ProjectNode names is not set");
+      VELOX_USER_CHECK(
+          projections_.has_value(), "ProjectNode projections is not set");
+      VELOX_USER_CHECK(source_.has_value(), "ProjectNode source is not set");
+
+      return std::make_shared<ProjectNode>(
+          id_.value(), names_.value(), projections_.value(), source_.value());
+    }
+
+   private:
+    std::vector<std::string> exprNames_;
+    std::vector<std::vector<core::TypedExprPtr>> exprGroups_;
+    std::vector<std::string> noLoadIdentities_;
+  };
+
   std::string_view name() const override {
     return "ParallelProject";
   }
@@ -933,6 +984,9 @@ class ParallelProjectNode : public core::AbstractProjectNode {
       const override;
 
   static PlanNodePtr create(const folly::dynamic& obj, void* context);
+
+  PlanNodePtr copyWithNewSources(
+      std::vector<PlanNodePtr> newSources) const override;
 
  private:
   void addDetails(std::stringstream& stream) const override;
@@ -963,6 +1017,9 @@ class LazyDereferenceNode : public core::ProjectNode {
   }
 
   static PlanNodePtr create(const folly::dynamic& obj, void* context);
+
+  PlanNodePtr copyWithNewSources(
+      std::vector<PlanNodePtr> newSources) const override;
 };
 
 using ParallelProjectNodePtr = std::shared_ptr<const ParallelProjectNode>;
@@ -1368,6 +1425,9 @@ class AggregationNode : public PlanNode {
 
   static PlanNodePtr create(const folly::dynamic& obj, void* context);
 
+  PlanNodePtr copyWithNewSources(
+      std::vector<PlanNodePtr> newSources) const override;
+
  private:
   static const std::vector<vector_size_t> kDefaultGlobalGroupingSets;
   static const std::optional<FieldAccessTypedExprPtr> kDefaultGroupId;
@@ -1674,6 +1734,9 @@ class TableWriteNode : public PlanNode {
 
   static PlanNodePtr create(const folly::dynamic& obj, void* context);
 
+  PlanNodePtr copyWithNewSources(
+      std::vector<PlanNodePtr> newSources) const override;
+
  private:
   void addDetails(std::stringstream& stream) const override;
 
@@ -1793,6 +1856,9 @@ class TableWriteMergeNode : public PlanNode {
 
   static PlanNodePtr create(const folly::dynamic& obj, void* context);
 
+  PlanNodePtr copyWithNewSources(
+      std::vector<PlanNodePtr> newSources) const override;
+
  private:
   void addDetails(std::stringstream& stream) const override;
 
@@ -1897,6 +1963,9 @@ class ExpandNode : public PlanNode {
   folly::dynamic serialize() const override;
 
   static PlanNodePtr create(const folly::dynamic& obj, void* context);
+
+  PlanNodePtr copyWithNewSources(
+      std::vector<PlanNodePtr> newSources) const override;
 
  private:
   void addDetails(std::stringstream& stream) const override;
@@ -2059,6 +2128,9 @@ class GroupIdNode : public PlanNode {
   folly::dynamic serialize() const override;
 
   static PlanNodePtr create(const folly::dynamic& obj, void* context);
+
+  PlanNodePtr copyWithNewSources(
+      std::vector<PlanNodePtr> newSources) const override;
 
  private:
   void addDetails(std::stringstream& stream) const override;
@@ -2259,6 +2331,9 @@ class MergeExchangeNode : public ExchangeNode {
 
   static PlanNodePtr create(const folly::dynamic& obj, void* context);
 
+  PlanNodePtr copyWithNewSources(
+      std::vector<PlanNodePtr> newSources) const override;
+
  private:
   void addDetails(std::stringstream& stream) const override;
 
@@ -2366,6 +2441,9 @@ class LocalMergeNode : public PlanNode {
 
   static PlanNodePtr create(const folly::dynamic& obj, void* context);
 
+  PlanNodePtr copyWithNewSources(
+      std::vector<PlanNodePtr> newSources) const override;
+
  private:
   void addDetails(std::stringstream& stream) const override;
 
@@ -2404,6 +2482,18 @@ class PartitionFunctionSpec : public ISerializable {
   virtual ~PartitionFunctionSpec() = default;
 
   virtual std::string toString() const = 0;
+
+  /// NEW: called when the input RowType of the LocalPartition changes
+  /// (e.g. cast-pushdown added new columns or reordered columns).
+  ///
+  /// Implementations that depend on input column indices (hash keys,
+  /// bucket channels, etc.) can return a new adjusted spec.
+  /// Default: return nullptr meaning "no change needed".
+  virtual std::shared_ptr<PartitionFunctionSpec> rewriteInputType(
+      const RowTypePtr& /*oldInputType*/,
+      const RowTypePtr& /*newInputType*/) const {
+    return nullptr;
+  }
 };
 
 using PartitionFunctionSpecPtr = std::shared_ptr<const PartitionFunctionSpec>;
@@ -2587,6 +2677,9 @@ class LocalPartitionNode : public PlanNode {
   folly::dynamic serialize() const override;
 
   static PlanNodePtr create(const folly::dynamic& obj, void* context);
+
+  PlanNodePtr copyWithNewSources(
+      std::vector<PlanNodePtr> newSources) const override;
 
  private:
   void addDetails(std::stringstream& stream) const override;
@@ -2815,6 +2908,9 @@ class PartitionedOutputNode : public PlanNode {
   folly::dynamic serialize() const override;
 
   static PlanNodePtr create(const folly::dynamic& obj, void* context);
+
+  PlanNodePtr copyWithNewSources(
+      std::vector<PlanNodePtr> newSources) const override;
 
  private:
   void addDetails(std::stringstream& stream) const override;
@@ -3117,6 +3213,9 @@ class AbstractJoinNode : public PlanNode {
 
   folly::dynamic serializeBase() const;
 
+  RowTypePtr recomputeOutputTypeForNewSources(
+      const std::vector<PlanNodePtr>& newSources) const;
+
   const JoinType joinType_;
   const std::vector<FieldAccessTypedExprPtr> leftKeys_;
   const std::vector<FieldAccessTypedExprPtr> rightKeys_;
@@ -3258,9 +3357,27 @@ class HashJoinNode : public AbstractJoinNode {
     return useHashTableCache_;
   }
 
+  bool updateKeys(std::map<std::string, TypePtr> updatedOutputTypes) {
+    bool updated = false;
+    for (auto& key : leftKeys_) {
+      auto it = updatedOutputTypes.find(key->name());
+      if (it != updatedOutputTypes.end()) {
+        updated = true;
+        printf(
+            "Update left join key %s to type %s\n",
+            key->name().c_str(),
+            it->second->toString().c_str());
+      }
+    }
+    return updated;
+  }
+
   folly::dynamic serialize() const override;
 
   static PlanNodePtr create(const folly::dynamic& obj, void* context);
+
+  PlanNodePtr copyWithNewSources(
+      std::vector<PlanNodePtr> newSources) const override;
 
  private:
   void addDetails(std::stringstream& stream) const override;
@@ -3339,6 +3456,9 @@ class MergeJoinNode : public AbstractJoinNode {
   static bool isSupported(JoinType joinType);
 
   static PlanNodePtr create(const folly::dynamic& obj, void* context);
+
+  PlanNodePtr copyWithNewSources(
+      std::vector<PlanNodePtr> newSources) const override;
 };
 
 using MergeJoinNodePtr = std::shared_ptr<const MergeJoinNode>;
@@ -3616,6 +3736,9 @@ class IndexLookupJoinNode : public AbstractJoinNode {
 
   static PlanNodePtr create(const folly::dynamic& obj, void* context);
 
+  PlanNodePtr copyWithNewSources(
+      std::vector<PlanNodePtr> newSources) const override;
+
   /// Returns true if the lookup join supports this join type, otherwise false.
   static bool isSupported(JoinType joinType);
 
@@ -3768,6 +3891,9 @@ class NestedLoopJoinNode : public PlanNode {
 
   static PlanNodePtr create(const folly::dynamic& obj, void* context);
 
+  PlanNodePtr copyWithNewSources(
+      std::vector<PlanNodePtr> newSources) const override;
+
  private:
   static const JoinType kDefaultJoinType;
   static const TypedExprPtr kDefaultJoinCondition;
@@ -3913,6 +4039,9 @@ class OrderByNode : public PlanNode {
   folly::dynamic serialize() const override;
 
   static PlanNodePtr create(const folly::dynamic& obj, void* context);
+
+  PlanNodePtr copyWithNewSources(
+      std::vector<PlanNodePtr> newSources) const override;
 
  private:
   void addDetails(std::stringstream& stream) const override;
@@ -4129,6 +4258,9 @@ class SpatialJoinNode : public PlanNode {
 
   static PlanNodePtr create(const folly::dynamic& obj, void* context);
 
+  PlanNodePtr copyWithNewSources(
+      std::vector<PlanNodePtr> newSources) const override;
+
  private:
   constexpr static JoinType kDefaultJoinType = JoinType::kInner;
 
@@ -4262,6 +4394,9 @@ class TopNNode : public PlanNode {
 
   static PlanNodePtr create(const folly::dynamic& obj, void* context);
 
+  PlanNodePtr copyWithNewSources(
+      std::vector<PlanNodePtr> newSources) const override;
+
  private:
   void addDetails(std::stringstream& stream) const override;
 
@@ -4392,6 +4527,9 @@ class LimitNode : public PlanNode {
   folly::dynamic serialize() const override;
 
   static PlanNodePtr create(const folly::dynamic& obj, void* context);
+
+  PlanNodePtr copyWithNewSources(
+      std::vector<PlanNodePtr> newSources) const override;
 
  private:
   void addDetails(std::stringstream& stream) const override;
@@ -4570,6 +4708,9 @@ class UnnestNode : public PlanNode {
 
   static PlanNodePtr create(const folly::dynamic& obj, void* context);
 
+  PlanNodePtr copyWithNewSources(
+      std::vector<PlanNodePtr> newSources) const override;
+
  private:
   void addDetails(std::stringstream& stream) const override;
 
@@ -4646,6 +4787,9 @@ class EnforceSingleRowNode : public PlanNode {
   folly::dynamic serialize() const override;
 
   static PlanNodePtr create(const folly::dynamic& obj, void* context);
+
+  PlanNodePtr copyWithNewSources(
+      std::vector<PlanNodePtr> newSources) const override;
 
  private:
   void addDetails(std::stringstream& stream) const override;
@@ -4755,6 +4899,9 @@ class AssignUniqueIdNode : public PlanNode {
   folly::dynamic serialize() const override;
 
   static PlanNodePtr create(const folly::dynamic& obj, void* context);
+
+  PlanNodePtr copyWithNewSources(
+      std::vector<PlanNodePtr> newSources) const override;
 
  private:
   void addDetails(std::stringstream& stream) const override;
@@ -4992,6 +5139,9 @@ class WindowNode : public PlanNode {
 
   static PlanNodePtr create(const folly::dynamic& obj, void* context);
 
+  PlanNodePtr copyWithNewSources(
+      std::vector<PlanNodePtr> newSources) const override;
+
  private:
   void addDetails(std::stringstream& stream) const override;
 
@@ -5134,6 +5284,9 @@ class RowNumberNode : public PlanNode {
 
   static PlanNodePtr create(const folly::dynamic& obj, void* context);
 
+  PlanNodePtr copyWithNewSources(
+      std::vector<PlanNodePtr> newSources) const override;
+
  private:
   void addDetails(std::stringstream& stream) const override;
 
@@ -5245,6 +5398,9 @@ class MarkDistinctNode : public PlanNode {
   folly::dynamic serialize() const override;
 
   static PlanNodePtr create(const folly::dynamic& obj, void* context);
+
+  PlanNodePtr copyWithNewSources(
+      std::vector<PlanNodePtr> newSources) const override;
 
  private:
   void addDetails(std::stringstream& stream) const override;
@@ -5519,6 +5675,9 @@ class TopNRowNumberNode : public PlanNode {
   folly::dynamic serialize() const override;
 
   static PlanNodePtr create(const folly::dynamic& obj, void* context);
+
+  PlanNodePtr copyWithNewSources(
+      std::vector<PlanNodePtr> newSources) const override;
 
  private:
   void addDetails(std::stringstream& stream) const override;
