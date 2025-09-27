@@ -13,7 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "velox/exec/LocalPlanner.h"
+#include <set>
+
 #include "velox/core/PlanFragment.h"
 #include "velox/exec/ArrowStream.h"
 #include "velox/exec/AssignUniqueId.h"
@@ -28,6 +29,7 @@
 #include "velox/exec/HashProbe.h"
 #include "velox/exec/IndexLookupJoin.h"
 #include "velox/exec/Limit.h"
+#include "velox/exec/LocalPlanner.h"
 #include "velox/exec/MarkDistinct.h"
 #include "velox/exec/Merge.h"
 #include "velox/exec/MergeJoin.h"
@@ -210,12 +212,63 @@ OperatorSupplier makeOperatorSupplier(
   return Operator::operatorSupplierFromPlanNode(planNode);
 }
 
-void plan(
+void traverseAndUpdateHashKeys(
+    const TypePtr& type,
+    std::set<std::string>& hashKeys) {
+  hashKeys.erase(std::string(type->name()));
+
+  if (type->isPrimitiveType()) {
+    return;
+  }
+
+  if (type->isMap()) {
+    const auto& mapType = type->as<TypeKind::MAP>();
+    traverseAndUpdateHashKeys(mapType.keyType(), hashKeys);
+    traverseAndUpdateHashKeys(mapType.valueType(), hashKeys);
+  } else if (type->isArray()) {
+    const auto& arrayType = type->as<TypeKind::ARRAY>();
+    traverseAndUpdateHashKeys(arrayType.elementType(), hashKeys);
+  } else if (type->isRow()) {
+    const auto& rowType = type->as<TypeKind::ROW>();
+    for (const auto& childType : rowType.children()) {
+      traverseAndUpdateHashKeys(childType, hashKeys);
+    }
+  } else {
+    VELOX_UNREACHABLE(
+        "traverseAndUpdateHashKeys: Unsupported complex type: {}",
+        type->toString());
+  }
+}
+
+bool isIntegral(const TypePtr& type) {
+  return type->isBigint() || type->isInteger() || type->isSmallint() ||
+      type->isTinyint();
+}
+
+bool isWideningIntegralCast(const core::TypedExprPtr& expr) {
+  auto castExpr = std::dynamic_pointer_cast<const core::CastTypedExpr>(expr);
+  if (!castExpr) {
+    return false;
+  }
+
+  auto outputType = castExpr->type();
+  auto inputType = castExpr->inputs()[0]->type();
+  if (!isIntegral(outputType) || !isIntegral(inputType)) {
+    return false;
+  }
+  if (outputType->cppSizeInBytes() >= inputType->cppSizeInBytes()) {
+    return true;
+  }
+  return false;
+}
+
+std::map<std::string, TypePtr> plan(
     const std::shared_ptr<const core::PlanNode>& planNode,
     std::vector<std::shared_ptr<const core::PlanNode>>* currentPlanNodes,
     const std::shared_ptr<const core::PlanNode>& consumerNode,
     OperatorSupplier operatorSupplier,
-    std::vector<std::unique_ptr<DriverFactory>>* driverFactories) {
+    std::vector<std::unique_ptr<DriverFactory>>* driverFactories,
+    std::set<std::string> hashOnlyKeys) {
   if (!currentPlanNodes) {
     auto driverFactory = std::make_unique<DriverFactory>();
     currentPlanNodes = &driverFactory->planNodes;
@@ -224,6 +277,45 @@ void plan(
     driverFactories->push_back(std::move(driverFactory));
   }
 
+  if (auto joinNode =
+          std::dynamic_pointer_cast<const core::HashJoinNode>(planNode)) {
+    // Collect all hash keys from both sides of the join that are not output.
+    std::set<std::string> currentHashKeys;
+    auto& leftKeys = joinNode->leftKeys();
+    for (int i = 0; i < leftKeys.size(); ++i) {
+      currentHashKeys.insert(leftKeys[i]->name());
+    }
+    auto& rightKeys = joinNode->rightKeys();
+    for (int i = 0; i < rightKeys.size(); ++i) {
+      currentHashKeys.insert(rightKeys[i]->name());
+    }
+
+    // Traverse the output type and remove the hash keys that are also output
+    traverseAndUpdateHashKeys(planNode->outputType(), currentHashKeys);
+
+    // Merge with the hash keys from the upper level.
+    for (const auto& key : currentHashKeys) {
+      hashOnlyKeys.insert(key);
+    }
+  } else if (
+      auto projectNode = std::const_pointer_cast<core::ProjectNode>(
+          dynamic_pointer_cast<const core::ProjectNode>(planNode))) {
+    // Remove cast expressions on hash keys if they are widening integral casts.
+    for (auto i = 0; i < projectNode->names().size(); i++) {
+      auto name = projectNode->names()[i];
+      if (hashOnlyKeys.find(name) != hashOnlyKeys.end()) {
+        auto projection = projectNode->projections()[i];
+        if (isWideningIntegralCast(projection)) {
+          hashOnlyKeys.erase(name);
+          projectNode->setProjection(i, projection->inputs()[0]);
+          projectNode->updateOutputType(i, projection->inputs()[0]->type());
+        }
+      }
+    }
+  }
+
+  std::map<std::string, TypePtr> updatedOutputTypes;
+
   const auto& sources = planNode->sources();
   if (sources.empty()) {
     driverFactories->back()->inputDriver = true;
@@ -231,16 +323,22 @@ void plan(
     const auto numSourcesToPlan =
         isIndexLookupJoin(planNode.get()) ? 1 : sources.size();
     for (int32_t i = 0; i < numSourcesToPlan; ++i) {
-      plan(
+      auto updatedTypesBySource = plan(
           sources[i],
           mustStartNewPipeline(planNode, i) ? nullptr : currentPlanNodes,
           planNode,
           makeOperatorSupplier(planNode),
-          driverFactories);
+          driverFactories,
+          hashOnlyKeys);
+      auto updatedOutputTypesBySource =
+          planNode->updateOutputTypes(updatedTypesBySource);
+      updatedOutputTypes.insert(
+          updatedOutputTypesBySource.begin(), updatedOutputTypesBySource.end());
     }
   }
 
   currentPlanNodes->push_back(planNode);
+  return updatedOutputTypes;
 }
 
 // Sometimes consumer limits the number of drivers its producer can run.
@@ -361,12 +459,15 @@ void LocalPlanner::plan(
       adapter.inspect(planFragment);
     }
   }
+
+  std::set<std::string> hashKeys;
   detail::plan(
       planFragment.planNode,
       nullptr,
       nullptr,
       detail::makeOperatorSupplier(std::move(consumerSupplier)),
-      driverFactories);
+      driverFactories,
+      hashKeys);
 
   (*driverFactories)[0]->outputDriver = true;
 

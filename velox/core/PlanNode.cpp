@@ -3528,6 +3528,27 @@ folly::dynamic PlanNode::serialize() const {
   return obj;
 }
 
+std::map<std::string, TypePtr> PlanNode::updateOutputTypes(
+    const std::map<std::string, TypePtr>& newOutputTypes) const {
+  RowTypePtr originalOutputType = outputType();
+  std::map<std::string, TypePtr> updatedOutputTypes;
+  for (auto i = 0; i < originalOutputType->size(); i++) {
+    auto name = originalOutputType->nameOf(i);
+    auto newOutTypeIter = newOutputTypes.find(name);
+    if (newOutTypeIter != newOutputTypes.end()) {
+      // If the field was updated by upstream PlanNodes before, it must be a
+      // FieldAccessTypedExpr that directly references the same field name in
+      // this current ProjectionNode. Otherwise it would have a different symbol
+      // name. In this case we only need to update the output type of this
+      // node, because FieldAccessTypedExpr doesn't specify the input type.
+      auto outputType = newOutTypeIter->second;
+      updateOutputType(i, outputType);
+      updatedOutputTypes[name] = outputType;
+    }
+  }
+  return updatedOutputTypes;
+}
+
 const std::vector<PlanNodePtr>& TraceScanNode::sources() const {
   return kEmptySources;
 }

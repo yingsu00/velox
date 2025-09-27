@@ -1142,6 +1142,11 @@ class RowType : public TypeBase<TypeKind::ROW> {
     return children_[idx];
   }
 
+  void updateChildAt(uint32_t idx, TypePtr newType) {
+    VELOX_CHECK_LT(idx, children_.size());
+    children_[idx] = newType;
+  }
+
   const std::vector<TypePtr>& children() const {
     return children_;
   }
@@ -1219,7 +1224,7 @@ class RowType : public TypeBase<TypeKind::ROW> {
   const NameToIndex* ensureNameToIndex() const;
 
   const std::vector<std::string> names_;
-  const std::vector<TypePtr> children_;
+  std::vector<TypePtr> children_;
   mutable std::atomic<std::vector<TypeParameter>*> parameters_{nullptr};
   mutable std::atomic<NameToIndex*> nameToIndex_{nullptr};
   mutable std::atomic_bool hashKindComputed_{false};

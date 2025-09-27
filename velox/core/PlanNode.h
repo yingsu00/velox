@@ -168,6 +168,13 @@ class PlanNode : public ISerializable {
 
   virtual const RowTypePtr& outputType() const = 0;
 
+  void updateOutputType(int i, TypePtr type) const {
+    std::const_pointer_cast<RowType>(outputType())->updateChildAt(i, type);
+  }
+
+  std::map<std::string, TypePtr> updateOutputTypes(
+      const std::map<std::string, TypePtr>& inputTypes) const;
+
   virtual const std::vector<std::shared_ptr<const PlanNode>>& sources()
       const = 0;
 
@@ -808,6 +815,10 @@ class AbstractProjectNode : public PlanNode {
     return projections_;
   }
 
+  void setProjection(int i, TypedExprPtr expr) {
+    projections_[i] = expr;
+  }
+
   // This function is virtual to allow customized projections to inherit from
   // this class without re-implementing the other functions.
   virtual std::string_view name() const override {
@@ -833,8 +844,8 @@ class AbstractProjectNode : public PlanNode {
 
   const std::vector<PlanNodePtr> sources_;
   const std::vector<std::string> names_;
-  const std::vector<TypedExprPtr> projections_;
-  const RowTypePtr outputType_;
+  std::vector<TypedExprPtr> projections_;
+  RowTypePtr outputType_;
 };
 
 class ProjectNode : public AbstractProjectNode {
