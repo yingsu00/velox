@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "velox/connectors/lakehouse/common/TableHandleBase.h"
+#include "TableHandleBase.h"
 #include "velox/dwio/common/Reader.h"
 #include "velox/type/Filter.h"
 #include "velox/type/Type.h"
@@ -39,7 +39,7 @@ bool filterSplit(
         partitionData,
     const std::unordered_map<
         std::string,
-        std::shared_ptr<const lakehouse::common::ColumnHandleBase>>& partitionKeysHandle,
+        std::shared_ptr<const ColumnHandleBase>>& partitionKeysHandle,
     bool asLocalTime);
 
 } // namespace facebook::velox::connector::lakehouse::iceberg

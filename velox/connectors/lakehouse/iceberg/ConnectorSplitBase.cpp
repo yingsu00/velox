@@ -16,7 +16,7 @@
 
 #include "ConnectorSplitBase.h"
 
-namespace facebook::velox::connector::lakehouse::common {
+namespace facebook::velox::connector::lakehouse::iceberg {
 
 std::string ConnectorSplitBase::getFileName() const {
   const auto i = filePath.rfind('/');
@@ -78,4 +78,4 @@ std::string ConnectorSplitBase::toStringBase(const std::string& className) const
       fileFormat);
 }
 
-} // namespace facebook::velox::connector::lakehouse::common
+} // namespace facebook::velox::connector::lakehouse::iceberg

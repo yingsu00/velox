@@ -17,12 +17,9 @@
 #include "IcebergConnector.h"
 
 #include "IcebergConfig.h"
-//#include "IcebergDataSink.h"
 #include "IcebergDataSource.h"
 #include "IcebergPartitionFunction.h"
 #include "velox/common/base/Fs.h"
-#include "velox/expression/ExprToSubfieldFilter.h"
-#include "velox/expression/FieldReference.h"
 
 #include <boost/lexical_cast.hpp>
 #include <folly/Executor.h>
@@ -32,7 +29,6 @@
 namespace facebook::velox::connector::lakehouse::iceberg  {
 
 using namespace facebook::velox::connector;
-using namespace facebook::velox::connector::lakehouse::common;
 using namespace facebook::velox::exec;
 
 namespace {
@@ -67,12 +63,6 @@ IcebergConnector::IcebergConnector(
     LOG(INFO) << "Iceberg connector " << connectorId()
               << " created with file handle cache disabled";
   }
-  for (auto& factory : IcebergConnectorMetadataFactories()) {
-    metadata_ = factory->create(this);
-    if (metadata_ != nullptr) {
-      break;
-    }
-  }
 }
 
 std::unique_ptr<DataSource> IcebergConnector::createDataSource(
@@ -80,7 +70,6 @@ std::unique_ptr<DataSource> IcebergConnector::createDataSource(
     const ConnectorTableHandlePtr& tableHandle,
     const connector::ColumnHandleMap& columnHandles,
     ConnectorQueryCtx* connectorQueryCtx) {
-  std::cout << "TableHandle is " << tableHandle->toString() << "\n";
   return std::make_unique<IcebergDataSource>(
       outputType,
       tableHandle,

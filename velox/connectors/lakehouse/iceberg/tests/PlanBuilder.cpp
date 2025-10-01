@@ -15,29 +15,26 @@
  */
 
 #include "velox/connectors/lakehouse/iceberg/tests/PlanBuilder.h"
-
-#include "velox/common/base/Status.h"
 #include "velox/connectors/lakehouse/iceberg/IcebergConnector.h"
-#include "velox/connectors/lakehouse/common/TableHandleBase.h"
-#include "velox/core/FilterToExpression.h"
+#include "velox/connectors/lakehouse/iceberg/IcebergTableHandle.h"
+#include "velox/connectors/tpcds/TpcdsConnector.h"
+#include "velox/connectors/tpch/TpchConnector.h"
 #include "velox/duckdb/conversion/DuckParser.h"
 #include "velox/exec/Aggregate.h"
 #include "velox/exec/HashPartitionFunction.h"
 #include "velox/exec/RoundRobinPartitionFunction.h"
 #include "velox/exec/TableWriter.h"
 #include "velox/exec/WindowFunction.h"
-#include "velox/expression/Expr.h"
+#include "velox/exec/tests/utils/AggregationResolver.h"
+#include "velox/exec/tests/utils/FilterToExpression.h"
 #include "velox/expression/ExprToSubfieldFilter.h"
-#include "velox/expression/SignatureBinder.h"
 #include "velox/expression/VectorReaders.h"
-#include "velox/parse/Expressions.h"
-#include "velox/parse/TypeResolver.h"
 
 using namespace facebook::velox;
-using namespace facebook::velox::exec;
-using namespace facebook::velox::connector::lakehouse::common;
+using namespace facebook::velox::connector;
+using namespace facebook::velox::connector::lakehouse::iceberg;
 
-namespace facebook::velox::connector::lakehouse::common::test {
+namespace facebook::velox::exec::test {
 namespace {
 
 core::TypedExprPtr parseExpr(
@@ -49,23 +46,23 @@ core::TypedExprPtr parseExpr(
   return core::Expressions::inferTypes(untyped, rowType, pool);
 }
 
-std::shared_ptr<HiveBucketProperty> buildHiveBucketProperty(
-    const RowTypePtr rowType,
-    int32_t bucketCount,
-    const std::vector<std::string>& bucketColumns,
-    const std::vector<std::shared_ptr<const HiveSortingColumn>>& sortBy) {
-  std::vector<TypePtr> bucketTypes;
-  bucketTypes.reserve(bucketColumns.size());
-  for (const auto& bucketColumn : bucketColumns) {
-    bucketTypes.push_back(rowType->childAt(rowType->getChildIdx(bucketColumn)));
-  }
-  return std::make_shared<HiveBucketProperty>(
-      HiveBucketProperty::Kind::kHiveCompatible,
-      bucketCount,
-      bucketColumns,
-      bucketTypes,
-      sortBy);
-}
+//std::shared_ptr<IcebergBucketProperty> buildIcebergBucketProperty(
+//    const RowTypePtr rowType,
+//    int32_t bucketCount,
+//    const std::vector<std::string>& bucketColumns,
+//    const std::vector<std::shared_ptr<const IcebergSortingColumn>>& sortBy) {
+//  std::vector<TypePtr> bucketTypes;
+//  bucketTypes.reserve(bucketColumns.size());
+//  for (const auto& bucketColumn : bucketColumns) {
+//    bucketTypes.push_back(rowType->childAt(rowType->getChildIdx(bucketColumn)));
+//  }
+//  return std::make_shared<IcebergBucketProperty>(
+//      IcebergBucketProperty::Kind::kHiveCompatible,
+//      bucketCount,
+//      bucketColumns,
+//      bucketTypes,
+//      sortBy);
+//}
 } // namespace
 
 PlanBuilder& PlanBuilder::tableScan(
@@ -144,7 +141,7 @@ PlanBuilder::TableScanBuilder& PlanBuilder::TableScanBuilder::subfieldFilters(
 
     auto it = columnAliases_.find(subfield.toString());
     if (it != columnAliases_.end()) {
-      subfield = velox::common::Subfield(it->second);
+      subfield = common::Subfield(it->second);
     }
     VELOX_CHECK_EQ(
         subfieldFiltersMap_.count(subfield),
@@ -159,7 +156,7 @@ PlanBuilder::TableScanBuilder& PlanBuilder::TableScanBuilder::subfieldFilters(
 
 PlanBuilder::TableScanBuilder&
 PlanBuilder::TableScanBuilder::subfieldFiltersMap(
-    const velox::common::SubfieldFilters& filtersMap) {
+    const common::SubfieldFilters& filtersMap) {
   for (const auto& [k, v] : filtersMap) {
     subfieldFiltersMap_[k.clone()] = v->clone();
   }
@@ -182,9 +179,7 @@ void addConjunct(
     conjunction = conjunct;
   } else {
     conjunction = std::make_shared<core::CallTypedExpr>(
-        BOOLEAN(),
-        std::vector<core::TypedExprPtr>{conjunction, conjunct},
-        "and");
+        BOOLEAN(), "and", conjunction, conjunct);
   }
 }
 } // namespace
@@ -197,20 +192,22 @@ core::PlanNodePtr PlanBuilder::TableScanBuilder::build(core::PlanNodeId id) {
     const auto& name = outputType_->nameOf(i);
     const auto& type = outputType_->childAt(i);
 
-    std::string hiveColumnName = name;
+    std::string columnName = name;
     auto it = columnAliases_.find(name);
     if (it != columnAliases_.end()) {
-      hiveColumnName = it->second;
+      columnName = it->second;
       typedMapping.emplace(
           name,
-          std::make_shared<core::FieldAccessTypedExpr>(type, hiveColumnName));
+          std::make_shared<core::FieldAccessTypedExpr>(type, columnName));
     }
 
     if (!hasAssignments) {
       assignments_.insert(
           {name,
-           std::make_shared<ColumnHandleBase>(
-               hiveColumnName, ColumnHandleBase::ColumnType::kRegular, type)});
+           std::make_shared<IcebergColumnHandle>(
+               columnName,
+               IcebergColumnHandle::ColumnType::kRegular,
+               type)});
     }
   }
 
@@ -220,7 +217,7 @@ core::PlanNodePtr PlanBuilder::TableScanBuilder::build(core::PlanNodeId id) {
 
   if (filtersAsNode_) {
     for (const auto& [subfield, filter] : subfieldFiltersMap_) {
-      auto filterExpr = core::filterToExpr(
+      auto filterExpr = core::test::filterToExpr(
           subfield, filter.get(), parseType, planBuilder_.pool_);
 
       addConjunct(filterExpr, filterNodeExpr);
@@ -241,7 +238,7 @@ core::PlanNodePtr PlanBuilder::TableScanBuilder::build(core::PlanNodeId id) {
   }
 
   if (!tableHandle_) {
-    tableHandle_ = std::make_shared<TableHandleBase>(
+    tableHandle_ = std::make_shared<IcebergTableHandle>(
         connectorId_,
         tableName_,
         true,
@@ -268,52 +265,50 @@ core::PlanNodePtr PlanBuilder::TableWriterBuilder::build(core::PlanNodeId id) {
   // upstream operator.
   auto outputType = outputType_ ? outputType_ : upstreamNode->outputType();
 
-  // If insertHandle_ is not specified, build a HiveInsertTableHandle along with
+  // If insertHandle_ is not specified, build a IcebergInsertTableHandle along with
   // columnHandles, bucketProperty and locationHandle.
   if (!insertHandle_) {
     // Create column handles.
-    std::vector<ColumnHandlePtr> columnHandles;
+    std::vector<std::shared_ptr<const ColumnHandle>>
+        columnHandles;
     for (auto i = 0; i < outputType->size(); ++i) {
       const auto column = outputType->nameOf(i);
       const bool isPartitionKey =
           std::find(partitionBy_.begin(), partitionBy_.end(), column) !=
           partitionBy_.end();
       columnHandles.push_back(
-          std::make_shared<connector::lakehouse::common::ColumnHandleBase>(
+          std::make_shared<IcebergColumnHandle>(
               column,
-              isPartitionKey ? connector::lakehouse::common::ColumnHandleBase::
-                                   ColumnType::kPartitionKey
-                             : connector::lakehouse::common::ColumnHandleBase::
-                                   ColumnType::kRegular,
+              isPartitionKey
+                  ? IcebergColumnHandle::ColumnType::kPartitionKey
+                  : IcebergColumnHandle::ColumnType::kRegular,
               outputType->childAt(i)));
     }
 
-    auto locationHandle =
-        std::make_shared<connector::lakehouse::common::LocationHandle>(
-            outputDirectoryPath_,
-            outputDirectoryPath_,
-            connector::lakehouse::common::LocationHandle::TableType::kNew,
-            outputFileName_);
+    auto locationHandle = std::make_shared<LocationHandle>(
+        outputDirectoryPath_,
+        outputDirectoryPath_,
+        LocationHandle::TableType::kNew,
+        outputFileName_);
 
-    std::shared_ptr<HiveBucketProperty> bucketProperty;
-    if (bucketCount_ != 0) {
-      bucketProperty = buildHiveBucketProperty(
-          outputType, bucketCount_, bucketedBy_, sortBy_);
-    }
+//    std::shared_ptr<IcebergBucketProperty> bucketProperty;
+//    if (bucketCount_ != 0) {
+//      bucketProperty = buildIcebergBucketProperty(
+//          outputType, bucketCount_, bucketedBy_, sortBy_);
+//    }
 
-    auto hiveHandle =
-        std::make_shared<connector::lakehouse::common::HiveInsertTableHandle>(
-            columnHandles,
-            locationHandle,
-            fileFormat_,
-            bucketProperty,
-            compressionKind_,
-            serdeParameters_,
-            options_,
-            ensureFiles_);
+    auto icebergHandle = std::make_shared<IcebergInsertTableHandle>(
+        columnHandles,
+        locationHandle,
+        fileFormat_,
+//        bucketProperty,
+        compressionKind_,
+        serdeParameters_,
+        options_,
+        ensureFiles_);
 
     insertHandle_ =
-        std::make_shared<core::InsertTableHandle>(connectorId_, hiveHandle);
+        std::make_shared<core::InsertTableHandle>(connectorId_, icebergHandle);
   }
 
   std::optional<core::ColumnStatsSpec> columnStatsSpec;
@@ -638,17 +633,18 @@ PlanBuilder& PlanBuilder::tableWrite(
     const std::vector<std::string>& partitionBy,
     int32_t bucketCount,
     const std::vector<std::string>& bucketedBy,
-    const std::vector<std::shared_ptr<const HiveSortingColumn>>& sortBy,
+    const std::vector<std::shared_ptr<const IcebergSortingColumn>>& sortBy,
     const dwio::common::FileFormat fileFormat,
     const std::vector<std::string>& aggregates,
     const std::string_view& connectorId,
     const std::unordered_map<std::string, std::string>& serdeParameters,
     const std::shared_ptr<dwio::common::WriterOptions>& options,
     const std::string& outputFileName,
-    const velox::common::CompressionKind compressionKind,
+    const common::CompressionKind compressionKind,
     const RowTypePtr& schema,
     const bool ensureFiles,
-    const connector::CommitStrategy commitStrategy) {
+    const connector::CommitStrategy commitStrategy,
+    std::shared_ptr<core::InsertTableHandle> insertTableHandle) {
   return TableWriterBuilder(*this)
       .outputDirectoryPath(outputDirectoryPath)
       .outputFileName(outputFileName)
@@ -665,6 +661,7 @@ PlanBuilder& PlanBuilder::tableWrite(
       .compressionKind(compressionKind)
       .ensureFiles(ensureFiles)
       .commitStrategy(commitStrategy)
+      .insertHandle(insertTableHandle)
       .endTableWriter();
 }
 
@@ -711,9 +708,8 @@ PlanBuilder& PlanBuilder::tableWriteMerge() {
       core::AggregationNode::Aggregate aggregate = writerSpec.aggregates[i];
       aggregate.call = std::make_shared<core::CallTypedExpr>(
           aggregate.call->type(),
-          std::vector<core::TypedExprPtr>{
-              field(inputType, writerSpec.aggregateNames[i])},
-          aggregate.call->name());
+          aggregate.call->name(),
+          field(inputType, writerSpec.aggregateNames[i]));
       aggregates.push_back(std::move(aggregate));
       aggregateNames.push_back(fmt::format("a{}", i));
     }
@@ -757,8 +753,8 @@ core::PlanNodePtr PlanBuilder::createIntermediateOrFinalAggregation(
       aggregate.rawInputTypes.push_back(rawInput->type());
     }
 
-    auto type = exec::test::resolveAggregateType(
-        name, step, aggregate.rawInputTypes, false);
+    auto type =
+        resolveAggregateType(name, step, aggregate.rawInputTypes, false);
     std::vector<core::TypedExprPtr> inputs = {field(numGroupingKeys + i)};
 
     // Add lambda inputs.
@@ -859,7 +855,7 @@ PlanBuilder::AggregatesAndNames PlanBuilder::createAggregateExpressionsAndNames(
 
   std::vector<core::AggregationNode::Aggregate> aggs;
 
-  exec::test::AggregateTypeResolver resolver(step);
+  AggregateTypeResolver resolver(step);
   std::vector<std::string> names;
   aggs.reserve(aggregates.size());
   names.reserve(aggregates.size());
@@ -1394,14 +1390,14 @@ PlanBuilder& PlanBuilder::scaleWriterlocalPartition(
   for (const auto& key : keys) {
     keyIndices.push_back(planNode_->outputType()->getChildIdx(key));
   }
-  auto hivePartitionFunctionFactory =
-      std::make_shared<HivePartitionFunctionSpec>(
+  auto icebergPartitionFunctionFactory =
+      std::make_shared<IcebergPartitionFunctionSpec>(
           1009, keyIndices, std::vector<VectorPtr>{});
   planNode_ = std::make_shared<core::LocalPartitionNode>(
       nextPlanNodeId(),
       core::LocalPartitionNode::Type::kRepartition,
       true,
-      hivePartitionFunctionFactory,
+      icebergPartitionFunctionFactory,
       std::vector{planNode_});
   VELOX_CHECK(!planNode_->supportsBarrier());
   return *this;
@@ -1411,42 +1407,42 @@ PlanBuilder& PlanBuilder::localPartition(
     int numBuckets,
     const std::vector<column_index_t>& bucketChannels,
     const std::vector<VectorPtr>& constValues) {
-  auto hivePartitionFunctionFactory =
-      std::make_shared<HivePartitionFunctionSpec>(
+  auto icebergPartitionFunctionFactory =
+      std::make_shared<IcebergPartitionFunctionSpec>(
           numBuckets, bucketChannels, constValues);
   planNode_ = std::make_shared<core::LocalPartitionNode>(
       nextPlanNodeId(),
       core::LocalPartitionNode::Type::kRepartition,
       /*scaleWriter=*/false,
-      std::move(hivePartitionFunctionFactory),
+      std::move(icebergPartitionFunctionFactory),
       std::vector<core::PlanNodePtr>{planNode_});
   VELOX_CHECK(planNode_->supportsBarrier());
   return *this;
 }
 
-PlanBuilder& PlanBuilder::localPartitionByBucket(
-    const std::shared_ptr<connector::lakehouse::common::HiveBucketProperty>&
-        bucketProperty) {
-  VELOX_CHECK_NOT_NULL(planNode_, "LocalPartition cannot be the source node");
-  std::vector<column_index_t> bucketChannels;
-  for (const auto& bucketColumn : bucketProperty->bucketedBy()) {
-    bucketChannels.push_back(
-        planNode_->outputType()->getChildIdx(bucketColumn));
-  }
-  auto hivePartitionFunctionFactory =
-      std::make_shared<HivePartitionFunctionSpec>(
-          bucketProperty->bucketCount(),
-          bucketChannels,
-          std::vector<VectorPtr>{});
-  planNode_ = std::make_shared<core::LocalPartitionNode>(
-      nextPlanNodeId(),
-      core::LocalPartitionNode::Type::kRepartition,
-      /*scaleWriter=*/false,
-      std::move(hivePartitionFunctionFactory),
-      std::vector<core::PlanNodePtr>{planNode_});
-  VELOX_CHECK(planNode_->supportsBarrier());
-  return *this;
-}
+//PlanBuilder& PlanBuilder::localPartitionByBucket(
+//    const std::shared_ptr<IcebergBucketProperty>&
+//        bucketProperty) {
+//  VELOX_CHECK_NOT_NULL(planNode_, "LocalPartition cannot be the source node");
+//  std::vector<column_index_t> bucketChannels;
+//  for (const auto& bucketColumn : bucketProperty->bucketedBy()) {
+//    bucketChannels.push_back(
+//        planNode_->outputType()->getChildIdx(bucketColumn));
+//  }
+//  auto icebergPartitionFunctionFactory =
+//      std::make_shared<IcebergPartitionFunctionSpec>(
+//          bucketProperty->bucketCount(),
+//          bucketChannels,
+//          std::vector<VectorPtr>{});
+//  planNode_ = std::make_shared<core::LocalPartitionNode>(
+//      nextPlanNodeId(),
+//      core::LocalPartitionNode::Type::kRepartition,
+//      /*scaleWriter=*/false,
+//      std::move(icebergPartitionFunctionFactory),
+//      std::vector<core::PlanNodePtr>{planNode_});
+//  VELOX_CHECK(planNode_->supportsBarrier());
+//  return *this;
+//}
 
 namespace {
 core::PlanNodePtr createLocalPartitionRoundRobinNode(
@@ -1669,6 +1665,30 @@ PlanBuilder& PlanBuilder::nestedLoopJoin(
   return *this;
 }
 
+PlanBuilder& PlanBuilder::spatialJoin(
+    const core::PlanNodePtr& right,
+    const std::string& joinCondition,
+    const std::vector<std::string>& outputLayout,
+    core::JoinType joinType) {
+  VELOX_CHECK_NOT_NULL(planNode_, "SpatialJoin cannot be the source node");
+  auto resultType = concat(planNode_->outputType(), right->outputType());
+  auto outputType = extract(resultType, outputLayout);
+
+  VELOX_CHECK(!joinCondition.empty(), "SpatialJoin condition cannot be empty");
+  core::TypedExprPtr joinConditionExpr =
+      parseExpr(joinCondition, resultType, options_, pool_);
+
+  planNode_ = std::make_shared<core::SpatialJoinNode>(
+      nextPlanNodeId(),
+      joinType,
+      std::move(joinConditionExpr),
+      std::move(planNode_),
+      right,
+      outputType);
+  VELOX_CHECK(!planNode_->supportsBarrier());
+  return *this;
+}
+
 namespace {
 core::TypedExprPtr removeCastTypedExpr(const core::TypedExprPtr& expr) {
   core::TypedExprPtr convertedTypedExpr = expr;
@@ -1872,12 +1892,13 @@ PlanBuilder& PlanBuilder::indexLookupJoin(
     const std::vector<std::string>& rightKeys,
     const core::TableScanNodePtr& right,
     const std::vector<std::string>& joinConditions,
-    bool includeMatchColumn,
+    const std::string& filter,
+    bool hasMarker,
     const std::vector<std::string>& outputLayout,
     core::JoinType joinType) {
   VELOX_CHECK_NOT_NULL(planNode_, "indexLookupJoin cannot be the source node");
   auto inputType = concat(planNode_->outputType(), right->outputType());
-  if (includeMatchColumn) {
+  if (hasMarker) {
     auto names = inputType->names();
     names.push_back(outputLayout.back());
     auto types = inputType->children();
@@ -1895,13 +1916,20 @@ PlanBuilder& PlanBuilder::indexLookupJoin(
         parseIndexJoinCondition(joinCondition, inputType, pool_));
   }
 
+  // Parse filter expression if provided
+  core::TypedExprPtr filterExpr;
+  if (!filter.empty()) {
+    filterExpr = parseExpr(filter, inputType, options_, pool_);
+  }
+
   planNode_ = std::make_shared<core::IndexLookupJoinNode>(
       nextPlanNodeId(),
       joinType,
       std::move(leftKeyFields),
       std::move(rightKeyFields),
       std::move(joinConditionPtrs),
-      includeMatchColumn,
+      filterExpr,
+      hasMarker,
       std::move(planNode_),
       right,
       std::move(outputType));
@@ -1913,7 +1941,7 @@ PlanBuilder& PlanBuilder::unnest(
     const std::vector<std::string>& replicateColumns,
     const std::vector<std::string>& unnestColumns,
     const std::optional<std::string>& ordinalColumn,
-    const std::optional<std::string>& emptyUnnestValueName) {
+    const std::optional<std::string>& markerName) {
   VELOX_CHECK_NOT_NULL(planNode_, "Unnest cannot be the source node");
   std::vector<std::shared_ptr<const core::FieldAccessTypedExpr>>
       replicateFields;
@@ -1949,7 +1977,7 @@ PlanBuilder& PlanBuilder::unnest(
       unnestFields,
       unnestNames,
       ordinalColumn,
-      emptyUnnestValueName,
+      markerName,
       planNode_);
   VELOX_CHECK(planNode_->supportsBarrier());
   return *this;
@@ -1972,7 +2000,7 @@ std::string throwWindowFunctionSignatureNotSupported(
     const std::vector<FunctionSignaturePtr>& signatures) {
   std::stringstream error;
   error << "Window function signature is not supported: "
-        << exec::toString(name, types)
+        << toString(name, types)
         << ". Supported signatures: " << toString(signatures) << ".";
   VELOX_USER_FAIL(error.str());
 }
@@ -2408,4 +2436,50 @@ core::TypedExprPtr PlanBuilder::inferTypes(
   return core::Expressions::inferTypes(
       untypedExpr, planNode_->outputType(), pool_);
 }
-} // namespace facebook::velox::connector::lakehouse::common::test
+
+core::PlanNodePtr PlanBuilder::IndexLookupJoinBuilder::build(
+    const core::PlanNodeId& id) {
+  VELOX_CHECK_NOT_NULL(
+      planBuilder_.planNode_, "IndexLookupJoin cannot be the source node");
+  auto inputType =
+      concat(planBuilder_.planNode_->outputType(), indexSource_->outputType());
+  if (hasMarker_) {
+    auto names = inputType->names();
+    names.push_back(outputLayout_.back());
+    auto types = inputType->children();
+    types.push_back(BOOLEAN());
+    inputType = ROW(std::move(names), std::move(types));
+  }
+  auto outputType = extract(inputType, outputLayout_);
+  auto leftKeyFields =
+      PlanBuilder::fields(planBuilder_.planNode_->outputType(), leftKeys_);
+  auto rightKeyFields =
+      PlanBuilder::fields(indexSource_->outputType(), rightKeys_);
+
+  std::vector<core::IndexLookupConditionPtr> joinConditionPtrs{};
+  joinConditionPtrs.reserve(joinConditions_.size());
+  for (const auto& joinCondition : joinConditions_) {
+    joinConditionPtrs.push_back(PlanBuilder::parseIndexJoinCondition(
+        joinCondition, inputType, planBuilder_.pool_));
+  }
+
+  // Parse filter expression if provided
+  core::TypedExprPtr filterExpr;
+  if (!filter_.empty()) {
+    filterExpr = parseExpr(
+        filter_, inputType, planBuilder_.options_, planBuilder_.pool_);
+  }
+
+  return std::make_shared<core::IndexLookupJoinNode>(
+      id,
+      joinType_,
+      std::move(leftKeyFields),
+      std::move(rightKeyFields),
+      std::move(joinConditionPtrs),
+      filterExpr,
+      hasMarker_,
+      std::move(planBuilder_.planNode_),
+      indexSource_,
+      std::move(outputType));
+}
+} // namespace facebook::velox::exec::test

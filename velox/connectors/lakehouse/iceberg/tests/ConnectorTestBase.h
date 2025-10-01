@@ -15,7 +15,7 @@
  */
 #pragma once
 
-#include "velox/connectors/lakehouse/common/TableHandleBase.h"
+#include "velox/connectors/lakehouse/iceberg/TableHandleBase.h"
 #include "velox/dwio/dwrf/common/Config.h"
 #include "velox/dwio/dwrf/writer/FlushPolicy.h"
 #include "velox/exec/Operator.h"
@@ -25,7 +25,7 @@
 
 #include <string>
 
-namespace facebook::velox::connector::lakehouse::common::test {
+namespace facebook::velox::connector::lakehouse::iceberg::test {
 
 static const std::string kIcebergConnectorId = "test-hive";
 
@@ -39,7 +39,7 @@ class ConnectorTestBase : public exec::test::OperatorTestBase {
   void SetUp() override;
   void TearDown() override;
 
-  void resetHiveConnector(
+  void resetIcebergConnector(
       const std::shared_ptr<const config::ConfigBase>& config);
 
   void writeToFiles(
@@ -92,15 +92,15 @@ class ConnectorTestBase : public exec::test::OperatorTestBase {
   static std::vector<std::shared_ptr<facebook::velox::exec::test::TempFilePath>>
   makeFilePaths(int count);
 
-  static std::shared_ptr<lakehouse::common::ColumnHandleBase> regularColumn(
+  static std::shared_ptr<ColumnHandleBase> regularColumn(
       const std::string& name,
       const TypePtr& type);
 
-  static std::shared_ptr<lakehouse::common::ColumnHandleBase> partitionKey(
+  static std::shared_ptr<ColumnHandleBase> partitionKey(
       const std::string& name,
       const TypePtr& type);
 
-  static std::shared_ptr<lakehouse::common::ColumnHandleBase>
+  static std::shared_ptr<ColumnHandleBase>
   synthesizedColumn(const std::string& name, const TypePtr& type);
 
   static ColumnHandleMap allRegularColumns(const RowTypePtr& rowType) {
@@ -113,16 +113,4 @@ class ConnectorTestBase : public exec::test::OperatorTestBase {
     return assignments;
   }
 };
-
-///// Same as connector::hive::HiveConnectorBuilder, except that this defaults
-///// connectorId to kHiveConnectorId.
-// class HiveConnectorSplitBuilder
-//     : public connector::base::ConnectorSplitBaseBuilder {
-//  public:
-//   explicit HiveConnectorSplitBuilder(std::string filePath)
-//       : connector::base::ConnectorSplitBaseBuilder(filePath) {
-//     connectorId(kHiveConnectorId);
-//   }
-// };
-
-} // namespace facebook::velox::connector::lakehouse::common::test
+} // namespace facebook::velox::connector::lakehouse::iceberg::test

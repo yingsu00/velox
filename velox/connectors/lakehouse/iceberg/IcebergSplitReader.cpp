@@ -16,7 +16,6 @@
 
 #include "IcebergSplitReader.h"
 
-#include "EqualityDeleteFileReader.h"
 #include "IcebergConnectorSplit.h"
 #include "IcebergConnectorUtil.h"
 #include "IcebergDeleteFile.h"
@@ -28,21 +27,19 @@ using namespace facebook::velox::dwio::common;
 namespace facebook::velox::connector::lakehouse::iceberg  {
 
 IcebergSplitReader::IcebergSplitReader(
-    const std::shared_ptr<const lakehouse::common::ConnectorSplitBase>& split,
-    const std::shared_ptr<const lakehouse::common::TableHandleBase>& tableHandle,
+    const std::shared_ptr<const ConnectorSplitBase>& split,
+    const std::shared_ptr<const TableHandleBase>& tableHandle,
     const std::unordered_map<
         std::string,
-        std::shared_ptr<const lakehouse::common::ColumnHandleBase>>* partitionKeys,
+        std::shared_ptr<const ColumnHandleBase>>* partitionKeys,
     const ConnectorQueryCtx* connectorQueryCtx,
-    const std::shared_ptr<const lakehouse::common::ConnectorConfigBase>& ConnectorConfigBase,
+    const std::shared_ptr<const ConnectorConfigBase>& ConnectorConfigBase,
     const RowTypePtr& readerOutputType,
     const std::shared_ptr<io::IoStatistics>& ioStats,
     const std::shared_ptr<filesystems::File::IoStats>& fsStats,
-    lakehouse::common::FileHandleFactory* fileHandleFactory,
+    FileHandleFactory* fileHandleFactory,
     folly::Executor* executor,
-    const std::shared_ptr<velox::common::ScanSpec>& scanSpec,
-    core::ExpressionEvaluator* expressionEvaluator,
-    std::atomic<uint64_t>& totalRemainingFilterTime)
+    const std::shared_ptr<velox::common::ScanSpec>& scanSpec)
     : SplitReaderBase(
           split,
           tableHandle,
@@ -57,10 +54,7 @@ IcebergSplitReader::IcebergSplitReader(
           scanSpec),
       baseReadOffset_(0),
       splitOffset_(0),
-      deleteBitmap_(nullptr),
-      deleteExprSet_(nullptr),
-      expressionEvaluator_(expressionEvaluator),
-      totalRemainingFilterMs_(totalRemainingFilterTime) {}
+      deleteBitmap_(nullptr) {}
 
 IcebergSplitReader::~IcebergSplitReader() {}
 
@@ -88,58 +82,9 @@ void IcebergSplitReader::prepareSplit(
     }
   }
 
-  // checkIfSplitIsEmpty needs to use the base reader's schemaWithId_. For that
-  // we need to update the base RowReader to include these extra fields from the
-  // equality delete file first, so that the schemaWithId_ of the base file is
-  // updated when we call baseFileSchema() later.
-  baseReader_->setRequiredExtraFieldIds(equalityFieldIds);
-
   if (checkIfSplitIsEmpty(runtimeStats)) {
     VELOX_CHECK(emptySplit_);
     return;
-  }
-
-  // Process the equality delete files to update the scan spec and remaining
-  // filters. It needs to be done after creating the Reader and before creating
-  // the RowReader.
-
-  SubfieldFilters subfieldFilters;
-  std::vector<core::TypedExprPtr> conjunctInputs;
-
-  for (const auto& deleteFile : deleteFiles) {
-    if (deleteFile.content == FileContent::kEqualityDeletes &&
-        deleteFile.recordCount > 0) {
-      // TODO: build cache of <Partition, ExprSet> to avoid repeating file
-      // parsing across partitions. Within a single partition, the splits should
-      // be with the same equality delete files and only need to be parsed once.
-      auto equalityDeleteReader = std::make_unique<EqualityDeleteFileReader>(
-          deleteFile,
-          baseFileSchema(),
-          fileHandleFactory_,
-          executor_,
-          connectorQueryCtx_,
-          connectorConfig_,
-          ioStats_,
-          fsStats_,
-          split_->connectorId);
-      equalityDeleteReader->readDeleteValues(subfieldFilters, conjunctInputs);
-    }
-  }
-
-  if (!subfieldFilters.empty()) {
-    for (const auto& [key, filter] : subfieldFilters) {
-      auto childSpec = scanSpec_->getOrCreateChild(key, true);
-      childSpec->addFilter(*filter);
-      childSpec->setHasTempFilter(true);
-      childSpec->setSubscript(scanSpec_->children().size() - 1);
-    }
-  }
-
-  if (!conjunctInputs.empty()) {
-    core::TypedExprPtr expression =
-        std::make_shared<core::CallTypedExpr>(BOOLEAN(), conjunctInputs, "and");
-    deleteExprSet_ = expressionEvaluator_->compile(expression);
-    VELOX_CHECK_EQ(deleteExprSet_->size(), 1);
   }
 
   createRowReader(std::move(metadataFilter), std::move(rowType));
@@ -216,33 +161,7 @@ uint64_t IcebergSplitReader::next(uint64_t size, VectorPtr& output) {
 
   auto rowsScanned = baseRowReader_->next(actualSize, output, &mutation);
 
-  // Evaluate the remaining filter deleteExprSet_ for every batch and update the
-  // output vector if it reduces any rows.
-  if (deleteExprSet_) {
-    auto filterStartMs = getCurrentTimeMs();
-
-    filterRows_.resize(output->size());
-    auto rowVector = std::dynamic_pointer_cast<RowVector>(output);
-    expressionEvaluator_->evaluate(
-        deleteExprSet_.get(), filterRows_, *rowVector, filterResult_);
-    auto numRemainingRows = exec::processFilterResults(
-        filterResult_, filterRows_, filterEvalCtx_, pool_);
-
-    if (numRemainingRows < output->size()) {
-      output = exec::wrap(
-          numRemainingRows, filterEvalCtx_.selectedIndices, rowVector);
-    }
-
-    totalRemainingFilterMs_.fetch_add(
-        (getCurrentTimeMs() - filterStartMs), std::memory_order_relaxed);
-  }
-
   baseReadOffset_ += rowsScanned;
-
-  if (rowsScanned == 0) {
-    scanSpec_->deleteTempNodes();
-  }
-
   return rowsScanned;
 }
 

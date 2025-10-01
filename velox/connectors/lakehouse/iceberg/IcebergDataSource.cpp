@@ -32,10 +32,10 @@ IcebergDataSource::IcebergDataSource(
     const RowTypePtr& outputType,
     const ConnectorTableHandlePtr& tableHandle,
     const connector::ColumnHandleMap& columnHandles,
-    lakehouse::common::FileHandleFactory* fileHandleFactory,
+    FileHandleFactory* fileHandleFactory,
     folly::Executor* executor,
     const ConnectorQueryCtx* connectorQueryCtx,
-    const std::shared_ptr<common::ConnectorConfigBase>& connectorConfig)
+    const std::shared_ptr<ConnectorConfigBase>& connectorConfig)
     : DataSourceBase(
           outputType,
           tableHandle,
@@ -134,15 +134,14 @@ std::optional<RowVectorPtr> IcebergDataSource::next(
 
 void IcebergDataSource::addSplit(std::shared_ptr<ConnectorSplit> split) {
   VELOX_CHECK_NULL(
-      split,
+      split_,
       "Previous split has not been processed yet. Call next to process the split.");
   split_ = std::dynamic_pointer_cast<IcebergConnectorSplit>(split);
   VELOX_CHECK_NOT_NULL(split_, "Wrong type of split");
-
   VLOG(1) << "Adding split " << split_->toString();
 
 
-  makeScanSpec();
+  scanSpec_ = makeScanSpec();
 
 //  if (remainingFilter) {
 //    metadataFilter_ = std::make_shared<velox::common::MetadataFilter>(
@@ -164,9 +163,7 @@ void IcebergDataSource::addSplit(std::shared_ptr<ConnectorSplit> split) {
       fsStats_,
       fileHandleFactory_,
       executor_,
-      scanSpec_,
-      expressionEvaluator_,
-      totalRemainingFilterTime_);
+      scanSpec_);
 
   // Split reader subclasses may need to use the reader options in prepareSplit
   // so we initialize it beforehand.
@@ -180,13 +177,13 @@ std::shared_ptr<velox::common::ScanSpec> IcebergDataSource::makeScanSpec() {
   auto spec = std::make_shared<velox::common::ScanSpec>("root");
   folly::F14FastMap<std::string, std::vector<const velox::common::Subfield*>>
       filterSubfields;
-  std::vector<common::SubfieldSpec> subfieldSpecs;
+  std::vector<SubfieldSpec> subfieldSpecs;
   for (auto& [subfield, _] : filters_) {
     if (auto name = subfield.toString();
         !isSynthesizedColumn(name, infoColumns_) &&
         partitionColumnHandles_.count(name) == 0) {
       VELOX_CHECK(!isSpecialColumn(name));
-      filterSubfields[common::getColumnName(subfield)].push_back(&subfield);
+      filterSubfields[getColumnName(subfield)].push_back(&subfield);
     }
   }
 
@@ -205,7 +202,7 @@ std::shared_ptr<velox::common::ScanSpec> IcebergDataSource::makeScanSpec() {
     auto it = subfields_.find(name);
     if (it == subfields_.end()) {
       auto* fieldSpec = spec->addFieldRecursively(name, *type, i);
-      common::processFieldSpec(dataColumns, type, *fieldSpec);
+      processFieldSpec(dataColumns, type, *fieldSpec);
       filterSubfields.erase(name);
       continue;
     }
@@ -221,7 +218,7 @@ std::shared_ptr<velox::common::ScanSpec> IcebergDataSource::makeScanSpec() {
     }
     auto* fieldSpec = spec->addField(name, i);
     addSubfields(*type, subfieldSpecs, 1, pool_, *fieldSpec);
-    common::processFieldSpec(dataColumns, type, *fieldSpec);
+    processFieldSpec(dataColumns, type, *fieldSpec);
     subfieldSpecs.clear();
   }
 
@@ -235,7 +232,7 @@ std::shared_ptr<velox::common::ScanSpec> IcebergDataSource::makeScanSpec() {
       auto& type = tableHandle_->dataColumns()->findChild(fieldName);
       auto* fieldSpec = spec->getOrCreateChild(fieldName);
       addSubfields(*type, subfieldSpecs, 1, pool_, *fieldSpec);
-      common::processFieldSpec(tableHandle_->dataColumns(), type, *fieldSpec);
+      processFieldSpec(tableHandle_->dataColumns(), type, *fieldSpec);
       subfieldSpecs.clear();
     }
   }
@@ -254,7 +251,7 @@ std::shared_ptr<velox::common::ScanSpec> IcebergDataSource::makeScanSpec() {
       continue;
     }
     auto fieldSpec = spec->getOrCreateChild(pair.first);
-    fieldSpec->addFilter(*pair.second);
+    fieldSpec->setFilter(pair.second);
   }
 
   if (connectorConfig_->readStatsBasedFilterReorderDisabled(

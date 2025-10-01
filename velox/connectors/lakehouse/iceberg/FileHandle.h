@@ -34,7 +34,7 @@
 
 #include <string>
 
-namespace facebook::velox::connector::lakehouse::common {
+namespace facebook::velox::connector::lakehouse::iceberg {
 
 // See the file comment.
 struct FileHandle {
@@ -83,13 +83,13 @@ struct FileHandleKey {
   }
 };
 
-} // facebook::velox::connector::lakehouse::common
+} // facebook::velox::connector::lakehouse::iceberg
 
 namespace std {
 template <>
-struct hash<facebook::velox::connector::lakehouse::common::FileHandleKey> {
+struct hash<facebook::velox::connector::lakehouse::iceberg::FileHandleKey> {
   size_t operator()(
-      const facebook::velox::connector::lakehouse::common::FileHandleKey& key)
+      const facebook::velox::connector::lakehouse::iceberg::FileHandleKey& key)
       const noexcept {
     size_t filenameHash = std::hash<std::string>()(key.filename);
     return key.tokenProvider ? facebook::velox::bits::hashMix(
@@ -99,7 +99,7 @@ struct hash<facebook::velox::connector::lakehouse::common::FileHandleKey> {
 };
 } // namespace std
 
-namespace facebook::velox::connector::lakehouse::common {
+namespace facebook::velox::connector::lakehouse::iceberg {
 
 using FileHandleCache = SimpleLRUCache<FileHandleKey, FileHandle>;
 
@@ -130,4 +130,4 @@ using FileHandleCachedPtr = CachedPtr<FileHandleKey, FileHandle>;
 
 using FileHandleCacheStats = SimpleLRUCacheStats;
 
-} // namespace facebook::velox::connector::lakehouse::common
+} // namespace facebook::velox::connector::lakehouse::iceberg

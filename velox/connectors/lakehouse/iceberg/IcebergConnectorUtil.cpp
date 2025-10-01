@@ -16,7 +16,6 @@
 
 #include "IcebergConnectorUtil.h"
 
-#include "IcebergConfig.h"
 #include "IcebergConnectorSplit.h"
 #include "IcebergTableHandle.h"
 #include "velox/dwio/common/CachedBufferedInput.h"
@@ -85,7 +84,7 @@ bool filterSplit(
         partitionData,
     const std::unordered_map<
         std::string,
-        std::shared_ptr<const lakehouse::common::ColumnHandleBase>>& partitionKeysHandle,
+        std::shared_ptr<const ColumnHandleBase>>& partitionKeysHandle,
     bool asLocalTime) {
   const auto totalRows = reader->numberOfRows();
   const auto& fileTypeWithId = reader->typeWithId();

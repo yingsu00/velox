@@ -22,7 +22,7 @@
 
 #include <string>
 
-namespace facebook::velox::connector::lakehouse::common {
+namespace facebook::velox::connector::lakehouse::iceberg {
 
 struct ConnectorSplitBase : public connector::ConnectorSplit {
   const std::string filePath;
@@ -179,4 +179,4 @@ class ConnectorSplitBuilder {
   std::optional<FileProperties> fileProperties_;
 };
 
-} // namespace facebook::velox::connector::lakehouse::common
+} // namespace facebook::velox::connector::lakehouse::iceberg

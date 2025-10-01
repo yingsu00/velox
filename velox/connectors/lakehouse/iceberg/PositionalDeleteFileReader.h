@@ -16,9 +16,9 @@
 
 #pragma once
 
+#include "ConnectorConfigBase.h"
+#include "FileHandle.h"
 #include "IcebergConnectorSplit.h"
-#include "velox/connectors/lakehouse/common/ConnectorConfigBase.h"
-#include "velox/connectors/lakehouse/common/FileHandle.h"
 #include "velox/dwio/common/Reader.h"
 
 #include <folly/Executor.h>
@@ -35,10 +35,10 @@ class PositionalDeleteFileReader {
   PositionalDeleteFileReader(
       const IcebergDeleteFile& deleteFile,
       const std::string& baseFilePath,
-      lakehouse::common::FileHandleFactory* fileHandleFactory,
+      FileHandleFactory* fileHandleFactory,
       const ConnectorQueryCtx* connectorQueryCtx,
       folly::Executor* executor,
-      const std::shared_ptr<const lakehouse::common::ConnectorConfigBase> ConnectorConfigBase,
+      const std::shared_ptr<const ConnectorConfigBase> ConnectorConfigBase,
       const std::shared_ptr<io::IoStatistics>& ioStats,
       const std::shared_ptr<filesystems::File::IoStats>& fsStats,
       dwio::common::RuntimeStatistics& runtimeStats,
@@ -63,10 +63,10 @@ class PositionalDeleteFileReader {
 
   const IcebergDeleteFile& deleteFile_;
   const std::string& baseFilePath_;
-  lakehouse::common::FileHandleFactory* const fileHandleFactory_;
+  FileHandleFactory* const fileHandleFactory_;
   folly::Executor* const executor_;
   const ConnectorQueryCtx* connectorQueryCtx_;
-  const std::shared_ptr<const lakehouse::common::ConnectorConfigBase> connectorConfig_;
+  const std::shared_ptr<const ConnectorConfigBase> connectorConfig_;
   const std::shared_ptr<io::IoStatistics> ioStats_;
   const std::shared_ptr<filesystems::File::IoStats> fsStats_;
   const std::shared_ptr<filesystems::File::IoStats> fsStats;

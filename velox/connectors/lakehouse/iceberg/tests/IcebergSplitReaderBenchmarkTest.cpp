@@ -15,6 +15,7 @@
  */
 
 #include "IcebergSplitReaderBenchmark.h"
+
 #include <gtest/gtest.h>
 
 namespace facebook::velox::connector::lakehouse::iceberg::test {

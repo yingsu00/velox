@@ -17,7 +17,7 @@
 
 #include "velox/common/config/Config.h"
 
-namespace facebook::velox::connector::lakehouse::common {
+namespace facebook::velox::connector::lakehouse::iceberg {
 
 class ConnectorConfigBase {
  public:
@@ -180,15 +180,6 @@ class ConnectorConfigBase {
   // Used by spiller
   std::string writeFileCreateConfig() const;
 
-  //  uint32_t sortWriterMaxOutputRows(const velox::config::ConfigBase* session)
-  //  const;
-  //
-  //  uint64_t sortWriterMaxOutputBytes(const velox::config::ConfigBase*
-  //  session) const;
-  //
-  //  uint64_t sortWriterFinishTimeSliceLimitMs(
-  //      const velox::config::ConfigBase* session) const;
-
   uint64_t footerEstimatedSize() const;
 
   uint64_t filePreloadThreshold() const;
@@ -205,20 +196,9 @@ class ConnectorConfigBase {
   bool readStatsBasedFilterReorderDisabled(
       const velox::config::ConfigBase* session) const;
 
-  //  /// Returns the file system path containing local data. If non-empty,
-  //  /// initializes LocalHiveConnectorMetadata to provide metadata for the
-  //  tables
-  //  /// in the directory.
-  //  std::string hiveLocalDataPath() const;
-  //
-  //  /// Returns the name of the file format to use in interpreting the
-  //  contents of
-  //  /// hiveLocalDataPath().
-  //  std::string hiveLocalFileFormat() const;
-
   ConnectorConfigBase(std::shared_ptr<const velox::config::ConfigBase> config) {
     VELOX_CHECK_NOT_NULL(
-        config, "Config is null for HiveConfig initialization");
+        config, "Config is null for IcebergConfig initialization");
     config_ = std::move(config);
     // TODO: add sanity check
   }
@@ -231,4 +211,4 @@ class ConnectorConfigBase {
   std::shared_ptr<const velox::config::ConfigBase> config_;
 };
 
-} // namespace facebook::velox::connector::lakehouse::common
+} // namespace facebook::velox::connector::lakehouse::iceberg

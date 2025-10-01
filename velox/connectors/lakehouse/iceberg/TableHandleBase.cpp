@@ -16,7 +16,7 @@
 
 #include "TableHandleBase.h"
 
-namespace facebook::velox::connector::lakehouse::common {
+namespace facebook::velox::connector::lakehouse::iceberg {
 
 namespace {
 std::unordered_map<ColumnHandleBase::ColumnType, std::string>
@@ -203,9 +203,4 @@ std::string TableHandleBase::toStringBase(const std::string& className) const {
   return out.str();
 }
 
-// void TableHandleBase::registerSerDe() {
-//   auto& registry = DeserializationWithContextRegistryForSharedPtr();
-//   registry.Register("ColumnHandleBase", create);
-// }
-
-} // namespace facebook::velox::connector::lakehouse::common
+} // namespace facebook::velox::connector::lakehouse::iceberg

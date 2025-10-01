@@ -64,7 +64,7 @@ folly::dynamic IcebergTableHandle::serialize() const {
 ConnectorTableHandlePtr IcebergTableHandle::create(
    const folly::dynamic& obj,
    void* context) {
- return lakehouse::common::TableHandleBase::create(obj, context);
+ return TableHandleBase::create(obj, context);
 }
 
 void IcebergTableHandle::registerSerDe() {

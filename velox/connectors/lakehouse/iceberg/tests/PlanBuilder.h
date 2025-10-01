@@ -16,11 +16,11 @@
 
 #pragma once
 
-#include "velox/connectors/lakehouse/iceberg/HiveDataSink.h"
-#include "velox/core/Expressions.h"
-#include "velox/core/ITypedExpr.h"
-#include "velox/core/PlanFragment.h"
-#include "velox/core/PlanNode.h"
+#include <velox/core/Expressions.h>
+#include <velox/core/ITypedExpr.h>
+#include <velox/core/PlanFragment.h>
+#include <velox/core/PlanNode.h>
+#include "velox/connectors/lakehouse/iceberg/IcebergDataSink.h"
 #include "velox/parse/ExpressionsParser.h"
 #include "velox/parse/IExpr.h"
 #include "velox/parse/PlanNodeIdGenerator.h"
@@ -29,10 +29,14 @@ namespace facebook::velox::tpch {
 enum class Table : uint8_t;
 }
 
-namespace facebook::velox::connector::lakehouse::common::test {
+namespace facebook::velox::tpcds {
+enum class Table : uint8_t;
+}
+
+namespace facebook::velox::exec::test {
 
 struct PushdownConfig {
-  velox::common::SubfieldFilters subfieldFiltersMap;
+  common::SubfieldFilters subfieldFiltersMap;
   std::string remainingFilter;
 };
 
@@ -113,6 +117,8 @@ class PlanBuilder {
 
   static constexpr const std::string_view kHiveDefaultConnectorId{"test-hive"};
   static constexpr const std::string_view kTpchDefaultConnectorId{"test-tpch"};
+  static constexpr const std::string_view kTpcdsDefaultConnectorId{
+      "test-tpcds"};
 
   ///
   /// TableScan
@@ -201,11 +207,24 @@ class PlanBuilder {
       std::string_view connectorId = kTpchDefaultConnectorId,
       const std::string& filter = "");
 
+  /// Add a TableScanNode to scan a TPC-DS table.
+  ///
+  /// @param tpcdsTableHandle The handle that specifies the target TPC-DS table
+  /// and scale factor.
+  /// @param columnNames The columns to be returned from that table.
+  /// @param scaleFactor The TPC-DS scale factor.
+  /// @param connectorId The TPC-DS connector id.
+  PlanBuilder& tpcdsTableScan(
+      tpcds::Table table,
+      std::vector<std::string> columnNames,
+      double scaleFactor = 0.01,
+      std::string_view connectorId = kTpcdsDefaultConnectorId);
+
   /// Helper class to build a custom TableScanNode.
   /// Uses a planBuilder instance to get the next plan id, memory pool, and
   /// parse options.
   ///
-  /// Uses the hive connector by default. Specify outputType, tableHandle, and
+  /// Uses the iceberg connector by default. Specify outputType, tableHandle, and
   /// assignments for other connectors. If these three are specified, all other
   /// builder arguments will be ignored.
   class TableScanBuilder {
@@ -257,7 +276,7 @@ class PlanBuilder {
 
     // @param subfieldFiltersMap A map of Subfield to Filters.
     TableScanBuilder& subfieldFiltersMap(
-        const velox::common::SubfieldFilters& filtersMap);
+        const common::SubfieldFilters& filtersMap);
 
     /// @param subfieldFilter A single SQL expression to be applied to an
     /// individual column.
@@ -292,7 +311,7 @@ class PlanBuilder {
     /// @param tableHandle Optional tableHandle. Other builder arguments such as
     /// the `subfieldFilters` and `remainingFilter` will be ignored.
     TableScanBuilder& tableHandle(
-        connector::ConnectorTableHandlePtr tableHandle) {
+        std::shared_ptr<const connector::lakehouse::iceberg::TableHandleBase> tableHandle) {
       tableHandle_ = std::move(tableHandle);
       return *this;
     }
@@ -317,13 +336,13 @@ class PlanBuilder {
     core::PlanNodePtr build(core::PlanNodeId id);
 
     PlanBuilder& planBuilder_;
-    std::string tableName_{"hive_table"};
+    std::string tableName_{"iceberg_table"};
     std::string connectorId_{kHiveDefaultConnectorId};
     RowTypePtr outputType_;
     core::ExprPtr remainingFilter_;
     RowTypePtr dataColumns_;
     std::unordered_map<std::string, std::string> columnAliases_;
-    connector::ConnectorTableHandlePtr tableHandle_;
+    std::shared_ptr<const connector::lakehouse::iceberg::TableHandleBase> tableHandle_;
     connector::ColumnHandleMap assignments_;
 
     // produce filters as a FilterNode instead of pushdown.
@@ -333,13 +352,98 @@ class PlanBuilder {
     std::shared_ptr<core::PlanNodeIdGenerator> planNodeIdGenerator_;
 
     // SubfieldFilters object containing filters to apply.
-    velox::common::SubfieldFilters subfieldFiltersMap_;
+    common::SubfieldFilters subfieldFiltersMap_;
   };
 
   /// Start a TableScanBuilder.
   TableScanBuilder& startTableScan() {
     tableScanBuilder_.reset(new TableScanBuilder(*this));
     return *tableScanBuilder_;
+  }
+
+  /// Helper class to build a custom IndexLookupJoinNode.
+  class IndexLookupJoinBuilder {
+   public:
+    explicit IndexLookupJoinBuilder(PlanBuilder& builder)
+        : planBuilder_(builder) {}
+
+    /// @param leftKeys Join keys from the table scan side, the preceding plan
+    /// node. Cannot be empty.
+    IndexLookupJoinBuilder& leftKeys(std::vector<std::string> leftKeys) {
+      leftKeys_ = std::move(leftKeys);
+      return *this;
+    }
+
+    /// @param rightKeys Join keys from the index lookup side, the plan node
+    /// specified in 'right' parameter. The number and types of left and right
+    /// keys must be the same.
+    IndexLookupJoinBuilder& rightKeys(std::vector<std::string> rightKeys) {
+      rightKeys_ = std::move(rightKeys);
+      return *this;
+    }
+
+    /// @param indexSource The right input source with index lookup support.
+    IndexLookupJoinBuilder& indexSource(
+        const core::TableScanNodePtr& indexSource) {
+      indexSource_ = indexSource;
+      return *this;
+    }
+
+    IndexLookupJoinBuilder& joinConditions(
+        std::vector<std::string> joinConditions) {
+      joinConditions_ = std::move(joinConditions);
+      return *this;
+    }
+
+    IndexLookupJoinBuilder& hasMarker(bool hasMarker) {
+      hasMarker_ = hasMarker;
+      return *this;
+    }
+
+    IndexLookupJoinBuilder& outputLayout(
+        std::vector<std::string> outputLayout) {
+      outputLayout_ = std::move(outputLayout);
+      return *this;
+    }
+
+    /// @param filter SQL expression for the additional join filter. Can
+    /// use columns from both probe and build sides of the join.
+    IndexLookupJoinBuilder& filter(std::string filter) {
+      filter_ = std::move(filter);
+      return *this;
+    }
+
+    /// @param joinType Type of the join supported: inner, left.
+    IndexLookupJoinBuilder& joinType(core::JoinType joinType) {
+      joinType_ = joinType;
+      return *this;
+    }
+
+    /// Stop the IndexLookupJoinBuilder.
+    PlanBuilder& endIndexLookupJoin() {
+      planBuilder_.planNode_ = build(planBuilder_.nextPlanNodeId());
+      return planBuilder_;
+    }
+
+   private:
+    /// Build the plan node IndexLookupJoinNode.
+    core::PlanNodePtr build(const core::PlanNodeId& id);
+
+    PlanBuilder& planBuilder_;
+    std::vector<std::string> leftKeys_;
+    std::vector<std::string> rightKeys_;
+    core::TableScanNodePtr indexSource_;
+    std::vector<std::string> joinConditions_;
+    std::string filter_;
+    bool hasMarker_{false};
+    std::vector<std::string> outputLayout_;
+    core::JoinType joinType_{core::JoinType::kInner};
+  };
+
+  /// Start an IndexLookupJoinBuilder.
+  IndexLookupJoinBuilder& startIndexLookupJoin() {
+    indexLookupJoinBuilder_.reset(new IndexLookupJoinBuilder(*this));
+    return *indexLookupJoinBuilder_;
   }
 
   ///
@@ -419,7 +523,7 @@ class PlanBuilder {
 
     /// @param sortBy Specifies the sort by columns.
     TableWriterBuilder& sortBy(
-        std::vector<std::shared_ptr<const lakehouse::common::HiveSortingColumn>>
+        std::vector<std::shared_ptr<const connector::lakehouse::iceberg::IcebergSortingColumn>>
             sortBy) {
       sortBy_ = std::move(sortBy);
       return *this;
@@ -448,7 +552,7 @@ class PlanBuilder {
     /// @param compressionKind Compression scheme to use for writing the
     /// output data files.
     TableWriterBuilder& compressionKind(
-        velox::common::CompressionKind compressionKind) {
+        common::CompressionKind compressionKind) {
       compressionKind_ = compressionKind;
       return *this;
     }
@@ -490,14 +594,14 @@ class PlanBuilder {
     int32_t bucketCount_{0};
     std::vector<std::string> bucketedBy_;
     std::vector<std::string> aggregates_;
-    std::vector<std::shared_ptr<const lakehouse::common::HiveSortingColumn>>
+    std::vector<std::shared_ptr<const connector::lakehouse::iceberg::IcebergSortingColumn>>
         sortBy_;
 
     std::unordered_map<std::string, std::string> serdeParameters_;
     std::shared_ptr<dwio::common::WriterOptions> options_;
 
     dwio::common::FileFormat fileFormat_{dwio::common::FileFormat::DWRF};
-    velox::common::CompressionKind compressionKind_{velox::common::CompressionKind_NONE};
+    common::CompressionKind compressionKind_{common::CompressionKind_NONE};
 
     bool ensureFiles_{false};
     connector::CommitStrategy commitStrategy_{
@@ -721,13 +825,19 @@ class PlanBuilder {
   /// output of the previous operator.
   /// @param ensureFiles When this option is set the HiveDataSink will always
   /// create a file even if there is no data.
+  /// @param commitStrategy The commit strategy to use for the table write
+  /// operation, default is kNoCommit.
+  /// @param insertTableHandle Encapsulates information needed to write data
+  /// to a table through a connector. If not specified, tableWrite will build
+  /// a HiveInsertTableHandle with columnHandles, bucketProperty and
+  /// locationHandle.
   PlanBuilder& tableWrite(
       const std::string& outputDirectoryPath,
       const std::vector<std::string>& partitionBy,
       int32_t bucketCount,
       const std::vector<std::string>& bucketedBy,
-      const std::vector<std::shared_ptr<
-          const connector::lakehouse::common::HiveSortingColumn>>& sortBy,
+      const std::vector<
+          std::shared_ptr<const connector::lakehouse::iceberg::IcebergSortingColumn>>& sortBy,
       const dwio::common::FileFormat fileFormat =
           dwio::common::FileFormat::DWRF,
       const std::vector<std::string>& aggregates = {},
@@ -735,12 +845,12 @@ class PlanBuilder {
       const std::unordered_map<std::string, std::string>& serdeParameters = {},
       const std::shared_ptr<dwio::common::WriterOptions>& options = nullptr,
       const std::string& outputFileName = "",
-      const velox::common::CompressionKind =
-          velox::common::CompressionKind_NONE,
+      const common::CompressionKind = common::CompressionKind_NONE,
       const RowTypePtr& schema = nullptr,
       const bool ensureFiles = false,
       const connector::CommitStrategy commitStrategy =
-          connector::CommitStrategy::kNoCommit);
+          connector::CommitStrategy::kNoCommit,
+      std::shared_ptr<core::InsertTableHandle> insertTableHandle = nullptr);
 
   /// Add a TableWriteMergeNode.
   PlanBuilder& tableWriteMerge();
@@ -1087,7 +1197,7 @@ class PlanBuilder {
   /// current plan node).
   PlanBuilder& localPartition(const std::vector<std::string>& keys);
 
-  /// A convenience method to add a LocalPartitionNode with hive partition
+  /// A convenience method to add a LocalPartitionNode with iceberg partition
   /// function.
   PlanBuilder& localPartition(
       int numBuckets,
@@ -1095,10 +1205,10 @@ class PlanBuilder {
       const std::vector<VectorPtr>& constValues);
 
   /// A convenience method to add a LocalPartitionNode with a single source (the
-  /// current plan node) and hive bucket property.
-  PlanBuilder& localPartitionByBucket(
-      const std::shared_ptr<lakehouse::common::HiveBucketProperty>&
-          bucketProperty);
+  /// current plan node) and iceberg bucket property.
+//  PlanBuilder& localPartitionByBucket(
+//      const std::shared_ptr<connector::lakehouse::iceberg::IcebergBucketProperty>&
+//          bucketProperty);
 
   /// Add a LocalPartitionNode to partition the input using batch-level
   /// round-robin. Number of partitions is determined at runtime based on
@@ -1195,6 +1305,21 @@ class PlanBuilder {
       const std::vector<std::string>& outputLayout,
       core::JoinType joinType = core::JoinType::kInner);
 
+  /// Add a SpatialJoinNode to join two inputs using spatial join condition.
+  ///
+  /// @param right Right-side input. Typically, to reduce memory usage, the
+  /// smaller input is placed on the right-side.
+  /// @param joinCondition SQL expression as the spatial join condition. Can
+  /// use columns from both probe and build sides of the join.
+  /// @param outputLayout Output layout consisting of columns from probe and
+  /// build sides.
+  /// @param joinType Type of the join: inner (only one supported for now
+  PlanBuilder& spatialJoin(
+      const core::PlanNodePtr& right,
+      const std::string& joinCondition,
+      const std::vector<std::string>& outputLayout,
+      core::JoinType joinType = core::JoinType::kInner);
+
   static core::IndexLookupConditionPtr parseIndexJoinCondition(
       const std::string& joinCondition,
       const RowTypePtr& rowType,
@@ -1205,6 +1330,11 @@ class PlanBuilder {
   /// node. Second input is specified in 'right' parameter and must be a
   /// table source with the connector table handle with index lookup support.
   ///
+  /// @param leftKeys Join keys from the probe side, the preceding plan node.
+  /// Cannot be empty.
+  /// @param rightKeys Join keys from the index lookup side, the plan node
+  /// specified in 'right' parameter. The number and types of left and right
+  /// keys must be the same.
   /// @param right The right input source with index lookup support.
   /// @param joinConditions SQL expressions as the join conditions. Each join
   /// condition must use columns from both sides. For the right side, it can
@@ -1217,18 +1347,23 @@ class PlanBuilder {
   /// where "a" is the index column from right side and "b", "c" are either
   /// condition column from left side or a constant but at least one of them
   /// must not be constant. They all have the same type.
-  /// @param joinType Type of the join supported: inner, left.
-  /// @param includeMatchColumn if true, 'outputLayout' should include a boolean
+  /// @param filter SQL expression for the additional join filter to apply on
+  /// join results. This supports filters that can't be converted into join
+  /// conditions or lookup conditions. Can be an empty string if no additional
+  /// filter is needed.
+  /// @param hasMarker if true, 'outputLayout' should include a boolean
   /// column at the end to indicate if a join output row has a match or not.
   /// This only applies for left join.
-  ///
-  /// See hashJoin method for the description of the other parameters.
+  /// @param outputLayout Output layout consisting of columns from probe and
+  /// build sides.
+  /// @param joinType Type of the join supported: inner, left.
   PlanBuilder& indexLookupJoin(
       const std::vector<std::string>& leftKeys,
       const std::vector<std::string>& rightKeys,
       const core::TableScanNodePtr& right,
       const std::vector<std::string>& joinConditions,
-      bool includeMatchColumn,
+      const std::string& filter,
+      bool hasMarker,
       const std::vector<std::string>& outputLayout,
       core::JoinType joinType = core::JoinType::kInner);
 
@@ -1250,16 +1385,16 @@ class PlanBuilder {
   /// @param ordinalColumn An optional name for the 'ordinal' column to produce.
   /// This column contains the index of the element of the unnested array or
   /// map. If not specified, the output will not contain this column.
-  /// @param emptyUnnestValueName An optional name for the
-  /// 'emptyUnnestValue' column to produce. This column contains a boolean
-  /// indicating if the output row has empty unnest value or not. If not
-  /// specified, the output will not contain this column and the unnest operator
-  /// also skips producing output rows with empty unnest value.
+  /// @param markerName An optional name for the marker column to produce.
+  /// This column contains a boolean indicating whether the output row has
+  /// non-empty unnested value. If not specified, the output will not contain
+  /// this column and the unnest operator also skips producing output rows
+  /// with empty unnest value.
   PlanBuilder& unnest(
       const std::vector<std::string>& replicateColumns,
       const std::vector<std::string>& unnestColumns,
       const std::optional<std::string>& ordinalColumn = std::nullopt,
-      const std::optional<std::string>& emptyUnnestValueName = std::nullopt);
+      const std::optional<std::string>& markerName = std::nullopt);
 
   /// Add a WindowNode to compute one or more windowFunctions.
   /// @param windowFunctions A list of one or more window function SQL like
@@ -1491,6 +1626,7 @@ class PlanBuilder {
   core::PlanNodePtr planNode_;
   parse::ParseOptions options_;
   std::shared_ptr<TableScanBuilder> tableScanBuilder_;
+  std::shared_ptr<IndexLookupJoinBuilder> indexLookupJoinBuilder_;
   std::shared_ptr<TableWriterBuilder> tableWriterBuilder_;
 
  private:

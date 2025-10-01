@@ -16,7 +16,7 @@
 
 // Adapted from velox/connectors/hive/SplitReader.cpp
 
-#include "velox/connectors/lakehouse/common/SplitReaderBase.h"
+#include "SplitReaderBase.h"
 
 #include "ConnectorConfigBase.h"
 #include "ConnectorSplitBase.h"
@@ -26,7 +26,7 @@
 
 using namespace facebook::velox::common;
 
-namespace facebook::velox::connector::lakehouse::common {
+namespace facebook::velox::connector::lakehouse::iceberg {
 
 SplitReaderBase::SplitReaderBase(
     const std::shared_ptr<const ConnectorSplitBase>& split,
@@ -58,7 +58,7 @@ SplitReaderBase::SplitReaderBase(
 
 void SplitReaderBase::configureReaderOptions(
     std::shared_ptr<velox::random::RandomSkipTracker> randomSkip) {
-  ::facebook::velox::connector::lakehouse::common::configureReaderOptions(
+  lakehouse::iceberg::configureReaderOptions(
       connectorConfig_,
       connectorQueryCtx_,
       tableHandle_->dataColumns(),
@@ -303,4 +303,4 @@ std::string SplitReaderBase::toStringBase(const std::string& className) const {
       static_cast<const void*>(baseRowReader_.get()));
 }
 
-} // namespace facebook::velox::connector::lakehouse::common
+} // namespace facebook::velox::connector::lakehouse::iceberg

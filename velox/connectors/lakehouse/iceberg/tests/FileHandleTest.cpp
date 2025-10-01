@@ -14,19 +14,14 @@
  * limitations under the License.
  */
 
-#include "velox/connectors/lakehouse/common/FileHandle.h"
+#include "velox/connectors/lakehouse/iceberg/FileHandle.h"
 #include "ConnectorTestBase.h"
-#include "velox/common/caching/SimpleLRUCache.h"
-#include "velox/common/file/File.h"
-#include "velox/common/file/FileSystems.h"
-#include "velox/exec/tests/utils/TempFilePath.h"
 
 #include <gtest/gtest.h>
 
-namespace facebook::velox::connector::lakehouse::common::test {
+namespace facebook::velox::connector::lakehouse::iceberg::test {
 
 using namespace facebook::velox;
-// using namespace facebook::velox::connector::lakehouse::common;
 
 TEST(FileHandleTest, localFile) {
   filesystems::registerLocalFileSystem();
@@ -83,4 +78,4 @@ TEST(FileHandleTest, localFileWithProperties) {
   remove(filename.c_str());
 }
 
-} // namespace facebook::velox::connector::lakehouse::common::test
+} // namespace facebook::velox::connector::lakehouse::iceberg::test

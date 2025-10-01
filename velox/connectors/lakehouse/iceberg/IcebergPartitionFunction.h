@@ -20,25 +20,6 @@
 
 namespace facebook::velox::connector::lakehouse::iceberg  {
 
-//enum class Transform {
-//  kIdentity,
-//  kYear,
-//  kMonth,
-//  kDay,
-//  kHour,
-//  kVoid,
-//  kBucket,
-//  kTruncate
-//};
-//
-//class FieldPartitionSpec {
-// private:
-//  column_index_t keyChannel_;  // Iceberg source-id
-//  column_index_t transformFieldId_;
-//  Transform transform_;
-//  std::string name_;
-//};
-
 class IcebergPartitionFunction : public core::PartitionFunction {
  public:
   IcebergPartitionFunction(

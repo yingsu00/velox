@@ -12,11 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-#velox_add_library(velox_connector Connector.cpp)
-#
-#velox_link_libraries(velox_connector velox_common_config velox_vector)
-
 add_subdirectory(storage_adapters)
-add_subdirectory(common)
 add_subdirectory(iceberg)
 

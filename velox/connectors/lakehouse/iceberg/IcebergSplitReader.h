@@ -19,29 +19,27 @@
 #include "IcebergDeleteFile.h"
 #include "IcebergTableHandle.h"
 #include "PositionalDeleteFileReader.h"
-#include "velox/connectors/lakehouse/common/SplitReaderBase.h"
+#include "SplitReaderBase.h"
 #include "velox/exec/OperatorUtils.h"
 
 namespace facebook::velox::connector::lakehouse::iceberg  {
 
-class IcebergSplitReader : public lakehouse::common::SplitReaderBase {
+class IcebergSplitReader : public SplitReaderBase {
  public:
   IcebergSplitReader(
-      const std::shared_ptr<const lakehouse::common::ConnectorSplitBase>& split,
-      const std::shared_ptr<const lakehouse::common::TableHandleBase>& tableHandle,
+      const std::shared_ptr<const ConnectorSplitBase>& split,
+      const std::shared_ptr<const TableHandleBase>& tableHandle,
       const std::unordered_map<
           std::string,
-          std::shared_ptr<const lakehouse::common::ColumnHandleBase>>* partitionKeys,
+          std::shared_ptr<const ColumnHandleBase>>* partitionKeys,
       const ConnectorQueryCtx* connectorQueryCtx,
-      const std::shared_ptr<const lakehouse::common::ConnectorConfigBase>& ConnectorConfigBase,
+      const std::shared_ptr<const ConnectorConfigBase>& ConnectorConfigBase,
       const RowTypePtr& readerOutputType,
       const std::shared_ptr<io::IoStatistics>& ioStats,
       const std::shared_ptr<filesystems::File::IoStats>& fsStats,
-      lakehouse::common::FileHandleFactory* fileHandleFactory,
+      FileHandleFactory* fileHandleFactory,
       folly::Executor* executor,
-      const std::shared_ptr<velox::common::ScanSpec>& scanSpec,
-      core::ExpressionEvaluator* expressionEvaluator,
-      std::atomic<uint64_t>& totalRemainingFilterTime);
+      const std::shared_ptr<velox::common::ScanSpec>& scanSpec);
 
   ~IcebergSplitReader() override;
 
@@ -65,14 +63,5 @@ class IcebergSplitReader : public lakehouse::common::SplitReaderBase {
   std::list<std::unique_ptr<PositionalDeleteFileReader>>
       positionalDeleteFileReaders_;
   BufferPtr deleteBitmap_;
-
-  std::unique_ptr<exec::ExprSet> deleteExprSet_;
-  core::ExpressionEvaluator* expressionEvaluator_;
-  std::atomic<uint64_t>& totalRemainingFilterMs_;
-
-  // Reusable memory for remaining filter evaluation.
-  VectorPtr filterResult_;
-  SelectivityVector filterRows_;
-  exec::FilterEvalCtx filterEvalCtx_;
 };
 } // namespace facebook::velox::connector::lakehouse::iceberg

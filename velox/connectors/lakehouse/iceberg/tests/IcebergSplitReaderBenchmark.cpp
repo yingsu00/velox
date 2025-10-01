@@ -16,13 +16,11 @@
 
 #include "velox/connectors/lakehouse/iceberg/tests/IcebergSplitReaderBenchmark.h"
 
-#include <filesystem>
+#include "velox/connectors/lakehouse/iceberg/IcebergConfig.h"
 
 #include <folly/executors/IOThreadPoolExecutor.h>
 
-#include "velox/connectors/lakehouse/common/FileHandle.h"
-#include "velox/connectors/lakehouse/iceberg/IcebergConfig.h"
-#include "velox/vector/tests/utils/VectorMaker.h"
+#include <filesystem>
 
 using namespace facebook::velox;
 using namespace facebook::velox::dwio;
@@ -30,7 +28,6 @@ using namespace facebook::velox::dwio::common;
 using namespace facebook::velox::dwrf;
 using namespace facebook::velox::memory;
 using namespace facebook::velox::connector::lakehouse::iceberg;
-using namespace facebook::velox::connector::lakehouse::common;
 
 namespace facebook::velox::connector::lakehouse::iceberg::test {
 
@@ -361,9 +358,7 @@ void IcebergSplitReaderBenchmark::readSingleColumn(
             fsStats,
             &fileHandleFactory,
             ioExecutor.get(),
-            scanSpec,
-            connectorQueryCtx_->expressionEvaluator(),
-            totalRemainingFilterMs);
+            scanSpec);
 
     std::shared_ptr<random::RandomSkipTracker> randomSkip;
     icebergSplitReader->configureReaderOptions(randomSkip);

@@ -15,30 +15,15 @@
  */
 #pragma once
 
+#include "ConnectorSplitBase.h"
 #include "IcebergDeleteFile.h"
-#include "velox/connectors/lakehouse/common/ConnectorSplitBase.h"
 
 #include <string>
 
 namespace facebook::velox::connector::lakehouse::iceberg {
 
-struct IcebergConnectorSplit : public lakehouse::common::ConnectorSplitBase {
+struct IcebergConnectorSplit : public lakehouse::iceberg::ConnectorSplitBase {
   std::vector<IcebergDeleteFile> deleteFiles;
-
-  //  IcebergConnectorSplit(
-  //      const std::string& connectorId,
-  //      const std::string& filePath,
-  //      dwio::common::FileFormat fileFormat,
-  //      uint64_t start = 0,
-  //      uint64_t length = std::numeric_limits<uint64_t>::max(),
-  //      const std::unordered_map<std::string, std::optional<std::string>>&
-  //          partitionKeys = {},
-  //      std::optional<int32_t> tableBucketNumber = std::nullopt,
-  //      const std::unordered_map<std::string, std::string>& customSplitInfo =
-  //      {}, const std::shared_ptr<std::string>& extraFileInfo = {}, bool
-  //      cacheable = true, const std::unordered_map<std::string, std::string>&
-  //      infoColumns = {}, std::optional<FileProperties> fileProperties =
-  //      std::nullopt);
 
   IcebergConnectorSplit(
       const std::string& _connectorId,

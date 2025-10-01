@@ -15,13 +15,13 @@
  */
 #pragma once
 
-#include "velox/connectors/lakehouse/common/TableHandleBase.h"
+#include "TableHandleBase.h"
 
 #include <string>
 
 namespace facebook::velox::connector::lakehouse::iceberg  {
 
-class IcebergColumnHandle : public lakehouse::common::ColumnHandleBase {
+class IcebergColumnHandle : public ColumnHandleBase {
  public:
   /// NOTE: 'dataType' is the column type in target write table. 'hiveType' is
   /// converted type of the corresponding column in source table which might not
@@ -33,7 +33,7 @@ class IcebergColumnHandle : public lakehouse::common::ColumnHandleBase {
       ColumnType columnType,
       TypePtr dataType,
       std::vector<velox::common::Subfield> requiredSubfields = {})
-      : lakehouse::common::ColumnHandleBase(
+      : ColumnHandleBase(
             name,
             columnType,
             std::move(dataType),
@@ -52,7 +52,7 @@ class IcebergColumnHandle : public lakehouse::common::ColumnHandleBase {
   }
 };
 
-class IcebergTableHandle : public lakehouse::common::TableHandleBase {
+class IcebergTableHandle : public TableHandleBase {
  public:
   IcebergTableHandle(
       std::string connectorId,

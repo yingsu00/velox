@@ -26,7 +26,7 @@
 #include "velox/expression/FieldReference.h"
 #include "velox/type/Type.h"
 
-namespace facebook::velox::connector::lakehouse::common {
+namespace facebook::velox::connector::lakehouse::iceberg {
 namespace {
 
 bool isMember(
@@ -49,6 +49,10 @@ class DataSourceBase : public DataSource {
       folly::Executor* executor,
       const ConnectorQueryCtx* connectorQueryCtx,
       const std::shared_ptr<ConnectorConfigBase>& connectorConfig);
+
+  const velox::common::SubfieldFilters* getFilters() const override {
+    return &filters_;
+  }
 
   void addDynamicFilter(
       column_index_t outputChannel,
@@ -154,9 +158,6 @@ class DataSourceBase : public DataSource {
   std::vector<column_index_t> multiReferencedFields_;
 
   std::shared_ptr<random::RandomSkipTracker> randomSkip_;
-
-  //  int64_t numBucketConversion_ = 0;
-  //  std::unique_ptr<HivePartitionFunction> partitionFunction_;
   std::vector<uint32_t> partitions_;
 
   // Reusable memory for remaining filter evaluation.
@@ -167,4 +168,4 @@ class DataSourceBase : public DataSource {
   exec::FilterEvalCtx filterEvalCtx_;
 };
 
-} // namespace facebook::velox::connector::lakehouse::common
+} // namespace facebook::velox::connector::lakehouse::iceberg

@@ -13,18 +13,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #pragma once
 
-#include "velox/expression/Expr.h"
-#include "velox/type/Filter.h"
 #include "velox/vector/ComplexVector.h"
 
-namespace facebook::velox::connector::lakehouse::iceberg  {
-std::unique_ptr<velox::common::Filter> createNotInFilter(
-    const VectorPtr& elements,
-    vector_size_t offset,
-    vector_size_t size,
-    TypeKind type);
+namespace facebook::velox::connector::lakehouse::iceberg {
+
+std::vector<std::pair<std::string, std::string>> extractPartitionKeyValues(
+    const RowVectorPtr& partitionsVector,
+    vector_size_t row,
+    const std::string& nullValueName = "");
 
 } // namespace facebook::velox::connector::lakehouse::iceberg

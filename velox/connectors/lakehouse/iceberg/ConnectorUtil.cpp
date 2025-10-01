@@ -21,12 +21,10 @@
 #include "velox/dwio/common/Reader.h"
 #include "velox/expression/Expr.h"
 #include "velox/expression/ExprToSubfieldFilter.h"
-#include "velox/vector/BaseVector.h"
-#include "velox/vector/ConstantVector.h"
 
 using namespace facebook::velox;
 
-namespace facebook::velox::connector::lakehouse::common {
+namespace facebook::velox::connector::lakehouse::iceberg {
 
 using namespace facebook::velox::common;
 
@@ -261,7 +259,7 @@ void processFieldSpec(
           auto* keys =
               spec.childByName(velox::common::ScanSpec::kMapKeysFieldName);
           VELOX_CHECK_NOT_NULL(keys);
-          keys->addFilter(velox::common::IsNotNull());
+          keys->setFilter(std::make_shared<common::IsNotNull>());
         }
       });
   if (dataColumns) {
@@ -599,51 +597,6 @@ void addSubfields(
   }
 }
 
-//template <TypeKind kind>
-//VectorPtr newConstantFromString(
-//    const TypePtr& type,
-//    const std::optional<std::string>& value,
-//    vector_size_t size,
-//    velox::memory::MemoryPool* pool,
-//    const std::string& sessionTimezone,
-//    bool asLocalTime,
-//    bool isPartitionDateDaysSinceEpoch) {
-//  using T = typename TypeTraits<kind>::NativeType;
-//  if (!value.has_value()) {
-//    return std::make_shared<ConstantVector<T>>(pool, size, true, type, T());
-//  }
-//
-//  if (type->isDate()) {
-//    int32_t days = 0;
-//    // For Iceberg, the date partition values are already in daysSinceEpoch
-//    // form.
-//    if (isPartitionDateDaysSinceEpoch) {
-//      days = folly::to<int32_t>(value.value());
-//    } else {
-//      days = DATE()->toDays(static_cast<folly::StringPiece>(value.value()));
-//    }
-//    return std::make_shared<ConstantVector<int32_t>>(
-//        pool, size, false, type, std::move(days));
-//  }
-//
-//  if constexpr (std::is_same_v<T, StringView>) {
-//    return std::make_shared<ConstantVector<StringView>>(
-//        pool, size, false, type, StringView(value.value()));
-//  } else {
-//    auto copy = velox::util::Converter<kind>::tryCast(value.value())
-//                    .thenOrThrow(folly::identity, [&](const Status& status) {
-//                      VELOX_USER_FAIL("{}", status.message());
-//                    });
-//    if constexpr (kind == TypeKind::TIMESTAMP) {
-//      if (asLocalTime) {
-//        copy.toGMT(Timestamp::defaultTimezone());
-//      }
-//    }
-//    return std::make_shared<ConstantVector<T>>(
-//        pool, size, false, type, std::move(copy));
-//  }
-//}
-
 std::unique_ptr<dwio::common::BufferedInput> createBufferedInput(
     const FileHandle& fileHandle,
     const dwio::common::ReaderOptions& readerOpts,
@@ -751,4 +704,4 @@ velox::core::TypedExprPtr extractFiltersFromRemainingFilter(
   return expr;
 }
 
-} // namespace facebook::velox::connector::lakehouse::common
+} // namespace facebook::velox::connector::lakehouse::iceberg

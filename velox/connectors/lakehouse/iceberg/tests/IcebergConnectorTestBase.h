@@ -16,14 +16,14 @@
 
 #pragma once
 
-#include "velox/connectors/lakehouse/common/tests/ConnectorTestBase.h"
+#include "ConnectorTestBase.h"
 #include "velox/connectors/lakehouse/iceberg/IcebergConnectorSplit.h"
 #include "velox/exec/Task.h"
 #include "velox/exec/tests/utils/TempFilePath.h"
 
 namespace facebook::velox::connector::lakehouse::iceberg::test {
 
-class IcebergConnectorTestBase : public common::test::ConnectorTestBase {
+class IcebergConnectorTestBase : public ConnectorTestBase {
  public:
   std::shared_ptr<exec::Task> assertQuery(
       const core::PlanNodePtr& plan,
@@ -39,22 +39,6 @@ class IcebergConnectorTestBase : public common::test::ConnectorTestBase {
   std::vector<std::shared_ptr<ConnectorSplit>>
   makeIcebergConnectorSplits(
       const std::vector<std::shared_ptr<exec::test::TempFilePath>>& filePaths);
-
-//  static std::shared_ptr<ConnectorSplit>
-//  makeIcebergConnectorSplit(
-//      const std::string& filePath,
-//      uint64_t start = 0,
-//      uint64_t length = std::numeric_limits<uint64_t>::max(),
-//      int64_t splitWeight = 0,
-//      bool cacheable = true);
-//
-//  static std::shared_ptr<ConnectorSplit>
-//  makeIcebergConnectorSplit(
-//      const std::string& filePath,
-//      int64_t fileSize,
-//      int64_t fileModifiedTime,
-//      uint64_t start,
-//      uint64_t length);
 
   /// Split file at path 'filePath' into 'splitCount' splits. If not local file,
   /// file size can be given as 'externalSize'.

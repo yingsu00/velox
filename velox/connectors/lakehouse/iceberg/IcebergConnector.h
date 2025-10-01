@@ -15,9 +15,9 @@
  */
 #pragma once
 
+#include "FileHandle.h"
 #include "IcebergConfig.h"
 #include "velox/connectors/Connector.h"
-#include "velox/connectors/lakehouse/common/FileHandle.h"
 #include "velox/core/PlanNode.h"
 #include "velox/type/Type.h"
 
@@ -35,17 +35,12 @@ class IcebergConnector : public Connector {
       folly::Executor* executor);
 
   const std::shared_ptr<const facebook::velox::config::ConfigBase>&
-  connectorConfig() const override {
+  connectorConfig() const {
     return icebergConfig_->config();
   }
 
   bool canAddDynamicFilter() const override {
     return true;
-  }
-
-  ConnectorMetadata* metadata() const override {
-    VELOX_CHECK_NOT_NULL(metadata_);
-    return metadata_.get();
   }
 
   std::unique_ptr<DataSource> createDataSource(
@@ -54,7 +49,7 @@ class IcebergConnector : public Connector {
       const connector::ColumnHandleMap& columnHandles,
       ConnectorQueryCtx* connectorQueryCtx) override;
 
-  bool supportsSplitPreload() override {
+  bool supportsSplitPreload() const override {
     return true;
   }
 
@@ -68,21 +63,20 @@ class IcebergConnector : public Connector {
     return executor_;
   }
 
-  lakehouse::common::FileHandleCacheStats fileHandleCacheStats() {
+  FileHandleCacheStats fileHandleCacheStats() {
     return fileHandleFactory_.cacheStats();
   }
 
   // NOTE: this is to clear file handle cache which might affect performance,
   // and is only used for operational purposes.
-  lakehouse::common::FileHandleCacheStats clearFileHandleCache() {
+  FileHandleCacheStats clearFileHandleCache() {
     return fileHandleFactory_.clearCache();
   }
 
  protected:
   const std::shared_ptr<IcebergConfig> icebergConfig_;
-  lakehouse::common::FileHandleFactory fileHandleFactory_;
+  FileHandleFactory fileHandleFactory_;
   folly::Executor* executor_;
-  std::shared_ptr<ConnectorMetadata> metadata_;
 };
 
 class IcebergConnectorFactory : public ConnectorFactory {
@@ -165,12 +159,6 @@ void registerIcebergPartitionFunctionSerDe();
 class IcebergConnectorMetadataFactory {
  public:
   virtual ~IcebergConnectorMetadataFactory() = default;
-
-  /// Returns a ConnectorMetadata to complete'IcebergConnector' if 'this'
-  /// recognizes a data source, e.g. local file system or remote metadata
-  /// service associated to configs in 'IcebergConnector'.
-  virtual std::shared_ptr<ConnectorMetadata> create(
-      IcebergConnector* connector) = 0;
 };
 
 bool registerIcebergConnectorMetadataFactory(

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "velox/connectors/lakehouse/common/DataSourceBase.h"
+#include "DataSourceBase.h"
 
 #include "ConnectorUtil.h"
 #include "velox/dwio/common/ReaderFactory.h"
@@ -24,7 +24,7 @@
 
 using facebook::velox::common::testutil::TestValue;
 
-namespace facebook::velox::connector::lakehouse::common {
+namespace facebook::velox::connector::lakehouse::iceberg {
 
 namespace {
 
@@ -184,181 +184,11 @@ DataSourceBase::DataSourceBase(
   fsStats_ = std::make_shared<filesystems::File::IoStats>();
 }
 
-// std::unique_ptr<SplitReaderBase> DataSourceBase::createSplitReader() {
-//  return SplitReaderBase::create(
-//      split_,
-//      tableHandle_,
-//      &partitionColumnHandles_,
-//      connectorQueryCtx_,
-//      connectorConfig_,
-//      readerOutputType_,
-//      ioStats_,
-//      fsStats_,
-//      fileHandleFactory_,
-//      executor_,
-//      scanSpec_,
-//      expressionEvaluator_,
-//      totalRemainingFilterTime_);
-// }
-//
-// std::unique_ptr<HivePartitionFunction>
-// DataSourceBase::setupBucketConversion() {
-//  VELOX_CHECK_NE(
-//      split_->bucketConversion->tableBucketCount,
-//      split_->bucketConversion->partitionBucketCount);
-//  VELOX_CHECK(split_->tableBucketNumber.has_value());
-//  VELOX_CHECK_NOT_NULL(tableHandle_->dataColumns());
-//  ++numBucketConversion_;
-//  bool rebuildScanSpec = false;
-//  std::vector<std::string> names;
-//  std::vector<TypePtr> types;
-//  std::vector<column_index_t> bucketChannels;
-//  for (auto& handle : split_->bucketConversion->bucketColumnHandles) {
-//    VELOX_CHECK(handle->columnType() ==
-//    HiveColumnHandle::ColumnType::kRegular); if
-//    (subfields_.erase(handle->name()) > 0) {
-//      rebuildScanSpec = true;
-//    }
-//    auto index = readerOutputType_->getChildIdxIfExists(handle->name());
-//    if (!index.has_value()) {
-//      if (names.empty()) {
-//        names = readerOutputType_->names();
-//        types = readerOutputType_->children();
-//      }
-//      index = names.size();
-//      names.push_back(handle->name());
-//      types.push_back(
-//          tableHandle_->dataColumns()->findChild(handle->name()));
-//      rebuildScanSpec = true;
-//    }
-//    bucketChannels.push_back(*index);
-//  }
-//  if (!names.empty()) {
-//    readerOutputType_ = ROW(std::move(names), std::move(types));
-//  }
-//  if (rebuildScanSpec) {
-//    auto newScanSpec = makeScanSpec(
-//        readerOutputType_,
-//        subfields_,
-//        filters_,
-//        tableHandle_->dataColumns(),
-//        partitionColumnHandles_,
-//        infoColumns_,
-//        specialColumns_,
-//        connectorConfig_->readStatsBasedFilterReorderDisabled(
-//            connectorQueryCtx_->sessionProperties()),
-//        pool_);
-//    newScanSpec->moveAdaptationFrom(*scanSpec_);
-//    scanSpec_ = std::move(newScanSpec);
-//  }
-//  return std::make_unique<HivePartitionFunction>(
-//      split_->bucketConversion->tableBucketCount, std::move(bucketChannels));
-// }
-//
-// void DataSourceBase::setupRowIdColumn() {
-//  VELOX_CHECK(split_->rowIdProperties.has_value());
-//  const auto& props = *split_->rowIdProperties;
-//  auto* rowId = scanSpec_->childByName(*specialColumns_.rowId);
-//  VELOX_CHECK_NOT_NULL(rowId);
-//  auto& rowIdType =
-//      readerOutputType_->findChild(*specialColumns_.rowId)->asRow();
-//  auto rowGroupId = split_->getFileName();
-//  rowId->childByName(rowIdType.nameOf(1))
-//      ->setConstantValue<StringView>(
-//          StringView(rowGroupId), VARCHAR(),
-//          connectorQueryCtx_->memoryPool());
-//  rowId->childByName(rowIdType.nameOf(2))
-//      ->setConstantValue<int64_t>(
-//          props.metadataVersion, BIGINT(), connectorQueryCtx_->memoryPool());
-//  rowId->childByName(rowIdType.nameOf(3))
-//      ->setConstantValue<int64_t>(
-//          props.partitionId, BIGINT(), connectorQueryCtx_->memoryPool());
-//  rowId->childByName(rowIdType.nameOf(4))
-//      ->setConstantValue<StringView>(
-//          StringView(props.tableGuid),
-//          VARCHAR(),
-//          connectorQueryCtx_->memoryPool());
-//}
-//
-// void DataSourceBase::addSplit(std::shared_ptr<ConnectorSplit> split) {
-//   VELOX_CHECK_NULL(
-//       split_,
-//       "Previous split has not been processed yet. Call next to process the
-//       split.");
-//   split_ = std::dynamic_pointer_cast<ConnectorSplitBase>(split);
-//   VELOX_CHECK_NOT_NULL(split_, "Wrong type of split");
-//
-//   VLOG(1) << "Adding split " << split_->toString();
-//
-//   if (splitReader_) {
-//     splitReader_.reset();
-//   }
-//
-//   if (split_->bucketConversion.has_value()) {
-//     partitionFunction_ = setupBucketConversion();
-//   } else {
-//     partitionFunction_.reset();
-//   }
-//   if (specialColumns_.rowId.has_value()) {
-//     setupRowIdColumn();
-//   }
-//
-//   splitReader_ = createSplitReader();
-//
-//   // Split reader subclasses may need to use the reader options in
-//   prepareSplit
-//   // so we initialize it beforehand.
-//
-//   splitReader_->configureReaderOptions(randomSkip_);
-//   splitReader_->prepareSplit(metadataFilter_, runtimeStats_);
-//   readerOutputType_ = splitReader_->readerOutputType();
-// }
-//
-// vector_size_t DataSourceBase::applyBucketConversion(
-//     const RowVectorPtr& rowVector,
-//     BufferPtr& indices) {
-//   partitions_.clear();
-//   partitionFunction_->partition(*rowVector, partitions_);
-//   const auto bucketToKeep = *split_->tableBucketNumber;
-//   const auto partitionBucketCount =
-//       split_->bucketConversion->partitionBucketCount;
-//   for (vector_size_t i = 0; i < rowVector->size(); ++i) {
-//     VELOX_CHECK_EQ((partitions_[i] - bucketToKeep) % partitionBucketCount,
-//     0);
-//   }
-//
-//   if (remainingFilterExprSet_) {
-//     for (vector_size_t i = 0; i < rowVector->size(); ++i) {
-//       if (partitions_[i] != bucketToKeep) {
-//         filterRows_.setValid(i, false);
-//       }
-//     }
-//     filterRows_.updateBounds();
-//     return filterRows_.countSelected();
-//   }
-//   vector_size_t size = 0;
-//   for (vector_size_t i = 0; i < rowVector->size(); ++i) {
-//     size += partitions_[i] == bucketToKeep;
-//   }
-//   if (size == 0) {
-//     return 0;
-//   }
-//   indices = allocateIndices(size, pool_);
-//   size = 0;
-//   auto* rawIndices = indices->asMutable<vector_size_t>();
-//   for (vector_size_t i = 0; i < rowVector->size(); ++i) {
-//     if (partitions_[i] == bucketToKeep) {
-//       rawIndices[size++] = i;
-//     }
-//   }
-//   return size;
-// }
-
 void DataSourceBase::addDynamicFilter(
     column_index_t outputChannel,
     const std::shared_ptr<velox::common::Filter>& filter) {
   auto& fieldSpec = scanSpec_->getChildByChannel(outputChannel);
-  fieldSpec.addFilter(*filter);
+  fieldSpec.setFilter(filter);
   scanSpec_->resetCachedValues(true);
   if (splitReader_) {
     splitReader_->resetFilterCaches();
@@ -411,10 +241,6 @@ DataSourceBase::runtimeStats() {
          RuntimeCounter(
              ioStats_->ramHit().sum(), RuntimeCounter::Unit::kBytes)});
   }
-  //  if (numBucketConversion_ > 0) {
-  //    res.insert({"numBucketConversion",
-  //    RuntimeCounter(numBucketConversion_)});
-  //  }
 
   const auto fsStats = fsStats_->stats();
   for (const auto& storageStats : fsStats) {
@@ -445,9 +271,6 @@ void DataSourceBase::setFromDataSource(
   ioStats_ = std::move(source->ioStats_);
   source->fsStats_->merge(*fsStats_);
   fsStats_ = std::move(source->fsStats_);
-
-  //  numBucketConversion_ += source->numBucketConversion_;
-  //  partitionFunction_ = std::move(source->partitionFunction_);
 }
 
 int64_t DataSourceBase::estimatedRowSize() {
@@ -480,95 +303,6 @@ vector_size_t DataSourceBase::evaluateRemainingFilter(
   return rowsRemaining;
 }
 
-//std::shared_ptr<velox::common::ScanSpec> DataSourceBase::makeScanSpec() {
-//  auto spec = std::make_shared<velox::common::ScanSpec>("root");
-//  folly::F14FastMap<std::string, std::vector<const velox::common::Subfield*>>
-//      filterSubfields;
-//  std::vector<SubfieldSpec> subfieldSpecs;
-//  for (auto& [subfield, _] : filters_) {
-//    if (auto name = subfield.toString();
-//        !isSynthesizedColumn(name, infoColumns_) &&
-//        partitionColumnHandles_.count(name) == 0) {
-//      VELOX_CHECK(!isSpecialColumn(name));
-//      filterSubfields[getColumnName(subfield)].push_back(&subfield);
-//    }
-//  }
-//
-//  // Process columns that will be projected out.
-//  for (int i = 0; i < readerOutputType_->size(); ++i) {
-//    auto& name = readerOutputType_->nameOf(i);
-//    auto& type = readerOutputType_->childAt(i);
-//
-//    // Different table formats may have different special columns. They would be
-//    // handled differently by corresponding connectors.
-//    if (isSpecialColumn(name)) {
-//      continue;
-//    }
-//
-//    auto dataColumns = tableHandle_->dataColumns();
-//    auto it = subfields_.find(name);
-//    if (it == subfields_.end()) {
-//      auto* fieldSpec = spec->addFieldRecursively(name, *type, i);
-//      processFieldSpec(dataColumns, type, *fieldSpec);
-//      filterSubfields.erase(name);
-//      continue;
-//    }
-//    for (auto* subfield : it->second) {
-//      subfieldSpecs.push_back({subfield, false});
-//    }
-//    it = filterSubfields.find(name);
-//    if (it != filterSubfields.end()) {
-//      for (auto* subfield : it->second) {
-//        subfieldSpecs.push_back({subfield, true});
-//      }
-//      filterSubfields.erase(it);
-//    }
-//    auto* fieldSpec = spec->addField(name, i);
-//    addSubfields(*type, subfieldSpecs, 1, pool_, *fieldSpec);
-//    processFieldSpec(dataColumns, type, *fieldSpec);
-//    subfieldSpecs.clear();
-//  }
-//
-//  // Now process the columns that will not be projected out.
-//  if (!filterSubfields.empty()) {
-//    VELOX_CHECK_NOT_NULL(tableHandle_->dataColumns());
-//    for (auto& [fieldName, subfields] : filterSubfields) {
-//      for (auto* subfield : subfields) {
-//        subfieldSpecs.push_back({subfield, true});
-//      }
-//      auto& type = tableHandle_->dataColumns()->findChild(fieldName);
-//      auto* fieldSpec = spec->getOrCreateChild(fieldName);
-//      addSubfields(*type, subfieldSpecs, 1, pool_, *fieldSpec);
-//      processFieldSpec(tableHandle_->dataColumns(), type, *fieldSpec);
-//      subfieldSpecs.clear();
-//    }
-//  }
-//
-//  for (auto& pair : filters_) {
-//    const auto name = pair.first.toString();
-//    // SelectiveColumnReader doesn't support constant columns with filters,
-//    // hence, we can't have a filter for a $path or $bucket column.
-//    //
-//    // Unfortunately, Presto happens to specify a filter for $path, $file_size,
-//    // $file_modified_time or $bucket column. This filter is redundant and needs
-//    // to be removed.
-//    // TODO Remove this check when Presto is fixed to not specify a filter
-//    // on $path and $bucket column.isSynthesizedColumn
-//    if (isSynthesizedColumn(name, infoColumns_)) {
-//      continue;
-//    }
-//    auto fieldSpec = spec->getOrCreateChild(pair.first);
-//    fieldSpec->addFilter(*pair.second);
-//  }
-//
-//  if (connectorConfig_->readStatsBasedFilterReorderDisabled(
-//          connectorQueryCtx_->sessionProperties())) {
-//    spec->disableStatsBasedFilterReorder();
-//  }
-//
-//  return spec;
-//}
-
 bool isSpecialColumn(const std::string& name) {
   return false;
 }
@@ -579,4 +313,4 @@ void DataSourceBase::resetSplit() {
   // Keep readers around to hold adaptation.
 }
 
-} // namespace facebook::velox::connector::lakehouse::common
+} // namespace facebook::velox::connector::lakehouse::iceberg

@@ -16,9 +16,7 @@
 
 #include "ConnectorConfigBase.h"
 
-#include "velox/common/config/Config.h"
-
-namespace facebook::velox::connector::lakehouse::common {
+namespace facebook::velox::connector::lakehouse::iceberg {
 
 std::string ConnectorConfigBase::gcsEndpoint() const {
   return config_->get<std::string>(kGcsEndpoint, std::string(""));
@@ -150,4 +148,4 @@ bool ConnectorConfigBase::readStatsBasedFilterReorderDisabled(
       config_->get<bool>(kReadStatsBasedFilterReorderDisabled, false));
 }
 
-} // namespace facebook::velox::connector::lakehouse::common
+} // namespace facebook::velox::connector::lakehouse::iceberg

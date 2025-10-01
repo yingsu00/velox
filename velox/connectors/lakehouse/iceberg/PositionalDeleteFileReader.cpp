@@ -16,24 +16,21 @@
 
 #include "velox/connectors/lakehouse/iceberg/PositionalDeleteFileReader.h"
 
+#include "ConnectorUtil.h"
 #include "IcebergConnectorUtil.h"
 #include "IcebergDeleteFile.h"
 #include "IcebergMetadataColumns.h"
-#include "velox/connectors/lakehouse/common/ConnectorUtil.h"
-#include "velox/dwio/common/Options.h"
 #include "velox/dwio/common/ReaderFactory.h"
 
 namespace facebook::velox::connector::lakehouse::iceberg {
 
-using namespace facebook::velox::connector::lakehouse::common;
-
 PositionalDeleteFileReader::PositionalDeleteFileReader(
     const IcebergDeleteFile& deleteFile,
     const std::string& baseFilePath,
-    lakehouse::common::FileHandleFactory* fileHandleFactory,
+    FileHandleFactory* fileHandleFactory,
     const ConnectorQueryCtx* connectorQueryCtx,
     folly::Executor* executor,
-    const std::shared_ptr<const lakehouse::common::ConnectorConfigBase>
+    const std::shared_ptr<const ConnectorConfigBase>
         ConnectorConfigBase,
     const std::shared_ptr<io::IoStatistics>& ioStats,
     const std::shared_ptr<filesystems::File::IoStats>& fsStats,

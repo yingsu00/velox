@@ -17,13 +17,11 @@
 #include "FileHandle.h"
 #include "velox/common/base/Counters.h"
 #include "velox/common/base/StatsReporter.h"
-#include "velox/common/file/FileSystems.h"
-#include "velox/common/time/Timer.h"
 
 #include <atomic>
 #include <string>
 
-namespace facebook::velox::connector::lakehouse::common {
+namespace facebook::velox::connector::lakehouse::iceberg {
 
 uint64_t FileHandleSizer::operator()(const FileHandle& fileHandle) {
   // TODO: add to support variable file cache size support when the file system
@@ -76,4 +74,4 @@ std::unique_ptr<FileHandle> FileHandleGenerator::operator()(
   return fileHandle;
 }
 
-} // namespace facebook::velox
+} // namespace facebook::velox::connector::lakehouse::iceberg

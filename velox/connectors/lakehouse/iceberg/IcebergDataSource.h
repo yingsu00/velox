@@ -15,13 +15,12 @@
  */
 #pragma once
 
+#include "ConnectorConfigBase.h"
+#include "DataSourceBase.h"
+#include "FileHandle.h"
 #include "velox/common/base/RandomUtil.h"
 #include "velox/common/file/FileSystems.h"
 #include "velox/common/io/IoStatistics.h"
-//#include "velox/connectors/lakehouse/common/ConnectorConfigBase.h"
-#include "velox/connectors/lakehouse/common/ConnectorConfigBase.h"
-#include "velox/connectors/lakehouse/common/DataSourceBase.h"
-#include "velox/connectors/lakehouse/common/FileHandle.h"
 #include "velox/connectors/lakehouse/iceberg/IcebergConnectorSplit.h"
 #include "velox/connectors/lakehouse/iceberg/IcebergPartitionFunction.h"
 #include "velox/connectors/lakehouse/iceberg/IcebergSplitReader.h"
@@ -30,47 +29,21 @@
 
 namespace facebook::velox::connector::lakehouse::iceberg {
 
-// class IcebergConfig;
-
-//using FileHandleFactory = CachedFactory<
-//    std::string,
-//    lakehouse::common::FileHandle,
-//    lakehouse::common::FileHandleGenerator,
-//    FileProperties,
-//    filesystems::File::IoStats,
-//    lakehouse::common::FileHandleSizer>;
-
-class IcebergDataSource : public common::DataSourceBase {
+class IcebergDataSource : public DataSourceBase {
  public:
   IcebergDataSource(
       const RowTypePtr& outputType,
       const ConnectorTableHandlePtr& tableHandle,
       const connector::ColumnHandleMap& columnHandles,
-      lakehouse::common::FileHandleFactory* fileHandleFactory,
+      FileHandleFactory* fileHandleFactory,
       folly::Executor* executor,
       const ConnectorQueryCtx* connectorQueryCtx,
-      const std::shared_ptr<common::ConnectorConfigBase>& connectorConfig);
+      const std::shared_ptr<ConnectorConfigBase>& connectorConfig);
 
   void addSplit(std::shared_ptr<ConnectorSplit> split) override;
 
   std::optional<RowVectorPtr> next(uint64_t size, velox::ContinueFuture& future)
       override;
-
-  //  void addDynamicFilter(
-  //      column_index_t outputChannel,
-  //      const std::shared_ptr<Filter>& filter) override;
-
-  //  std::unordered_map<std::string, RuntimeCounter> runtimeStats()
-  //  override;
-
-  //  bool allPrefetchIssued() const override {
-  //    return splitReader_ && splitReader_->allPrefetchIssued();
-  //  }
-
-  //  void setFromDataSource(std::unique_ptr<DataSource> sourceUnique)
-  //  override;
-
-  //  int64_t estimatedRowSize() override;
 
   const ConnectorQueryCtx* testingConnectorQueryCtx() const {
     return connectorQueryCtx_;
@@ -78,30 +51,6 @@ class IcebergDataSource : public common::DataSourceBase {
 
  private:
   std::shared_ptr<velox::common::ScanSpec> makeScanSpec() override;
-  //
-  //
-  //  memory::MemoryPool* const pool_;
-  //
-  //  std::shared_ptr<IcebergConnectorSplit> split_;
-  //  std::shared_ptr<IcebergTableHandle> icebergTableHandle_;
-  //  std::shared_ptr<ScanSpec> scanSpec_;
-  //  VectorPtr output_;
-  //  std::unique_ptr<SplitReaderBase> splitReader_;
-  //
-  //  // Output type from file reader.  This is different from outputType_ that
-  //  it
-  //  // contains column names before assignment, and columns that only used in
-  //  // remaining filter.
-  //  RowTypePtr readerOutputType_;
-  //
-  //  // Column handles for the partition key columns keyed on partition key
-  //  column
-  //  // name.
-  //  std::unordered_map<std::string, std::shared_ptr<IcebergColumnHandle>>
-  //      partitionKeys_;
-  //
-  //  std::shared_ptr<io::IoStatistics> ioStats_;
-  //  std::shared_ptr<filesystems::File::IoStats> fsStats_;
 
   bool isSpecialColumn(const std::string& name) const override;
   void setupRowIdColumn();
@@ -112,16 +61,5 @@ class IcebergDataSource : public common::DataSourceBase {
 
   std::unique_ptr<IcebergPartitionFunction> partitionFunction_;
   std::vector<uint32_t> partitions_;
-
-  //  // Reusable memory for remaining filter evaluation.
-  //  VectorPtr filterResult_;
-  //  SelectivityVector filterRows_;
-  //  DecodedVector filterLazyDecoded_;
-  //  SelectivityVector filterLazyBaseRows_;
-  //  exec::FilterEvalCtx filterEvalCtx_;
-
-  // Remembers the WaveDataSource. Successive calls to toWaveDataSource() will
-  // return the same.
-  //  std::shared_ptr<wave::WaveDataSource> waveDataSource_;
 };
 } // namespace facebook::velox::connector::lakehouse::iceberg

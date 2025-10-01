@@ -17,40 +17,8 @@
 #include "IcebergConnectorSplit.h"
 
 #include "IcebergDeleteFile.h"
-#include "velox/connectors/lakehouse/common/FileProperties.h"
 
 namespace facebook::velox::connector::lakehouse::iceberg  {
-
-//IcebergConnectorSplit::IcebergConnectorSplit(
-//    const std::string& connectorId,
-//    const std::string& filePath,
-//    dwio::common::FileFormat fileFormat,
-//    uint64_t start,
-//    uint64_t length,
-//    const std::unordered_map<std::string, std::optional<std::string>>&
-//        partitionKeys,
-//    std::optional<int32_t> tableBucketNumber,
-//    const std::unordered_map<std::string, std::string>& customSplitInfo,
-//    const std::shared_ptr<std::string>& extraFileInfo,
-//    bool cacheable,
-//    const std::unordered_map<std::string, std::string>& infoColumns,
-//    std::optional<velox::FileProperties> properties)
-//    : IcebergConnectorSplit(
-//          connectorId,
-//          filePath,
-//          fileFormat,
-//          start,
-//          length,
-//          partitionKeys,
-//          /*serdeParameters=*/{},
-//          /*storageParameters=*/{},
-//          /*splitWeight=*/0,
-//          cacheable,
-//          /*deletes=*/{},
-//          infoColumns,
-//          properties) {
-//  // TODO: Deserialize _extraFileInfo to get deleteFiles;
-//}
 
 IcebergConnectorSplit::IcebergConnectorSplit(
     const std::string& _connectorId,
