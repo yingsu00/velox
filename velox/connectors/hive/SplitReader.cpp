@@ -20,8 +20,6 @@
 #include "velox/connectors/hive/HiveConfig.h"
 #include "velox/connectors/hive/HiveConnectorSplit.h"
 #include "velox/connectors/hive/HiveConnectorUtil.h"
-#include "velox/connectors/hive/TableHandle.h"
-#include "velox/connectors/hive/iceberg/IcebergSplitReader.h"
 #include "velox/dwio/common/ReaderFactory.h"
 
 namespace facebook::velox::connector::hive {
@@ -34,22 +32,14 @@ VectorPtr newConstantFromString(
     vector_size_t size,
     velox::memory::MemoryPool* pool,
     const std::string& sessionTimezone,
-    bool asLocalTime,
-    bool isPartitionDateDaysSinceEpoch = false) {
+    bool asLocalTime) {
   using T = typename TypeTraits<kind>::NativeType;
   if (!value.has_value()) {
     return std::make_shared<ConstantVector<T>>(pool, size, true, type, T());
   }
 
   if (type->isDate()) {
-    int32_t days = 0;
-    // For Iceberg, the date partition values are already in daysSinceEpoch
-    // form.
-    if (isPartitionDateDaysSinceEpoch) {
-      days = folly::to<int32_t>(value.value());
-    } else {
-      days = DATE()->toDays(static_cast<folly::StringPiece>(value.value()));
-    }
+    int32_t days = DATE()->toDays(static_cast<folly::StringPiece>(value.value()));
     return std::make_shared<ConstantVector<int32_t>>(
         pool, size, false, type, std::move(days));
   }
@@ -97,22 +87,6 @@ std::unique_ptr<SplitReader> SplitReader::create(
     FileHandleFactory* fileHandleFactory,
     folly::Executor* ioExecutor,
     const std::shared_ptr<common::ScanSpec>& scanSpec) {
-  //  Create the SplitReader based on hiveSplit->customSplitInfo["table_format"]
-  if (hiveSplit->customSplitInfo.count("table_format") > 0 &&
-      hiveSplit->customSplitInfo["table_format"] == "hive-iceberg") {
-    return std::make_unique<iceberg::IcebergSplitReader>(
-        hiveSplit,
-        hiveTableHandle,
-        partitionKeys,
-        connectorQueryCtx,
-        hiveConfig,
-        readerOutputType,
-        ioStats,
-        fsStats,
-        fileHandleFactory,
-        ioExecutor,
-        scanSpec);
-  } else {
     return std::unique_ptr<SplitReader>(new SplitReader(
         hiveSplit,
         hiveTableHandle,
@@ -125,7 +99,6 @@ std::unique_ptr<SplitReader> SplitReader::create(
         fileHandleFactory,
         ioExecutor,
         scanSpec));
-  }
 }
 
 SplitReader::SplitReader(
@@ -486,8 +459,7 @@ void SplitReader::setPartitionValue(
       connectorQueryCtx_->memoryPool(),
       connectorQueryCtx_->sessionTimezone(),
       hiveConfig_->readTimestampPartitionValueAsLocalTime(
-          connectorQueryCtx_->sessionProperties()),
-      it->second->isPartitionDateValueDaysSinceEpoch());
+          connectorQueryCtx_->sessionProperties()));
   spec->setConstantValue(constant);
 }
 

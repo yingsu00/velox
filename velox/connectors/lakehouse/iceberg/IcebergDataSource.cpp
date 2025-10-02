@@ -140,7 +140,6 @@ void IcebergDataSource::addSplit(std::shared_ptr<ConnectorSplit> split) {
   VELOX_CHECK_NOT_NULL(split_, "Wrong type of split");
   VLOG(1) << "Adding split " << split_->toString();
 
-
   scanSpec_ = makeScanSpec();
 
 //  if (remainingFilter) {
