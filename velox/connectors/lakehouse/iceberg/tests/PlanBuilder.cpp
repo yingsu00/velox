@@ -35,8 +35,6 @@ using namespace facebook::velox::connector;
 using namespace facebook::velox::connector::lakehouse::iceberg;
 
 namespace facebook::velox::exec::test {
-namespace {
-
 core::TypedExprPtr parseExpr(
     const std::string& text,
     const RowTypePtr& rowType,
@@ -45,25 +43,6 @@ core::TypedExprPtr parseExpr(
   auto untyped = parse::parseExpr(text, options);
   return core::Expressions::inferTypes(untyped, rowType, pool);
 }
-
-//std::shared_ptr<IcebergBucketProperty> buildIcebergBucketProperty(
-//    const RowTypePtr rowType,
-//    int32_t bucketCount,
-//    const std::vector<std::string>& bucketColumns,
-//    const std::vector<std::shared_ptr<const IcebergSortingColumn>>& sortBy) {
-//  std::vector<TypePtr> bucketTypes;
-//  bucketTypes.reserve(bucketColumns.size());
-//  for (const auto& bucketColumn : bucketColumns) {
-//    bucketTypes.push_back(rowType->childAt(rowType->getChildIdx(bucketColumn)));
-//  }
-//  return std::make_shared<IcebergBucketProperty>(
-//      IcebergBucketProperty::Kind::kHiveCompatible,
-//      bucketCount,
-//      bucketColumns,
-//      bucketTypes,
-//      sortBy);
-//}
-} // namespace
 
 PlanBuilder& PlanBuilder::tableScan(
     const RowTypePtr& outputType,
@@ -197,17 +176,14 @@ core::PlanNodePtr PlanBuilder::TableScanBuilder::build(core::PlanNodeId id) {
     if (it != columnAliases_.end()) {
       columnName = it->second;
       typedMapping.emplace(
-          name,
-          std::make_shared<core::FieldAccessTypedExpr>(type, columnName));
+          name, std::make_shared<core::FieldAccessTypedExpr>(type, columnName));
     }
 
     if (!hasAssignments) {
       assignments_.insert(
           {name,
            std::make_shared<IcebergColumnHandle>(
-               columnName,
-               IcebergColumnHandle::ColumnType::kRegular,
-               type)});
+               columnName, IcebergColumnHandle::ColumnType::kRegular, type)});
     }
   }
 
@@ -255,90 +231,6 @@ core::PlanNodePtr PlanBuilder::TableScanBuilder::build(core::PlanNodeId id) {
         std::make_shared<core::FilterNode>(filterId, filterNodeExpr, result);
   }
   return result;
-}
-
-core::PlanNodePtr PlanBuilder::TableWriterBuilder::build(core::PlanNodeId id) {
-  auto upstreamNode = planBuilder_.planNode();
-  VELOX_CHECK_NOT_NULL(upstreamNode, "TableWrite cannot be the source node");
-
-  // If outputType wasn't explicit specified, fallback to use the output of the
-  // upstream operator.
-  auto outputType = outputType_ ? outputType_ : upstreamNode->outputType();
-
-  // If insertHandle_ is not specified, build a IcebergInsertTableHandle along with
-  // columnHandles, bucketProperty and locationHandle.
-  if (!insertHandle_) {
-    // Create column handles.
-    std::vector<std::shared_ptr<const ColumnHandle>>
-        columnHandles;
-    for (auto i = 0; i < outputType->size(); ++i) {
-      const auto column = outputType->nameOf(i);
-      const bool isPartitionKey =
-          std::find(partitionBy_.begin(), partitionBy_.end(), column) !=
-          partitionBy_.end();
-      columnHandles.push_back(
-          std::make_shared<IcebergColumnHandle>(
-              column,
-              isPartitionKey
-                  ? IcebergColumnHandle::ColumnType::kPartitionKey
-                  : IcebergColumnHandle::ColumnType::kRegular,
-              outputType->childAt(i)));
-    }
-
-    auto locationHandle = std::make_shared<LocationHandle>(
-        outputDirectoryPath_,
-        outputDirectoryPath_,
-        LocationHandle::TableType::kNew,
-        outputFileName_);
-
-//    std::shared_ptr<IcebergBucketProperty> bucketProperty;
-//    if (bucketCount_ != 0) {
-//      bucketProperty = buildIcebergBucketProperty(
-//          outputType, bucketCount_, bucketedBy_, sortBy_);
-//    }
-
-    auto icebergHandle = std::make_shared<IcebergInsertTableHandle>(
-        columnHandles,
-        locationHandle,
-        fileFormat_,
-//        bucketProperty,
-        compressionKind_,
-        serdeParameters_,
-        options_,
-        ensureFiles_);
-
-    insertHandle_ =
-        std::make_shared<core::InsertTableHandle>(connectorId_, icebergHandle);
-  }
-
-  std::optional<core::ColumnStatsSpec> columnStatsSpec;
-  if (!aggregates_.empty()) {
-    auto aggregatesAndNames = planBuilder_.createAggregateExpressionsAndNames(
-        aggregates_, {}, core::AggregationNode::Step::kPartial);
-    std::vector<core::FieldAccessTypedExprPtr> groupingKeys;
-    groupingKeys.reserve(partitionBy_.size());
-    for (const auto& partitionBy : partitionBy_) {
-      groupingKeys.push_back(std::make_shared<core::FieldAccessTypedExpr>(
-          outputType->findChild(partitionBy), partitionBy));
-    }
-    columnStatsSpec = core::ColumnStatsSpec(
-        std::move(groupingKeys),
-        core::AggregationNode::Step::kPartial,
-        aggregatesAndNames.names,
-        aggregatesAndNames.aggregates);
-  }
-  const auto writeNode = std::make_shared<core::TableWriteNode>(
-      id,
-      outputType,
-      outputType->names(),
-      columnStatsSpec,
-      insertHandle_,
-      false,
-      TableWriteTraits::outputType(columnStatsSpec),
-      commitStrategy_,
-      upstreamNode);
-  VELOX_CHECK(!writeNode->supportsBarrier());
-  return writeNode;
 }
 
 PlanBuilder& PlanBuilder::values(
@@ -576,156 +468,6 @@ PlanBuilder& PlanBuilder::filter(const std::string& filter) {
   planNode_ =
       std::make_shared<core::FilterNode>(nextPlanNodeId(), expr, planNode_);
   VELOX_CHECK(planNode_->supportsBarrier());
-  return *this;
-}
-
-PlanBuilder& PlanBuilder::tableWrite(
-    const std::string& outputDirectoryPath,
-    const dwio::common::FileFormat fileFormat,
-    const std::vector<std::string>& aggregates,
-    const std::shared_ptr<dwio::common::WriterOptions>& options,
-    const std::string& outputFileName) {
-  return TableWriterBuilder(*this)
-      .outputDirectoryPath(outputDirectoryPath)
-      .outputFileName(outputFileName)
-      .fileFormat(fileFormat)
-      .aggregates(aggregates)
-      .options(options)
-      .endTableWriter();
-}
-
-PlanBuilder& PlanBuilder::tableWrite(
-    const std::string& outputDirectoryPath,
-    const std::vector<std::string>& partitionBy,
-    const dwio::common::FileFormat fileFormat,
-    const std::vector<std::string>& aggregates,
-    const std::shared_ptr<dwio::common::WriterOptions>& options) {
-  return TableWriterBuilder(*this)
-      .outputDirectoryPath(outputDirectoryPath)
-      .partitionBy(partitionBy)
-      .fileFormat(fileFormat)
-      .aggregates(aggregates)
-      .options(options)
-      .endTableWriter();
-}
-
-PlanBuilder& PlanBuilder::tableWrite(
-    const std::string& outputDirectoryPath,
-    const std::vector<std::string>& partitionBy,
-    int32_t bucketCount,
-    const std::vector<std::string>& bucketedBy,
-    const dwio::common::FileFormat fileFormat,
-    const std::vector<std::string>& aggregates,
-    const std::shared_ptr<dwio::common::WriterOptions>& options) {
-  return TableWriterBuilder(*this)
-      .outputDirectoryPath(outputDirectoryPath)
-      .partitionBy(partitionBy)
-      .bucketCount(bucketCount)
-      .bucketedBy(bucketedBy)
-      .fileFormat(fileFormat)
-      .aggregates(aggregates)
-      .options(options)
-      .endTableWriter();
-}
-
-PlanBuilder& PlanBuilder::tableWrite(
-    const std::string& outputDirectoryPath,
-    const std::vector<std::string>& partitionBy,
-    int32_t bucketCount,
-    const std::vector<std::string>& bucketedBy,
-    const std::vector<std::shared_ptr<const IcebergSortingColumn>>& sortBy,
-    const dwio::common::FileFormat fileFormat,
-    const std::vector<std::string>& aggregates,
-    const std::string_view& connectorId,
-    const std::unordered_map<std::string, std::string>& serdeParameters,
-    const std::shared_ptr<dwio::common::WriterOptions>& options,
-    const std::string& outputFileName,
-    const common::CompressionKind compressionKind,
-    const RowTypePtr& schema,
-    const bool ensureFiles,
-    const connector::CommitStrategy commitStrategy,
-    std::shared_ptr<core::InsertTableHandle> insertTableHandle) {
-  return TableWriterBuilder(*this)
-      .outputDirectoryPath(outputDirectoryPath)
-      .outputFileName(outputFileName)
-      .outputType(schema)
-      .partitionBy(partitionBy)
-      .bucketCount(bucketCount)
-      .bucketedBy(bucketedBy)
-      .sortBy(sortBy)
-      .fileFormat(fileFormat)
-      .aggregates(aggregates)
-      .connectorId(connectorId)
-      .serdeParameters(serdeParameters)
-      .options(options)
-      .compressionKind(compressionKind)
-      .ensureFiles(ensureFiles)
-      .commitStrategy(commitStrategy)
-      .insertHandle(insertTableHandle)
-      .endTableWriter();
-}
-
-namespace {
-// Finds the table writer source node rooted from 'node'.
-const core::TableWriteNodePtr findTableWrite(const core::PlanNodePtr planNode) {
-  if (auto writer =
-          std::dynamic_pointer_cast<const core::TableWriteNode>(planNode)) {
-    return writer;
-  }
-  for (const auto& source : planNode->sources()) {
-    if (auto writer = findTableWrite(source)) {
-      return writer;
-    }
-  }
-  return nullptr;
-}
-} // namespace
-
-PlanBuilder& PlanBuilder::tableWriteMerge() {
-  VELOX_CHECK_NOT_NULL(planNode_, "TableWriteMerge cannot be the source node");
-  auto writer = findTableWrite(planNode_);
-  VELOX_CHECK_NOT_NULL(
-      writer, "TableWriteMerge can only be added after TableWrite node");
-
-  std::optional<core::ColumnStatsSpec> columnStatsSpec;
-  if (writer->hasColumnStatsSpec()) {
-    const auto writerSpec = writer->columnStatsSpec().value();
-    VELOX_CHECK_EQ(
-        writerSpec.aggregationStep, core::AggregationNode::Step::kPartial);
-    std::vector<std::vector<TypePtr>> aggregateRawInputs;
-    const auto numAggregates = writerSpec.aggregates.size();
-    aggregateRawInputs.reserve(numAggregates);
-    for (const auto& aggregate : writerSpec.aggregates) {
-      aggregateRawInputs.push_back(aggregate.rawInputTypes);
-    }
-    const auto& inputType = planNode_->outputType();
-
-    std::vector<std::string> aggregateNames;
-    aggregateNames.reserve(numAggregates);
-    std::vector<core::AggregationNode::Aggregate> aggregates;
-    aggregates.reserve(numAggregates);
-    for (int i = 0; i < numAggregates; ++i) {
-      core::AggregationNode::Aggregate aggregate = writerSpec.aggregates[i];
-      aggregate.call = std::make_shared<core::CallTypedExpr>(
-          aggregate.call->type(),
-          aggregate.call->name(),
-          field(inputType, writerSpec.aggregateNames[i]));
-      aggregates.push_back(std::move(aggregate));
-      aggregateNames.push_back(fmt::format("a{}", i));
-    }
-    columnStatsSpec = core::ColumnStatsSpec{
-        writerSpec.groupingKeys,
-        core::AggregationNode::Step::kIntermediate,
-        std::move(aggregateNames),
-        std::move(aggregates)};
-  }
-
-  planNode_ = std::make_shared<core::TableWriteMergeNode>(
-      nextPlanNodeId(),
-      TableWriteTraits::outputType(columnStatsSpec),
-      columnStatsSpec,
-      planNode_);
-  VELOX_CHECK(!planNode_->supportsBarrier());
   return *this;
 }
 
@@ -1420,29 +1162,27 @@ PlanBuilder& PlanBuilder::localPartition(
   return *this;
 }
 
-//PlanBuilder& PlanBuilder::localPartitionByBucket(
-//    const std::shared_ptr<IcebergBucketProperty>&
-//        bucketProperty) {
-//  VELOX_CHECK_NOT_NULL(planNode_, "LocalPartition cannot be the source node");
-//  std::vector<column_index_t> bucketChannels;
-//  for (const auto& bucketColumn : bucketProperty->bucketedBy()) {
-//    bucketChannels.push_back(
-//        planNode_->outputType()->getChildIdx(bucketColumn));
-//  }
-//  auto icebergPartitionFunctionFactory =
-//      std::make_shared<IcebergPartitionFunctionSpec>(
-//          bucketProperty->bucketCount(),
-//          bucketChannels,
-//          std::vector<VectorPtr>{});
-//  planNode_ = std::make_shared<core::LocalPartitionNode>(
-//      nextPlanNodeId(),
-//      core::LocalPartitionNode::Type::kRepartition,
-//      /*scaleWriter=*/false,
-//      std::move(icebergPartitionFunctionFactory),
-//      std::vector<core::PlanNodePtr>{planNode_});
-//  VELOX_CHECK(planNode_->supportsBarrier());
-//  return *this;
-//}
+// PlanBuilder& PlanBuilder::localPartitionByBucket(
+//     const std::shared_ptr<IcebergBucketProperty>&
+//         bucketProperty) {
+//   VELOX_CHECK_NOT_NULL(planNode_, "LocalPartition cannot be the source node"); std::vector<column_index_t> bucketChannels; for (const auto& bucketColumn : bucketProperty->bucketedBy()) {
+//     bucketChannels.push_back(
+//         planNode_->outputType()->getChildIdx(bucketColumn));
+//   }
+//   auto icebergPartitionFunctionFactory =
+//       std::make_shared<IcebergPartitionFunctionSpec>(
+//           bucketProperty->bucketCount(),
+//           bucketChannels,
+//           std::vector<VectorPtr>{});
+//   planNode_ = std::make_shared<core::LocalPartitionNode>(
+//       nextPlanNodeId(),
+//       core::LocalPartitionNode::Type::kRepartition,
+//       /*scaleWriter=*/false,
+//       std::move(icebergPartitionFunctionFactory),
+//       std::vector<core::PlanNodePtr>{planNode_});
+//   VELOX_CHECK(planNode_->supportsBarrier());
+//   return *this;
+// }
 
 namespace {
 core::PlanNodePtr createLocalPartitionRoundRobinNode(
