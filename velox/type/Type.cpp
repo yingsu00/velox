@@ -1569,4 +1569,19 @@ std::string stringifyTruncatedElementList(
   out << "}";
   return out.str();
 }
+
+bool isIntegral(const TypePtr& type) {
+  return type->isBigint() || type->isInteger() || type->isSmallint() ||
+      type->isTinyint();
+}
+
+bool isWideningIntegerType(const TypePtr& inputType, const TypePtr& outputType) {
+  if (!isIntegral(outputType) || !isIntegral(inputType)) {
+    return false;
+  }
+  if (outputType->cppSizeInBytes() < inputType->cppSizeInBytes()) {
+    return true;
+  }
+  return false;
+}
 } // namespace facebook::velox

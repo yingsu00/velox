@@ -75,7 +75,22 @@ Exchange::Exchange(
           serdeKind_)},
       processSplits_{operatorCtx_->driverCtx()->driverId == 0},
       driverId_{driverCtx->driverId},
-      exchangeClient_{std::move(exchangeClient)} {}
+      exchangeClient_{std::move(exchangeClient)} {
+  std::vector<std::string> outputNames;
+  std::vector<TypePtr> outputTypes;
+
+  for (int i = 0; i < outputType_->size(); ++i) {
+    const auto& columnName = outputType_->nameOf(i);
+    const auto& columnType = outputType_->childAt(i);
+
+    if (columnName.ends_with("_upcast")) {
+      continue;
+    }
+    outputNames.push_back(columnName);
+    outputTypes.push_back(columnType);
+  }
+  outputTypeWithoutUpcasts_ = ROW(outputNames, outputTypes);
+}
 
 void Exchange::addRemoteTaskIds(std::vector<std::string>& remoteTaskIds) {
   std::shuffle(std::begin(remoteTaskIds), std::end(remoteTaskIds), rng_);
@@ -199,7 +214,7 @@ RowVectorPtr Exchange::getOutput() {
         serde->deserialize(
             inputStream.get(),
             pool(),
-            outputType_,
+            outputTypeWithoutUpcasts_,
             &result_,
             resultOffset,
             serdeOptions_.get());
@@ -208,14 +223,18 @@ RowVectorPtr Exchange::getOutput() {
     }
     currentPages_.clear();
     recordInputStats(rawInputBytes);
-    return result_;
   }
   if (serde->kind() == VectorSerde::Kind::kCompactRow) {
-    return getOutputFromCompactRows(serde);
+    result_ = getOutputFromCompactRows(serde);
   }
   if (serde->kind() == VectorSerde::Kind::kUnsafeRow) {
-    return getOutputFromUnsafeRows(serde);
+    result_= getOutputFromUnsafeRows(serde);
   }
+
+  // Copy the upcast columns if any.
+  widenResults();
+  return resultWithUpcasts_;
+
   VELOX_UNREACHABLE(
       "Unsupported serde kind: {}", VectorSerde::kindName(serde->kind()));
 }
@@ -246,10 +265,11 @@ RowVectorPtr Exchange::getOutputFromCompactRows(VectorSerde* serde) {
       compactRowInputStream_.get(),
       compactRowIterator_,
       numRows,
-      outputType_,
+      outputTypeWithoutUpcasts_,
       &result_,
       pool(),
       serdeOptions_.get());
+  // TODO
   const auto numOutputRows = result_->size();
   VELOX_CHECK_GT(numOutputRows, 0);
 
@@ -280,7 +300,8 @@ RowVectorPtr Exchange::getOutputFromUnsafeRows(VectorSerde* serde) {
   auto mergedPages = std::make_unique<SerializedPage>(std::move(mergedBufs));
   auto source = mergedPages->prepareStreamForDeserialize();
   serde->deserialize(
-      source.get(), pool(), outputType_, &result_, serdeOptions_.get());
+      source.get(), pool(), outputTypeWithoutUpcasts_, &result_, serdeOptions_.get());
+  // TODO
   currentPages_.clear();
   recordInputStats(rawInputBytes);
   return result_;
@@ -340,6 +361,53 @@ void Exchange::recordExchangeClientStats() {
 
 VectorSerde* Exchange::getSerde() {
   return getNamedVectorSerde(serdeKind_);
+}
+
+void Exchange::widenResults() {
+  
+  if (outputType_->size() > outputTypeWithoutUpcasts_->size()) {
+    // find the upcast columns and add them to result_
+    std::vector<VectorPtr> outputColumns;
+    outputColumns.reserve(outputType_->size());
+    
+    for (int i = 0; i < outputType_->size(); ++i) {
+      const auto& columnName = outputType_->nameOf(i);
+      if (columnName.ends_with("_upcast")) {
+        auto originalOutputName =
+            columnName.substr(0, columnName.size() - strlen("_upcast"));
+
+        auto index = outputTypeWithoutUpcasts_->getChildIdxIfExists(originalOutputName);
+//        if (!index.has_value()) {
+//                LOG(ERROR) << "Cannot find original column for upcast column: "
+//                         << columnName << " original: " << originalOutputName
+//                         << " outputType_: " << outputType_->toString()
+//                         << " outputTypeWithoutUpcasts_: "
+//                         << outputTypeWithoutUpcasts_->toString();
+//        }
+        VELOX_CHECK(index.has_value());
+        auto originalColumn =
+            result_->asUnchecked<RowVector>()->childAt(*index);
+
+        auto casted = BaseVector::create(
+            outputType_->childAt(i), originalColumn->size(), pool());
+        casted->copy(originalColumn.get(), 0, 0, originalColumn->size());
+        outputColumns.push_back(casted);
+      } else {
+        auto originalColumn =
+            result_->asUnchecked<RowVector>()->childAt(i);
+        outputColumns.push_back(originalColumn);
+      }
+    }
+
+    resultWithUpcasts_ = std::make_shared<RowVector>(
+        pool(),
+        outputType_,
+        BufferPtr(nullptr),
+        result_->size(),
+        std::move(outputColumns));
+  } else {
+    resultWithUpcasts_ = result_;
+  }
 }
 
 } // namespace facebook::velox::exec

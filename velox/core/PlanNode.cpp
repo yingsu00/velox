@@ -1566,13 +1566,6 @@ AbstractJoinNode::AbstractJoinNode(
       sources_({std::move(left), std::move(right)}),
       outputType_(std::move(outputType)) {}
 
-namespace {
-bool isIntegral(const TypePtr& type) {
-  return type->isBigint() || type->isInteger() || type->isSmallint() ||
-      type->isTinyint();
-}
-} // namespace
-
 void AbstractJoinNode::validate() const {
   VELOX_CHECK(!leftKeys_.empty(), "JoinNode requires at least one join key");
   VELOX_CHECK_EQ(
@@ -1811,11 +1804,15 @@ PlanNodePtr HashJoinNode::copyWithNewSources(
   std::vector<core::FieldAccessTypedExprPtr> rightKeys =
       getKeysFromSource(rightKeys_, newSources[1]);
 
+  // Recompute outputType using member helper (no key args needed here).
+  auto newOutputType = recomputeOutputTypeForNewSources(newSources);
+
   Builder builder(*this);
   builder.left(std::move(newSources[0]))
       .right(std::move(newSources[1]))
       .leftKeys(std::move(leftKeys))
-      .rightKeys(std::move(rightKeys));
+      .rightKeys(std::move(rightKeys))
+      .outputType(std::move(newOutputType));
   return builder.build();
 }
 
@@ -1906,11 +1903,15 @@ PlanNodePtr MergeJoinNode::copyWithNewSources(
   std::vector<core::FieldAccessTypedExprPtr> rightKeys =
       getKeysFromSource(rightKeys_, newSources[1]);
 
+  // Recompute outputType using member helper (no key args needed here).
+  auto newOutputType = recomputeOutputTypeForNewSources(newSources);
+
   Builder builder(*this);
   builder.left(std::move(newSources[0]))
       .right(std::move(newSources[1]))
       .leftKeys(std::move(leftKeys))
-      .rightKeys(std::move(rightKeys));
+      .rightKeys(std::move(rightKeys))
+      .outputType(std::move(newOutputType));
   return builder.build();
 }
 
@@ -2047,11 +2048,15 @@ PlanNodePtr IndexLookupJoinNode::copyWithNewSources(
   std::vector<core::FieldAccessTypedExprPtr> rightKeys =
       getKeysFromSource(rightKeys_, newSources[1]);
 
+  // Recompute outputType using member helper (no key args needed here).
+  auto newOutputType = recomputeOutputTypeForNewSources(newSources);
+
   Builder builder(*this);
   builder.left(std::move(newSources[0]))
       .right(std::move(newSources[1]))
       .leftKeys(std::move(leftKeys))
-      .rightKeys(std::move(rightKeys));
+      .rightKeys(std::move(rightKeys))
+      .outputType(std::move(newOutputType));
   return builder.build();
 }
 
@@ -2086,6 +2091,110 @@ void IndexLookupJoinNode::addDetails(std::stringstream& stream) const {
          << " ], filter: ["
          << (filter_ == nullptr ? "null" : filter_->toString())
          << "], hasMarker: [" << (hasMarker_ ? "true" : "false") << "]";
+}
+
+RowTypePtr AbstractJoinNode::recomputeOutputTypeForNewSources(
+    const std::vector<PlanNodePtr>& newSources) const {
+  VELOX_CHECK_EQ(newSources.size(), 2);
+
+  const auto& oldOutput =
+      outputType_; // the join node's current (authoritative) output
+  const auto& newLeft = newSources[0]->outputType();
+  const auto& newRight = newSources[1]->outputType();
+
+  // Which sides are visible for this join type?
+  const bool allowLeft = !(isRightSemiFilterJoin() || isRightSemiProjectJoin());
+  const bool allowRight =
+      !(isLeftSemiFilterJoin() || isLeftSemiProjectJoin() || isAntiJoin());
+
+  // Collect *all* child fields from allowed sides (name -> type).
+  folly::F14FastMap<std::string, TypePtr> newFields;
+  auto collect = [&](const RowTypePtr& row, bool allowed) {
+    if (!allowed)
+      return;
+    for (int i = 0; i < row->size(); ++i) {
+      newFields[row->nameOf(i)] = row->childAt(i);
+    }
+  };
+  collect(newLeft, allowLeft);
+  collect(newRight, allowRight);
+
+  // Derive join key names from this node's existing key expressions.
+  // We use them only to *exclude* pure keys that were not previously visible.
+  folly::F14FastSet<std::string> joinKeyNames;
+  for (const auto& k : leftKeys_) {
+    if (auto fa =
+            std::dynamic_pointer_cast<const core::FieldAccessTypedExpr>(k)) {
+      joinKeyNames.insert(fa->name());
+    }
+  }
+  for (const auto& k : rightKeys_) {
+    if (auto fa =
+            std::dynamic_pointer_cast<const core::FieldAccessTypedExpr>(k)) {
+      joinKeyNames.insert(fa->name());
+    }
+  }
+
+  // If semi-project, temporarily strip trailing match column; we’ll re-append
+  // it last.
+  const bool semiProject = isLeftSemiProjectJoin() || isRightSemiProjectJoin();
+  std::optional<std::string> matchName;
+  int take = oldOutput->size();
+  if (semiProject) {
+    VELOX_CHECK_GT(take, 0);
+    const int matchIdx = take - 1;
+    VELOX_CHECK_EQ(oldOutput->childAt(matchIdx), BOOLEAN());
+    matchName = oldOutput->nameOf(matchIdx);
+    take = matchIdx; // seed without the match flag
+  }
+
+  // Seed with existing output (preserve order & names); update type if widened
+  // upstream.
+  std::vector<std::string> names;
+  std::vector<TypePtr> types;
+  names.reserve(oldOutput->size() + 8);
+  types.reserve(oldOutput->size() + 8);
+
+  folly::F14FastSet<std::string> seen;
+  for (int i = 0; i < take; ++i) {
+    const auto& n = oldOutput->nameOf(i);
+    auto t = oldOutput->childAt(i);
+    if (auto it = newFields.find(n); it != newFields.end()) {
+      t = it->second; // reflect upstream type change if any
+    }
+    names.push_back(n);
+    types.push_back(t);
+    seen.insert(n);
+  }
+
+  // Append *new* fields from allowed sides, but skip pure join keys
+  // that were not previously visible in oldOutput.
+  auto appendMissingFrom = [&](const RowTypePtr& row, bool allowed) {
+    if (!allowed)
+      return;
+    for (int i = 0; i < row->size(); ++i) {
+      const auto& n = row->nameOf(i);
+      if (!seen.contains(n) && !joinKeyNames.contains(n)) {
+        names.push_back(n);
+        types.push_back(row->childAt(i));
+        seen.insert(n);
+      }
+    }
+  };
+  appendMissingFrom(newLeft, allowLeft);
+  appendMissingFrom(newRight, allowRight);
+
+  // Re-append the semi-project match flag (BOOLEAN) as the very last column.
+  if (matchName.has_value()) {
+    VELOX_CHECK(
+        !seen.contains(*matchName),
+        "Semi-project match column '{}' collides with child columns",
+        *matchName);
+    names.push_back(*matchName);
+    types.push_back(BOOLEAN());
+  }
+
+  return ROW(std::move(names), std::move(types));
 }
 
 void IndexLookupJoinNode::accept(
@@ -3108,8 +3217,17 @@ PlanNodePtr MergeExchangeNode::copyWithNewSources(
   //  VELOX_CHECK_EQ(newSources.size(), 1);
 
   // TODO: sortingKeys_ and outputType_ need to be constructed from newSources.
+  // All inputs must share the same schema; use the first one.
+  auto newOutputType = newSources[0]->outputType();
+  //  for (size_t i = 1; i < newSources.size(); ++i) {
+  //    VELOX_CHECK_EQ(
+  //        *newSources[i]->outputType(),
+  //        *newOutputType,
+  //        "All MergeExchange inputs must have the same schema");
+  //  }
+
   Builder builder(*this);
-  //  builder.source(newSources[0]);
+  builder.outputType(std::move(newOutputType));
   return builder.build();
 }
 
@@ -3375,8 +3493,14 @@ PlanNodePtr PartitionedOutputNode::create(
 PlanNodePtr PartitionedOutputNode::copyWithNewSources(
     std::vector<PlanNodePtr> newSources) const {
   VELOX_CHECK_EQ(newSources.size(), 1);
+  // In this case, the output type is the same as the source's. But we don't
+  // expect the type to be changed so commenting this line out
+  //  auto newOutputType = newSources[0]->outputType();
+
   Builder builder(*this);
   builder.source(newSources[0]);
+  // The order may defer, so we will keep using the original output type.
+  //      .outputType(std::move(newOutputType));
   return builder.build();
 }
 
@@ -3767,7 +3891,7 @@ void PlanNode::toString(
     }
   }
 
-//  stream << serialize();
+  //  stream << serialize();
 }
 
 namespace {

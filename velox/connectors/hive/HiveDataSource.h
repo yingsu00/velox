@@ -111,6 +111,7 @@ class HiveDataSource : public DataSource {
   HiveTableHandlePtr hiveTableHandle_;
   std::shared_ptr<common::ScanSpec> scanSpec_;
   VectorPtr output_;
+  VectorPtr outputWithUpcasts_;
   std::unique_ptr<SplitReader> splitReader_;
 
   // Output type from file reader.  This is different from outputType_ that it
@@ -148,7 +149,14 @@ class HiveDataSource : public DataSource {
   }
 
   // The row type for the data source output, not including filter-only columns
+  // May be aliased, e.g. (order_id_21, order_id_21_upcast). Does not include
+  // filter only columns
   const RowTypePtr outputType_;
+  // Same as outputType_ but the column names are the ColumnHandle names
+  RowTypePtr outputTypeWithColumnHandleNames_;
+  RowTypePtr
+      readerOutputTypeWithoutUpcasts_; // The ColumnHandle name, e.g. order_id
+
   core::ExpressionEvaluator* const expressionEvaluator_;
 
   // Column handles for the Split info columns keyed on their column names.

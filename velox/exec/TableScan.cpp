@@ -50,7 +50,14 @@ std::unique_ptr<connector::DataSource> createDataSource(
   auto lk = pushdownFilters.wlock();
   if (!lk->staticFiltersInitialized) {
     for (column_index_t i = 0, size = outputType->size(); i < size; ++i) {
-      auto handle = columnHandles.find(outputType->nameOf(i));
+      std::string columnName = outputType->nameOf(i);
+      if (columnName.ends_with("_upcast")) {
+        columnName = columnName.substr(0, columnName.size() - 7);
+      }
+      auto handle = columnHandles.find(columnName);
+      if (handle == columnHandles.end()) {
+        VELOX_FAIL();
+      }
       VELOX_CHECK(handle != columnHandles.end());
       auto field = common::Subfield::create(handle->second->name());
       if (auto it = staticFilters->find(*field); it != staticFilters->end()) {

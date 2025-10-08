@@ -242,12 +242,7 @@ OperatorSupplier makeOperatorSupplier(const PlanNodePtr& planNode) {
 //   }
 // }
 
-bool isIntegral(const TypePtr& type) {
-  return type->isBigint() || type->isInteger() || type->isSmallint() ||
-      type->isTinyint();
-}
-
-bool isWideningIntegralCast(const core::TypedExprPtr& expr) {
+bool isWideningIntegerCast(const core::TypedExprPtr& expr) {
   auto castExpr = std::dynamic_pointer_cast<const core::CastTypedExpr>(expr);
   if (!castExpr) {
     return false;
@@ -308,7 +303,7 @@ bool isWideningIntegralCast(const core::TypedExprPtr& expr) {
 //      auto name = projectNode->names()[i];
 //      if (hashOnlyKeys.find(name) != hashOnlyKeys.end()) {
 //        auto projection = projectNode->projections()[i];
-//        if (isWideningIntegralCast(projection)) {
+//        if (isWideningIntegerCast(projection)) {
 //          hashOnlyKeys.erase(name);
 //          VELOX_CHECK_EQ(projection->inputs().size(), 1);
 //          auto newProjection = projection->inputs()[0];
@@ -377,9 +372,9 @@ bool isWideningIntegralCast(const core::TypedExprPtr& expr) {
 //
 
 void plan(
-    const std::shared_ptr<const core::PlanNode>& planNode,
-    std::vector<std::shared_ptr<const core::PlanNode>>* currentPlanNodes,
-    const std::shared_ptr<const core::PlanNode>& consumerNode,
+    const PlanNodePtr& planNode,
+    std::vector<PlanNodePtr>* currentPlanNodes,
+    const PlanNodePtr& consumerNode,
     OperatorSupplier operatorSupplier,
     std::vector<std::unique_ptr<DriverFactory>>* driverFactories) {
   if (!currentPlanNodes) {
@@ -487,7 +482,7 @@ PlanNodePtr plan2(
         for (auto i = 0; i < projectNode->names().size(); i++) {
           const auto& name = projectNode->names()[i];
           if (hashOnlyKeys.find(name) != hashOnlyKeys.end()) {
-            if (isWideningIntegralCast(projectNode->projections()[i])) {
+            if (isWideningIntegerCast(projectNode->projections()[i])) {
               hashOnlyKeys.erase(name);
               projectionsNeedUpdate.insert(i);
               needNewPlanNode = true;
@@ -527,7 +522,7 @@ PlanNodePtr plan2(
           for (auto index : projectionsNeedUpdate) {
             const auto& projection = projectNode->projections()[index];
             VELOX_CHECK(
-                isWideningIntegralCast(projection),
+                isWideningIntegerCast(projection),
                 "Expect widening integral cast, got {}",
                 projection->toString());
             VELOX_CHECK_EQ(projection->inputs().size(), 1);
@@ -578,8 +573,8 @@ PlanNodePtr plan2(
 
 PlanNodePtr plan3(
     PlanNodePtr planNode,
-    std::vector<std::shared_ptr<const core::PlanNode>>* currentPlanNodes,
-    const std::shared_ptr<const core::PlanNode>& consumerNode,
+    std::vector<PlanNodePtr>* currentPlanNodes,
+    const PlanNodePtr& consumerNode,
     OperatorSupplier operatorSupplier,
     std::vector<std::unique_ptr<DriverFactory>>* driverFactories,
     std::map<std::string, TypePtr>& desiredOutputTypes) {
@@ -649,7 +644,7 @@ PlanNodePtr plan3(
           // TODO: Do not copy if no change.
           auto newProjection = projection;
 
-          if (isWideningIntegralCast(projection)) {
+          if (isWideningIntegerCast(projection)) {
             // Find the new name from the input of the cast expression, which
             // must be a FieldAccessTypedExpr.
             VELOX_CHECK_EQ(projection->inputs().size(), 1);
@@ -702,7 +697,7 @@ PlanNodePtr plan3(
           for (auto index : projectionsNeedUpdate) {
             const auto& projection = projectNode->projections()[index];
             VELOX_CHECK(
-                isWideningIntegralCast(projection),
+                isWideningIntegerCast(projection),
                 "Expect widening integral cast, got {}",
                 projection->toString());
             VELOX_CHECK_EQ(projection->inputs().size(), 1);
@@ -735,6 +730,566 @@ PlanNodePtr plan3(
       }
     }
   }
+  // 3. Add the current (updated) plan node to the current pipeline.
+  currentPlanNodes->push_back(planNode);
+  return planNode;
+}
+
+PlanNodePtr rewriteTableScanNode(
+    core::TableScanNodePtr tableScanNode,
+    std::map<std::string, TypePtr>& desiredOutputTypes) {
+  const auto& outputType = tableScanNode->outputType();
+  std::vector<std::string> names;
+  std::vector<TypePtr> types;
+  names.reserve(outputType->size());
+  types.reserve(outputType->size());
+  for (int i = 0; i < outputType->size(); i++) {
+    std::string name = outputType->nameOf(i);
+
+    auto iter = desiredOutputTypes.find(name);
+    if (iter != desiredOutputTypes.end()) {
+      types.push_back(iter->second);
+      LOG(INFO) << "Update TableScanNode output type for column: "
+                << names.back() << " from " << outputType->childAt(i) << " to "
+                << types.back();
+      desiredOutputTypes.erase(iter);
+    } else {
+      types.push_back(outputType->childAt(i));
+    }
+    names.push_back(std::move(name));
+  }
+  auto newOutputType =
+      std::make_shared<RowType>(std::move(names), std::move(types));
+
+  core::TableScanNode::Builder builder(*tableScanNode);
+  auto newTableScanNode = builder.outputType(std::move(newOutputType)).build();
+  LOG(INFO) << "Created new TableScanNode: " << newTableScanNode->toString();
+
+  return newTableScanNode;
+}
+
+PlanNodePtr rewriteExchangeNode(
+    core::ExchangeNodePtr exchangeNode,
+    std::map<std::string, TypePtr>& desiredOutputTypes) {
+  const auto& outputType = exchangeNode->outputType();
+  std::vector<std::string> names;
+  std::vector<TypePtr> types;
+  names.reserve(outputType->size());
+  types.reserve(outputType->size());
+  for (int i = 0; i < outputType->size(); i++) {
+    std::string name = outputType->nameOf(i);
+
+    auto iter = desiredOutputTypes.find(name);
+    if (iter != desiredOutputTypes.end()) {
+      types.push_back(iter->second);
+      LOG(INFO) << "Update TableScanNode output type for column: "
+                << names.back() << " from " << outputType->childAt(i) << " to "
+                << types.back();
+      desiredOutputTypes.erase(iter);
+    } else {
+      types.push_back(outputType->childAt(i));
+    }
+    names.push_back(std::move(name));
+  }
+  auto newOutputType =
+      std::make_shared<RowType>(std::move(names), std::move(types));
+
+  core::ExchangeNode::Builder builder(*exchangeNode);
+  auto newTableScanNode = builder.outputType(std::move(newOutputType)).build();
+  LOG(INFO) << "Created new TableScanNode: " << newTableScanNode->toString();
+
+  return newTableScanNode;
+}
+
+PlanNodePtr rewriteProjectNode(
+    core::ProjectNodePtr projectNode,
+    std::map<std::string, TypePtr>& desiredOutputTypes,
+    std::set<int> projectionsNeedUpdate,
+    std::vector<PlanNodePtr> newSources) {
+  // TODO: Do not copy if no change.
+  auto newProjections = projectNode->projections(); // copy
+  if (!projectionsNeedUpdate.empty()) {
+    for (auto index : projectionsNeedUpdate) {
+      const auto& projection = projectNode->projections()[index];
+      VELOX_CHECK(
+          isWideningIntegerCast(projection),
+          "Expect widening integral cast, got {}",
+          projection->toString());
+      VELOX_CHECK_EQ(projection->inputs().size(), 1);
+
+      const auto& projectionName = projectNode->names()[index];
+      const auto& projectionType = projection->type();
+
+      const auto& inputExpr = projection->inputs()[0];
+      VELOX_CHECK(inputExpr->isFieldAccessKind());
+      auto fieldAccessExpr =
+          std::dynamic_pointer_cast<const core::FieldAccessTypedExpr>(
+              inputExpr);
+      auto inputExprName = fieldAccessExpr->name();
+
+      //      auto desiredOutputType = projectionType;
+      //      auto iter = desiredOutputTypes.find(projectionName);
+      //      if (iter != desiredOutputTypes.end()) {
+      //        desiredOutputType = iter->second;
+      //      }
+      //
+      //      if (desiredOutputType->equivalent(*projectionType)) {
+      //        // It means the upcast was already pushed down to the source
+      //        operator.
+      //        // Replace the cast by its input expr.
+      //        LOG(INFO) << "Remove unnecessary upcast for column: " <<
+      //        projectionName
+      //                  << " of type: " << projectionType;
+      //        newProjections[index] =
+      //        std::make_shared<core::FieldAccessTypedExpr>(
+      //            desiredOutputType, projectionName);
+      //      } else {
+      // Upcast is not needed. Replace CAST(int->bigint) by its input expr
+      // (identity on base type).
+      TypePtr inputExprType = projectNode->outputType()->childAt(index);
+      newProjections[index] = std::make_shared<core::FieldAccessTypedExpr>(
+          inputExprType, inputExprName);
+      //      }
+    }
+  }
+
+  core::ProjectNode::Builder builder;
+  auto newProjectNode = builder.id(projectNode->id())
+                            .source(newSources[0])
+                            .projections(newProjections)
+                            .names(projectNode->names())
+                            .build();
+  LOG(INFO) << "Created new ProjectNode: " << newProjectNode->toString();
+  return projectNode;
+}
+
+// exprsToBePushedDown's key is the child name of the cast expression
+PlanNodePtr rewriteTableScanNode(
+    core::TableScanNodePtr tableScanNode,
+    std::map<std::string, core::TypedExprPtr>& exprsToBePushedDown) {
+  if (exprsToBePushedDown.empty()) {
+    return tableScanNode;
+  }
+
+  const auto& outputType = tableScanNode->outputType();
+  std::vector<std::string> newNames;
+  std::vector<TypePtr> newTypes;
+  newNames.reserve(outputType->size() + exprsToBePushedDown.size());
+  newTypes.reserve(outputType->size() + exprsToBePushedDown.size());
+
+  for (int i = 0; i < outputType->size(); i++) {
+    const auto& name = outputType->nameOf(i);
+    const auto& type = outputType->childAt(i);
+
+    newNames.push_back(name);
+    newTypes.push_back(type);
+
+    // Add new columns for the pushed down expressions.
+    auto iter = exprsToBePushedDown.find(name);
+    if (iter != exprsToBePushedDown.end()) {
+      auto castExpr =
+          std::dynamic_pointer_cast<const core::CastTypedExpr>(iter->second);
+      VELOX_CHECK(castExpr);
+
+      // The same column name if it's found
+      newNames.push_back(name + "_upcast");
+      newTypes.push_back(castExpr->type());
+
+      LOG(INFO) << "Update TableScanNode output type for column: "
+                << newNames.back() << " from " << outputType->childAt(i) << " to "
+                << newTypes.back();
+      exprsToBePushedDown.erase(iter);
+    }
+  }
+  auto newOutputType =
+      std::make_shared<RowType>(std::move(newNames), std::move(newTypes));
+
+  core::TableScanNode::Builder builder(*tableScanNode);
+  auto newTableScanNode = builder.outputType(std::move(newOutputType)).build();
+  LOG(INFO) << "Created new TableScanNode: " << newTableScanNode->toString();
+
+  return newTableScanNode;
+}
+
+// exprsToBePushedDown's key is the child name of the cast expression
+PlanNodePtr rewriteExchangeNode(
+    core::ExchangeNodePtr exchangeNode,
+    std::map<std::string, core::TypedExprPtr>& exprsToBePushedDown) {
+  if (exprsToBePushedDown.empty()) {
+    return exchangeNode;
+  }
+
+  const auto& outputType = exchangeNode->outputType();
+  std::vector<std::string> newNames;
+  std::vector<TypePtr> newTypes;
+  newNames.reserve(outputType->size() + exprsToBePushedDown.size());
+  newTypes.reserve(outputType->size() + exprsToBePushedDown.size());
+
+  for (int i = 0; i < outputType->size(); i++) {
+    const auto& name = outputType->nameOf(i);
+    const auto& type = outputType->childAt(i);
+
+    newNames.push_back(name);
+    newTypes.push_back(type);
+
+    // Add new columns for the pushed down expressions.
+    auto iter = exprsToBePushedDown.find(name);
+    if (iter != exprsToBePushedDown.end()) {
+      auto castExpr =
+          std::dynamic_pointer_cast<const core::CastTypedExpr>(iter->second);
+      VELOX_CHECK(castExpr);
+
+      // The same column name if it's found // TODO: handle name conflict
+      newNames.push_back(name + "_upcast");
+      newTypes.push_back(castExpr->type());
+
+      LOG(INFO) << "Update TableScanNode output type for column: "
+                << newNames.back() << " from " << outputType->childAt(i) << " to "
+                << newTypes.back();
+      exprsToBePushedDown.erase(iter);
+    }
+  }
+  auto newOutputType =
+      std::make_shared<RowType>(std::move(newNames), std::move(newTypes));
+
+  core::ExchangeNode::Builder builder(*exchangeNode);
+  auto newExchangenNode = builder.outputType(std::move(newOutputType)).build();
+  LOG(INFO) << "Created new ExchangeNode: " << newExchangenNode->toString();
+
+  return newExchangenNode;
+}
+
+PlanNodePtr rewriteProjectNode(
+    core::ProjectNodePtr projectNode,
+    std::map<std::string, core::TypedExprPtr>& exprsToBePushedDown,
+    std::set<int> projectionsNeedUpdate,
+    std::vector<PlanNodePtr> newSources) {
+  // TODO: Do not copy if no change.
+  auto newProjections = projectNode->projections(); // copy
+  if (!projectionsNeedUpdate.empty()) {
+    VELOX_CHECK_EQ(newSources.size(), 1);
+
+    // Replace the original "expr_22 := CAST(provider_id AS bigint)" to
+    // "expr_22 := FieldAccess(provider_id_upcast)"
+    for (auto index : projectionsNeedUpdate) {
+      const auto& projection = projectNode->projections()[index];
+      VELOX_CHECK(
+          isWideningIntegerCast(projection),
+          "Expect widening integral cast, got {}",
+          projection->toString());
+      VELOX_CHECK_EQ(projection->inputs().size(), 1);
+      const auto& projectionType = projection->type();
+
+      auto inputFieldAccessExpr =
+          std::dynamic_pointer_cast<const core::FieldAccessTypedExpr>(
+              projection->inputs()[0]);
+      VELOX_CHECK(inputFieldAccessExpr);
+
+      auto newName = inputFieldAccessExpr->name() + "_upcast";
+      if (newSources[0]->outputType()->containsChild(newName)) {
+        newProjections[index] = std::make_shared<core::FieldAccessTypedExpr>(
+            projectionType, newName);
+      }
+
+//      auto iter = exprsToBePushedDown.find(inputExprName);
+//      if (iter == exprsToBePushedDown.end()) {
+//        // The cast expression was pushed down successfully to source
+//        TypePtr inputExprType = projectNode->outputType()->childAt(index);
+//        newProjections[index] = std::make_shared<core::FieldAccessTypedExpr>(
+//            projectionType, projectionName);
+//      }
+
+      //      auto desiredOutputType = projectionType;
+      //      auto iter = desiredOutputTypes.find(projectionName);
+      //      if (iter != desiredOutputTypes.end()) {
+      //        desiredOutputType = iter->second;
+      //      }
+      //
+      //      if (desiredOutputType->equivalent(*projectionType)) {
+      //        // It means the upcast was already pushed down to the source
+      //        operator.
+      //        // Replace the cast by its input expr.
+      //        LOG(INFO) << "Remove unnecessary upcast for column: " <<
+      //        projectionName
+      //                  << " of type: " << projectionType;
+      //        newProjections[index] =
+      //        std::make_shared<core::FieldAccessTypedExpr>(
+      //            desiredOutputType, projectionName);
+      //      } else {
+      // Upcast is not needed. Replace CAST(int->bigint) by its input expr
+      // (identity on base type).
+//      TypePtr inputExprType = projectNode->outputType()->childAt(index);
+//      newProjections[index] = std::make_shared<core::FieldAccessTypedExpr>(
+//          inputExprType, inputExprName);
+      //      }
+    }
+  }
+
+  core::ProjectNode::Builder builder;
+  auto newProjectNode = builder.id(projectNode->id())
+                            .source(newSources[0])
+                            .projections(newProjections)
+                            .names(projectNode->names())
+                            .build();
+  LOG(INFO) << "Created new ProjectNode: " << newProjectNode->toString();
+  return newProjectNode;
+}
+
+// Pushdown to source.
+PlanNodePtr plan4(
+    PlanNodePtr planNode,
+    std::vector<PlanNodePtr>* currentPlanNodes,
+    const PlanNodePtr& consumerNode,
+    OperatorSupplier operatorSupplier,
+    std::vector<std::unique_ptr<DriverFactory>>* driverFactories,
+    std::map<std::string, core::TypedExprPtr>& exprsToBePushedDown) {
+  if (!currentPlanNodes) {
+    auto driverFactory = std::make_unique<DriverFactory>();
+    currentPlanNodes = &driverFactory->planNodes;
+    driverFactory->operatorSupplier = std::move(operatorSupplier);
+    driverFactory->consumerNode = consumerNode;
+    driverFactories->push_back(std::move(driverFactory));
+  }
+
+  bool needNewPlanNode = false;
+  std::set<int> projectionsNeedUpdate;
+  std::vector<PlanNodePtr> newSources;
+
+  auto& sources = planNode->sources();
+  if (sources.empty()) {
+    // Leaf: new driver, and update TableScan output type if needed.
+    driverFactories->back()->inputDriver = true;
+    if (!exprsToBePushedDown.empty()) {
+      needNewPlanNode = true;
+    }
+  } else {
+    // Non-leaf node. Gather information before planning children, to help
+    // decide whether we need to update the current plan tree.
+    if (const auto& projectNode =
+            dynamic_pointer_cast<const core::ProjectNode>(planNode)) {
+      // For ProjectNode that is the immediate consumer of TableScan, remove
+      // cast expressions if they are widening integer casts. We want the
+      // TableScan to return the upcasted type by type coercion.
+      VELOX_CHECK_EQ(projectNode->sources().size(), 1);
+
+      for (auto i = 0; i < projectNode->names().size(); i++) {
+        auto& projection = projectNode->projections()[i];
+        const auto& name = projectNode->names()[i];
+
+        // TODO: Do not copy if no change.
+        auto newProjection = projection;
+
+        if (isWideningIntegerCast(projection)) {
+          // Find the new name from the input of the cast expression, which
+          // must be a FieldAccessTypedExpr.
+          VELOX_CHECK_EQ(projection->inputs().size(), 1);
+          const auto& inputExpr = projection->inputs()[0];
+          VELOX_CHECK(inputExpr->isFieldAccessKind());
+          auto childName =
+              std::dynamic_pointer_cast<const core::FieldAccessTypedExpr>(
+                  inputExpr)
+                  ->name();
+
+          exprsToBePushedDown[childName] = projection;
+          LOG(INFO) << "Pushdown the upcast " << projectNode->names()[i]
+                    << " to the source operator. ";
+          // Remove upcast for both cases.
+          projectionsNeedUpdate.insert(i);
+          // The pushdown may or maynot succeed
+          needNewPlanNode = true;
+        }
+      }
+    } // if ProjectNode
+
+    const auto numSourcesToPlan =
+        isIndexLookupJoin(planNode.get()) ? 1 : sources.size();
+    for (int32_t i = 0; i < numSourcesToPlan; ++i) {
+      auto source = plan4(
+          sources[i],
+          mustStartNewPipeline(planNode, i) ? nullptr : currentPlanNodes,
+          planNode,
+          makeOperatorSupplier(planNode),
+          driverFactories,
+          exprsToBePushedDown);
+
+      // Backtrack and propagate the updated types to the current plan node.
+      if (source != sources[i]) {
+        needNewPlanNode = true;
+      }
+      newSources.push_back(source);
+    }
+  }
+
+  if (needNewPlanNode) {
+    if (
+        // TableScan Node: update the output type to avoid upcasting in
+        // the upcoming FilterProject
+        // Example: table has columns a(bigint), c(integer)
+        // ProjectNode right above scan: a, CAST(c AS bigint)
+        // We want to update the TableScanNode to return c as
+        // bigint.
+        const auto& tableScanNode =
+            std::dynamic_pointer_cast<const core::TableScanNode>(planNode)) {
+      planNode = rewriteTableScanNode(tableScanNode, exprsToBePushedDown);
+    } else if (
+        const auto& exchangeNode =
+            std::dynamic_pointer_cast<const core::ExchangeNode>(planNode)) {
+      planNode = rewriteExchangeNode(exchangeNode, exprsToBePushedDown);
+    } else if (
+        const auto& projectNode =
+            std::dynamic_pointer_cast<const core::ProjectNode>(planNode)) {
+      // Special handling for ProjectNode to remove widening integral
+      // casts. Create new projections with the updated expressions.
+      planNode = rewriteProjectNode(
+          projectNode, exprsToBePushedDown, projectionsNeedUpdate, newSources);
+    } else {
+      // 2.2 Generic path: same node with new children.
+      planNode = planNode->copyWithNewSources(newSources);
+      LOG(INFO) << "Created new generic PlanNode: " << planNode->toString();
+    }
+  }
+
+  // 3. Add the current (updated) plan node to the current pipeline.
+  currentPlanNodes->push_back(planNode);
+  return planNode;
+}
+
+// Pushdown to source + avoid upcast when possible
+PlanNodePtr plan5(
+    PlanNodePtr planNode,
+    std::vector<PlanNodePtr>* currentPlanNodes,
+    const PlanNodePtr& consumerNode,
+    OperatorSupplier operatorSupplier,
+    std::vector<std::unique_ptr<DriverFactory>>* driverFactories,
+    std::map<std::string, TypePtr>& desiredOutputTypes,
+    std::set<std::string>& keysNeedUpcasts) {
+  if (!currentPlanNodes) {
+    auto driverFactory = std::make_unique<DriverFactory>();
+    currentPlanNodes = &driverFactory->planNodes;
+    driverFactory->operatorSupplier = std::move(operatorSupplier);
+    driverFactory->consumerNode = consumerNode;
+    driverFactories->push_back(std::move(driverFactory));
+  }
+
+  bool needNewPlanNode = false;
+  std::set<int> projectionsNeedUpdate;
+  std::vector<PlanNodePtr> newSources;
+
+  auto& sources = planNode->sources();
+  if (sources.empty()) {
+    // Leaf: new driver, and update TableScan output type if needed.
+    driverFactories->back()->inputDriver = true;
+  } else {
+    // Non-leaf node. Gather information before planning children, to help
+    // decide whether we need to update the current plan tree.
+    if (auto joinNode =
+            std::dynamic_pointer_cast<const core::HashJoinNode>(planNode)) {
+      auto& leftKeys = joinNode->leftKeys();
+      for (int i = 0; i < leftKeys.size(); ++i) {
+        keysNeedUpcasts.insert(leftKeys[i]->name());
+      }
+      auto& rightKeys = joinNode->rightKeys();
+      for (int i = 0; i < rightKeys.size(); ++i) {
+        keysNeedUpcasts.insert(rightKeys[i]->name());
+      }
+    } else if (
+        const auto& projectNode =
+            dynamic_pointer_cast<const core::ProjectNode>(planNode)) {
+      // For ProjectNode that is the immediate consumer of TableScan, remove
+      // cast expressions if they are widening integer casts. We want the
+      // TableScan to return the upcasted type by type coercion.
+      VELOX_CHECK_EQ(projectNode->sources().size(), 1);
+
+      for (auto i = 0; i < projectNode->names().size(); i++) {
+        auto& projection = projectNode->projections()[i];
+        const auto& name = projectNode->names()[i];
+
+        // TODO: Do not copy if no change.
+        auto newProjection = projection;
+
+        if (isWideningIntegerCast(projection)) {
+          // Find the new name from the input of the cast expression, which
+          // must be a FieldAccessTypedExpr.
+          VELOX_CHECK_EQ(projection->inputs().size(), 1);
+          const auto& inputExpr = projection->inputs()[0];
+          VELOX_CHECK(inputExpr->isFieldAccessKind());
+          auto childName =
+              std::dynamic_pointer_cast<const core::FieldAccessTypedExpr>(
+                  inputExpr)
+                  ->name();
+
+          if (keysNeedUpcasts.find(name) != keysNeedUpcasts.end()) {
+            //            if (isHashJoinKey() || isFinalOutputKey()) {
+            // Pushdown the upcast to the source operator. Update the desired
+            // output type for its source to avoid upcasting.
+            desiredOutputTypes[childName] =
+                projectNode->outputType()->childAt(i);
+            keysNeedUpcasts.erase(name);
+            LOG(INFO) << "Pushdown the upcast " << projectNode->names()[i]
+                      << " to the source operator. ";
+          } else {
+            // This upcast is actually not needed.
+            // Remove this projection.
+            desiredOutputTypes[name] = inputExpr->type();
+            LOG(INFO) << "Remove widening integral cast on key: "
+                      << projectNode->names()[i];
+          }
+          // Remove upcast for both cases.
+          projectionsNeedUpdate.insert(i);
+          needNewPlanNode = true;
+        }
+      }
+    } // if ProjectNode
+
+    const auto numSourcesToPlan =
+        isIndexLookupJoin(planNode.get()) ? 1 : sources.size();
+    for (int32_t i = 0; i < numSourcesToPlan; ++i) {
+      auto source = plan5(
+          sources[i],
+          mustStartNewPipeline(planNode, i) ? nullptr : currentPlanNodes,
+          planNode,
+          makeOperatorSupplier(planNode),
+          driverFactories,
+          desiredOutputTypes,
+          keysNeedUpcasts);
+
+      // Backtrack and propagate the updated types to the current plan node.
+      if (source != sources[i]) {
+        needNewPlanNode = true;
+      }
+      newSources.push_back(source);
+    }
+  }
+
+  if (needNewPlanNode) {
+    if (
+        // TableScan Node: update the output type to avoid upcasting in
+        // the upcoming FilterProject
+        // Example: table has columns a(bigint), c(integer)
+        // ProjectNode right above scan: a, CAST(c AS bigint)
+        // We want to update the TableScanNode to return c as
+        // bigint.
+        const auto& tableScanNode =
+            std::dynamic_pointer_cast<const core::TableScanNode>(planNode)) {
+      planNode = rewriteTableScanNode(tableScanNode, desiredOutputTypes);
+    } else if (
+        const auto& exchangeNode =
+            std::dynamic_pointer_cast<const core::ExchangeNode>(planNode)) {
+      planNode = rewriteExchangeNode(exchangeNode, desiredOutputTypes);
+    } else if (
+        const auto& projectNode =
+            std::dynamic_pointer_cast<const core::ProjectNode>(planNode)) {
+      // Special handling for ProjectNode to remove widening integral
+      // casts. Create new projections with the updated expressions.
+      planNode = rewriteProjectNode(
+          projectNode, desiredOutputTypes, projectionsNeedUpdate, newSources);
+    } else {
+      // 2.2 Generic path: same node with new children.
+      planNode = planNode->copyWithNewSources(newSources);
+      LOG(INFO) << "Created new generic PlanNode: " << planNode->toString();
+    }
+  }
+
   // 3. Add the current (updated) plan node to the current pipeline.
   currentPlanNodes->push_back(planNode);
   return planNode;
@@ -859,14 +1414,16 @@ void LocalPlanner::plan(
   }
 
   if (queryConfig.pushdownIntegerUpcastsToScan()) {
-    std::map<std::string, TypePtr> desiredOutputTypes;
-    detail::plan3(
+//    std::set<std::string> keysNeedUpcasts;
+//    std::map<std::string, TypePtr> desiredOutputTypes;
+    std::map<std::string, core::TypedExprPtr> exprsToBePushedDown;
+    detail::plan4(
         planFragment.planNode,
         nullptr,
         nullptr,
         detail::makeOperatorSupplier(std::move(consumerSupplier)),
         driverFactories,
-        desiredOutputTypes);
+        exprsToBePushedDown);
   } else {
     detail::plan(
         planFragment.planNode,

@@ -68,6 +68,8 @@ class Exchange : public SourceOperator {
   virtual VectorSerde* getSerde();
 
  private:
+
+  void widenResults();
   // When 'estimatedCompactRowSize_' is unset, meaning we haven't materialized
   // and returned any output from this exchange operator, we return this
   // conservative number of output rows, to make sure memory does not grow too
@@ -98,6 +100,8 @@ class Exchange : public SourceOperator {
 
   RowVectorPtr getOutputFromUnsafeRows(VectorSerde* serde);
 
+  RowTypePtr outputTypeWithoutUpcasts_;
+
   const uint64_t preferredOutputBatchBytes_;
 
   const VectorSerde::Kind serdeKind_;
@@ -120,6 +124,7 @@ class Exchange : public SourceOperator {
 
   // Reusable result vector.
   RowVectorPtr result_;
+  RowVectorPtr resultWithUpcasts_;
 
   std::vector<std::unique_ptr<SerializedPage>> currentPages_;
   bool atEnd_{false};
