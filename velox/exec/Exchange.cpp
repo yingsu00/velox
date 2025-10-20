@@ -134,7 +134,8 @@ BlockingReason Exchange::isBlocked(ContinueFuture* future) {
     return BlockingReason::kNotBlocked;
   }
 
-  // Start fetching data right away. Do not wait for all splits to be available.
+  // Start fetching data right away. Do not wait for all splits to be
+  // available.
   if (!splitFuture_.valid()) {
     getSplits(&splitFuture_);
   }
@@ -142,6 +143,7 @@ BlockingReason Exchange::isBlocked(ContinueFuture* future) {
   ContinueFuture dataFuture;
   currentPages_ = exchangeClient_->next(
       driverId_, preferredOutputBatchBytes_, &atEnd_, &dataFuture);
+
   if (!currentPages_.empty() || atEnd_) {
     if (atEnd_ && noMoreSplits_) {
       const auto numSplits = stats_.rlock()->numSplits;
@@ -175,7 +177,45 @@ bool Exchange::isFinished() {
 RowVectorPtr Exchange::getOutput() {
   auto* serde = getSerde();
   if (serde->supportsAppendInDeserialize()) {
-    return getOutputFromColumnarPages(serde);
+    uint64_t rawInputBytes{0};
+    if (currentPages_.empty()) {
+      return nullptr;
+    }
+
+    vector_size_t resultOffset = 0;
+    for (const auto& page : currentPages_) {
+      // NOTE: 'rawInputBytes' only counts bytes from pages processed from the
+      // beginning in this call. If processing resumes from the middle of a
+      // page, that page's bytes are not counted. This ensures each page is
+      // counted only once in 'rawInputBytes' across multiple calls.
+      rawInputBytes += page->size();
+
+      int64_t numRowsInPage = page->numRows().value_or(0);
+      prepareResultVector(numRowsInPage);
+      VELOX_CHECK(result_);
+      // Reset the logical size to the offset where we will start
+      result_->resize(resultOffset);
+
+      auto inputStream = page->prepareStreamForDeserialize();
+      while (!inputStream->atEnd()) {
+        // Each SerializedPage may contain multiple serialized IOBufs.
+        serde->deserialize(
+            inputStream.get(),
+            pool(),
+            outputType_,
+            &result_,
+            resultOffset,
+            serdeOptions_.get());
+
+        // resultOffset is updated inside deserialize. Reset the logical size
+        // without changing the capacity.
+        result_->resize(resultOffset);
+      }
+    }
+    currentPages_.clear();
+    recordInputStats(rawInputBytes);
+
+    return result_;
   }
   return getOutputFromRowPages(serde);
 }
@@ -270,12 +310,9 @@ RowVectorPtr Exchange::getOutputFromRowPages(VectorSerde* serde) {
     return nullptr;
   }
 
-  if (inputStream_ == nullptr) {
-    std::unique_ptr<folly::IOBuf> mergedBufs = mergePages(currentPages_);
-    rawInputBytes += mergedBufs->computeChainDataLength();
-    mergedRowPage_ =
-        std::make_unique<PrestoSerializedPage>(std::move(mergedBufs));
-    inputStream_ = mergedRowPage_->prepareStreamForDeserialize();
+  if (rowInputStream_ == nullptr) {
+    rowPages_ = mergePages();
+    rowInputStream_ = rowPages_->prepareStreamForDeserialize();
   }
 
   auto numRows = kInitialOutputRows;
@@ -285,7 +322,6 @@ RowVectorPtr Exchange::getOutputFromRowPages(VectorSerde* serde) {
         kInitialOutputRows);
   }
 
-  // Check if the serde supports batched deserialization
   serde->deserialize(
       inputStream_.get(),
       rowIterator_,
@@ -374,6 +410,47 @@ void Exchange::recordExchangeClientStats() {
 
 VectorSerde* Exchange::getSerde() {
   return getNamedVectorSerde(serdeKind_);
+}
+
+std::unique_ptr<SerializedPage> Exchange::mergePages() {
+  VELOX_CHECK(!currentPages_.empty());
+
+  std::unique_ptr<folly::IOBuf> mergedBufs;
+  numRowsInCurrentPages_ = 0;
+  for (const auto& page : currentPages_) {
+    numRowsInCurrentPages_ += page->numRows().value_or(0);
+    if (mergedBufs == nullptr) {
+      mergedBufs = page->getIOBuf();
+    } else {
+      mergedBufs->appendToChain(page->getIOBuf());
+    }
+  }
+  numBytesInCurrentPages_ = mergedBufs->computeChainDataLength();
+
+  auto mergedPage = std::make_unique<SerializedPage>(
+      std::move(mergedBufs), nullptr, numRowsInCurrentPages_);
+  return mergedPage;
+}
+
+void Exchange::prepareResultVector(int64_t numRowsInPage) {
+  if (result_ && result_.use_count() == 1) {
+    VELOX_CHECK(
+        *result_->type() == *outputType_,
+        "Unexpected type: {} vs. {}",
+        result_->type()->toString(),
+        outputType_->toString());
+
+    // prepareForReuse may create new vectors if (vector.use_count() != 1 ||
+    // !isReusableEncoding(vector->encoding())) is true. We have checked the
+    // use_count() at this moment, and all supported encodings in Exchange
+    // operator are reusable. So there won't be any new allocations in
+    // prepareForReuse() therefore no performance impact.
+    result_->prepareForReuse();
+    // This might allocate new memory and grow the result_ vector.
+    result_->resize(static_cast<vector_size_t>(numRowsInPage));
+  } else {
+    result_ = BaseVector::create<RowVector>(outputType_, numRowsInPage, pool());
+  }
 }
 
 } // namespace facebook::velox::exec

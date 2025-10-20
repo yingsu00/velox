@@ -20,8 +20,27 @@
 #include "velox/exec/Operator.h"
 #include "velox/exec/OutputBufferManager.h"
 
+#include <iostream>
+#include <thread>
+
 namespace facebook::velox::exec::test {
 namespace {
+
+std::string printSerializedPage(const std::unique_ptr<SerializedPage>& page) {
+  std::stringstream resultStream;
+  resultStream << page.get() << " [rows: " << page->numRows().value_or(-1)
+               << ", size: " << page->size() << "] ";
+  return resultStream.str();
+}
+
+std::string printSerializedPages(
+    const std::vector<std::unique_ptr<SerializedPage>>& pages) {
+  std::string result;
+  for (const auto& page : pages) {
+    result += printSerializedPage(page);
+  }
+  return result;
+}
 
 class LocalExchangeSource : public exec::ExchangeSource {
  public:
@@ -65,7 +84,8 @@ class LocalExchangeSource : public exec::ExchangeSource {
     auto resultCallback = [self, requestedSequence, buffers, this](
                               std::vector<std::unique_ptr<folly::IOBuf>> data,
                               int64_t sequence,
-                              std::vector<int64_t> remainingBytes) {
+                              std::vector<int64_t> remainingBytes,
+                              std::optional<int64_t> totalNumRows) {
       {
         std::lock_guard<std::mutex> l(mutex_);
         // This function is called either for a result or timeout. Only the
@@ -90,23 +110,47 @@ class LocalExchangeSource : public exec::ExchangeSource {
       if (data.empty()) {
         sequence = requestedSequence;
       }
-      std::vector<std::unique_ptr<SerializedPageBase>> pages;
+
       bool atEnd = false;
       int64_t totalBytes = 0;
-      for (auto& inputPage : data) {
-        if (!inputPage) {
+      auto numIOBufs = data.size();
+
+      // Relink all IOBufs into a single SerializedPage
+      std::unique_ptr<SerializedPage> serializedPage = nullptr;
+      std::unique_ptr<folly::IOBuf> singleChain = nullptr;
+      for (auto& iobuf : data) {
+        if (!iobuf) {
           atEnd = true;
           // Keep looping, there could be extra end markers.
           continue;
         }
-        totalBytes += inputPage->length();
-        inputPage->unshare();
-        pages.push_back(
-            std::make_unique<PrestoSerializedPage>(std::move(inputPage)));
-        inputPage = nullptr;
+
+        // Note that original code was using length(), not capacity()
+        totalBytes += iobuf->capacity();
+
+        //        std::cout << "LocalExchangeSource received IOBuf of size "
+        //                  << iobuf->capacity() << " " <<
+        //                  iobuf->computeChainDataLength()
+        //                  << " total rows: " << totalNumRows.value_or(-1) <<
+        //                  std::endl;
+
+        if (!singleChain) {
+          singleChain = std::move(iobuf);
+        } else {
+          singleChain->prev()->appendChain(std::move(iobuf));
+        }
       }
-      numPages_ += pages.size();
+      if (singleChain) {
+        serializedPage = std::make_unique<PrestoSerializedPage>(
+            std::move(singleChain), nullptr, totalNumRows);
+        //        std::cout << std::this_thread::get_id()
+        //                  << " LocalExchangeSource request() created
+        //                  SerializedPage "
+        //                  << printSerializedPage(serializedPage) << std::endl;
+      }
+      numPages_ += numIOBufs;
       totalBytes_ += totalBytes;
+
       if (data.empty()) {
         common::testutil::TestValue::adjust(
             "facebook::velox::exec::test::LocalExchangeSource::timeout", this);
@@ -128,28 +172,38 @@ class LocalExchangeSource : public exec::ExchangeSource {
           std::lock_guard<std::mutex> l(queue_->mutex());
           requestPending_ = false;
           requestPromise = std::move(promise_);
-          for (auto& page : pages) {
-            queue_->enqueueLocked(std::move(page), queuePromises);
+
+          if (serializedPage) {
+//            std::stringstream ss;
+//            ss << std::this_thread::get_id()
+//               << " LocalExchangeSource request() enqueing SerializedPage "
+//               << printSerializedPage(serializedPage) << std::endl;
+//            std::cout << ss.str();
+
+            queue_->enqueueLocked(std::move(serializedPage), queuePromises);
           }
           if (atEnd) {
             queue_->enqueueLocked(nullptr, queuePromises);
             atEnd_ = true;
           }
+
           if (!data.empty()) {
-            sequence_ = sequence + pages.size();
+            sequence_ = sequence + numIOBufs;
           }
         }
         for (auto& promise : queuePromises) {
           promise.setValue();
         }
       }
+
       // Outside of queue mutex.
       if (atEnd_) {
         buffers->deleteResults(remoteTaskId_, destination_);
       }
 
       if (!requestPromise.isFulfilled()) {
-        requestPromise.setValue(Response{totalBytes, atEnd_, remainingBytes});
+        requestPromise.setValue(
+            Response{totalBytes, atEnd_, remainingBytes, totalNumRows});
       }
     };
 
@@ -231,7 +285,8 @@ class LocalExchangeSource : public exec::ExchangeSource {
   using ResultCallback = std::function<void(
       std::vector<std::unique_ptr<folly::IOBuf>> data,
       int64_t sequence,
-      std::vector<int64_t> remainingBytes)>;
+      std::vector<int64_t> remainingBytes,
+      int64_t totalNumRows)>;
 
   static void registerTimeout(
       const std::shared_ptr<ExchangeSource>& self,
@@ -256,7 +311,7 @@ class LocalExchangeSource : public exec::ExchangeSource {
           }
           if (callback) {
             // Outside of mutex.
-            callback({}, 0, {});
+            callback({}, 0, {}, 0);
             continue;
           }
           std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -278,7 +333,7 @@ class LocalExchangeSource : public exec::ExchangeSource {
       promise = std::move(promise_);
     }
     if (promise.valid() && !promise.isFulfilled()) {
-      promise.setValue(Response{0, false, {}});
+      promise.setValue(Response{0, false, {}, 0});
       return true;
     }
 

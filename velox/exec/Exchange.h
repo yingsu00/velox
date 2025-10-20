@@ -67,7 +67,11 @@ class Exchange : public SourceOperator {
  protected:
   virtual VectorSerde* getSerde();
 
-  // When 'estimatedRowSize_' is unset, meaning we haven't materialized
+ private:
+  std::unique_ptr<SerializedPage> mergePages();
+  void prepareResultVector(int64_t numRowsInPage);
+
+  // When 'estimatedCompactRowSize_' is unset, meaning we haven't materialized
   // and returned any output from this exchange operator, we return this
   // conservative number of output rows, to make sure memory does not grow too
   // much.
@@ -118,6 +122,9 @@ class Exchange : public SourceOperator {
   RowVectorPtr result_;
 
   std::vector<std::unique_ptr<SerializedPageBase>> currentPages_;
+  int64_t numRowsInCurrentPages_{0};
+  int64_t numBytesInCurrentPages_{0};
+
   bool atEnd_{false};
   std::default_random_engine rng_{std::random_device{}()};
 

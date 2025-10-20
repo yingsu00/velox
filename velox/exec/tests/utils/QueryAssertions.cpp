@@ -1100,7 +1100,7 @@ bool assertEqualResults(
     std::string note = numFloatingPointColumns > 0
         ? "\nNote: results are compared without epsilon because values at non-floating-point columns do not form unique keys."
         : "";
-    ADD_FAILURE() << generateUserFriendlyDiff(
+      ADD_FAILURE() << generateUserFriendlyDiff(
                          expectedRows, actualRows, expectedType)
                   << message << note;
     return false;

@@ -1,17 +1,17 @@
 /*
- * Copyright (c) Facebook, Inc. and its affiliates.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+* Copyright (c) Facebook, Inc. and its affiliates.
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
  */
 #include <folly/Benchmark.h>
 #include <folly/init/Init.h>
@@ -88,6 +88,45 @@ void sortByAndPrintMax(
             << "\n Min: " << metrics.back().toString() << std::endl;
 }
 
+
+// divide PlanNodeStats by n (simple fields + operatorStats)
+void normalizeStats(PlanNodeStats& s, int64_t n) {
+  if (n <= 1) {
+    return;
+  }
+  auto divu64 = [n](uint64_t v) -> uint64_t { return v / n; };
+  s.rawInputRows = divu64(s.rawInputRows);
+  s.outputRows = divu64(s.outputRows);
+  s.outputBytes = divu64(s.outputBytes);
+  s.cpuWallTiming.cpuNanos = divu64(s.cpuWallTiming.cpuNanos);
+  s.cpuWallTiming.wallNanos = divu64(s.cpuWallTiming.wallNanos);
+  s.backgroundTiming.cpuNanos = divu64(s.backgroundTiming.cpuNanos);
+  s.backgroundTiming.wallNanos = divu64(s.backgroundTiming.wallNanos);
+  s.blockedWallNanos = divu64(s.blockedWallNanos);
+  s.peakMemoryBytes = divu64(s.peakMemoryBytes);
+  s.numMemoryAllocations = divu64(s.numMemoryAllocations);
+  s.numDrivers = divu64(s.numDrivers);
+  s.numSplits = divu64(s.numSplits);
+
+  for (auto& kv : s.customStats) {
+    kv.second.count /= n;
+    kv.second.sum /= n;
+    kv.second.min /= n;
+    kv.second.max /= n;
+  }
+  //  for (auto& op : s.operatorStats) {
+  //    op.rawInputRows /= n;
+  //    op.inputRows /= n;
+  //    op.outputRows /= n;
+  //    op.outputVectors /= n;
+  //    op.outputBytes /= n;
+  //    op.peakMemoryBytes /= n;
+  //    op.cpuTimeNanos /= n;
+  //    op.scheduledTimeNanos /= n;
+  //    op.blockedWallNanos /= n;
+  //  }
+}
+
 class ExchangeBenchmark : public VectorTestBase {
  public:
   std::vector<RowVectorPtr> makeRows(
@@ -122,7 +161,8 @@ class ExchangeBenchmark : public VectorTestBase {
       int32_t taskWidth,
       int64_t& wallUs,
       PlanNodeStats& partitionedOutputStats,
-      PlanNodeStats& exchangeStats) {
+      PlanNodeStats& exchangeStats,
+      int32_t& iteration) {
     core::PlanNodePtr plan;
     core::PlanNodeId exchangeId;
     core::PlanNodeId leafPartitionedOutputId;
@@ -139,7 +179,7 @@ class ExchangeBenchmark : public VectorTestBase {
       assert(!vectors.empty());
       configSettings_[core::QueryConfig::kMaxPartitionedOutputBufferSize] =
           fmt::format("{}", FLAGS_exchange_buffer_mb << 20);
-      const auto iteration = ++iteration_;
+      ++iteration;
 
       // leafPlan: PartitionedOutput/kPartitioned(1) <-- Values(0)
       std::vector<std::string> leafTaskIds;
@@ -231,7 +271,8 @@ class ExchangeBenchmark : public VectorTestBase {
       int32_t numTasks,
       int64_t& localPartitionWallUs,
       PlanNodeStats& partitionedOutputStats,
-      LocalPartitionWaitStats& localPartitionWaitStats) {
+      LocalPartitionWaitStats& localPartitionWaitStats,
+      int32_t& iteration) {
     assert(!vectors.empty());
 
     core::PlanNodePtr plan;
@@ -325,6 +366,8 @@ class ExchangeBenchmark : public VectorTestBase {
     };
   }
 
+  static int32_t iteration_;
+
  private:
   static constexpr int64_t kMaxMemory = 6UL << 30; // 6GB
 
@@ -367,7 +410,7 @@ class ExchangeBenchmark : public VectorTestBase {
 
   std::unordered_map<std::string, std::string> configSettings_;
   // Serial number to differentiate consecutive benchmark repeats.
-  static int32_t iteration_;
+
 };
 
 int32_t ExchangeBenchmark::iteration_;
@@ -442,6 +485,7 @@ void runBenchmarks() {
   int64_t flat10KWallUs;
   PlanNodeStats partitionedOutputStatsFlat10K;
   PlanNodeStats exchangeStatsFlat10K;
+  int32_t flat10KIteration = 0;
   folly::addBenchmark(__FILE__, "exchangeFlat10k", [&]() {
     bm->run(
         flat10k,
@@ -449,13 +493,17 @@ void runBenchmarks() {
         FLAGS_task_width,
         flat10KWallUs,
         partitionedOutputStatsFlat10K,
-        exchangeStatsFlat10K);
+        exchangeStatsFlat10K,
+        flat10KIteration);
     return 1;
   });
+  normalizeStats(partitionedOutputStatsFlat10K, flat10KIteration);
+  normalizeStats(exchangeStatsFlat10K, flat10KIteration);
 
   int64_t flat50KWallUs;
   PlanNodeStats partitionedOutputStatsFlat50;
   PlanNodeStats exchangeStatsFlat50;
+  int32_t flat50KIteration = 0;
   folly::addBenchmark(__FILE__, "exchangeFlat50", [&]() {
     bm->run(
         flat50,
@@ -463,13 +511,17 @@ void runBenchmarks() {
         FLAGS_task_width,
         flat50KWallUs,
         partitionedOutputStatsFlat50,
-        exchangeStatsFlat50);
+        exchangeStatsFlat50,
+        flat50KIteration);
     return 1;
   });
+  normalizeStats(partitionedOutputStatsFlat50, flat50KIteration);
+  normalizeStats(exchangeStatsFlat50, flat50KIteration);
 
   int64_t deep10KWallUs;
   PlanNodeStats partitionedOutputStatsDeep10K;
   PlanNodeStats exchangeStatsDeep10K;
+  int32_t deep10KIteration = 0;
   folly::addBenchmark(__FILE__, "exchangeDeep10k", [&]() {
     bm->run(
         deep10k,
@@ -477,13 +529,17 @@ void runBenchmarks() {
         FLAGS_task_width,
         deep10KWallUs,
         partitionedOutputStatsDeep10K,
-        exchangeStatsDeep10K);
+        exchangeStatsDeep10K,
+        deep10KIteration);
     return 1;
   });
+  normalizeStats(partitionedOutputStatsDeep10K, deep10KIteration);
+  normalizeStats(exchangeStatsDeep10K, deep10KIteration);
 
   int64_t deep50KWallUs;
   PlanNodeStats partitionedOutputStatsDeep50;
   PlanNodeStats exchangeStatsDeep50;
+  int32_t deep50KIteration = 0;
   folly::addBenchmark(__FILE__, "exchangeDeep50", [&]() {
     bm->run(
         deep50,
@@ -491,13 +547,17 @@ void runBenchmarks() {
         FLAGS_task_width,
         deep50KWallUs,
         partitionedOutputStatsDeep50,
-        exchangeStatsDeep50);
+        exchangeStatsDeep50,
+        deep50KIteration);
     return 1;
   });
+  normalizeStats(partitionedOutputStatsDeep50, deep50KIteration);
+  normalizeStats(exchangeStatsDeep50, deep50KIteration);
 
   int64_t stuct1KWallUs;
   PlanNodeStats partitionedOutputStatsStruct1K;
   PlanNodeStats exchangeStatsStruct1K;
+  int32_t stuct1KIteration = 0;
   folly::addBenchmark(__FILE__, "exchangeStruct1K", [&]() {
     bm->run(
         struct1k,
@@ -505,13 +565,17 @@ void runBenchmarks() {
         FLAGS_task_width,
         stuct1KWallUs,
         partitionedOutputStatsStruct1K,
-        exchangeStatsStruct1K);
+        exchangeStatsStruct1K,
+        stuct1KIteration);
     return 1;
   });
+  normalizeStats(partitionedOutputStatsStruct1K, stuct1KIteration);
+  normalizeStats(exchangeStatsStruct1K, stuct1KIteration);
 
   int64_t localPartitionWallUs;
   PlanNodeStats localPartitionStatsFlat10K;
   LocalPartitionWaitStats localPartitionWaitStats;
+  int32_t localIteration = 0;
   folly::addBenchmark(__FILE__, "localFlat10k", [&]() {
     bm->runLocal(
         flat10k,
@@ -519,15 +583,18 @@ void runBenchmarks() {
         FLAGS_num_local_tasks,
         localPartitionWallUs,
         localPartitionStatsFlat10K,
-        localPartitionWaitStats);
+        localPartitionWaitStats,
+        localIteration);
     return 1;
   });
+  normalizeStats(localPartitionStatsFlat10K, localIteration);
 
   folly::runBenchmarks();
 
   std::cout
       << "----------------------------------Flat10K----------------------------------"
       << std::endl;
+  std::cout << flat10KIteration << std::endl;
   std::cout << "Wall Time (ms): " << succinctMicros(flat10KWallUs) << std::endl;
   std::cout << "PartitionOutput: " << partitionedOutputStatsFlat10K.toString()
             << std::endl;

@@ -16,6 +16,7 @@
 #include "velox/exec/HashAggregation.h"
 
 #include <optional>
+
 #include "velox/exec/PrefixSort.h"
 #include "velox/exec/Task.h"
 #include "velox/expression/Expr.h"
@@ -183,6 +184,13 @@ void HashAggregation::addInput(RowVectorPtr input) {
     numInputRows_ += input->size();
     return;
   }
+
+//  std::cout << std::this_thread::get_id()
+//            << " HashAggregation adding input of size " << input->size()
+//            << " value "
+//            << input->childAt(0)->asFlatVector<int64_t>()->valueAt(0)
+//            << std::endl;
+
   groupingSet_->addInput(input, mayPushdown_);
   numInputRows_ += input->size();
 
