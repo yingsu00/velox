@@ -115,6 +115,11 @@ class ITypedExpr : public ISerializable {
   virtual TypedExprPtr rewriteInputNames(
       const std::unordered_map<std::string, TypedExprPtr>& mapping) const = 0;
 
+  virtual TypedExprPtr rewriteCastExprsWithUpcastName(
+      const std::multimap<
+          std::string,
+          std::pair<core::TypedExprPtr, std::string>>&) const = 0;
+
   /// Part of the visitor pattern. Calls visitor.vist(*this, context) with the
   /// "right" type of the first argument.
   virtual void accept(
@@ -155,6 +160,18 @@ class ITypedExpr : public ISerializable {
     newInputs.reserve(inputs().size());
     for (const auto& input : inputs()) {
       newInputs.emplace_back(input->rewriteInputNames(mapping));
+    }
+    return newInputs;
+  }
+
+  std::vector<TypedExprPtr> rewriteCastExprsWithUpcastNameRecursive(
+      const std::multimap<
+          std::string,
+          std::pair<core::TypedExprPtr, std::string>>& castExprs) const {
+    std::vector<TypedExprPtr> newInputs;
+    newInputs.reserve(inputs().size());
+    for (const auto& input : inputs()) {
+      newInputs.emplace_back(input->rewriteCastExprsWithUpcastName(castExprs));
     }
     return newInputs;
   }
