@@ -25,6 +25,7 @@ namespace facebook::velox::exec {
 class PrestoCastHooks : public CastHooks {
  public:
   explicit PrestoCastHooks(const core::QueryConfig& config);
+  PrestoCastHooks(bool isLegacyCast, bool adjustTimestampToTimezone, const std::string& sessionTimezone);
 
   // Uses the default implementation of 'castFromDateString'.
   Expected<Timestamp> castStringToTimestamp(
