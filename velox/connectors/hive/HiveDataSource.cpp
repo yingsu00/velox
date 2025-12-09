@@ -25,6 +25,7 @@
 #include "velox/connectors/hive/HiveConfig.h"
 
 #include "velox/expression/FieldReference.h"
+#include "velox/expression/PrestoCastHooks.h"
 
 using facebook::velox::common::testutil::TestValue;
 
@@ -457,8 +458,53 @@ std::optional<RowVectorPtr> HiveDataSource::next(
       VELOX_CHECK(index.has_value());
       auto originalColumn = rowVector->childAt(*index);
 
+//      VLOG(2) << "Copying values for upcast column: Original type: "
+//              << originalColumn->type()->toString()
+//              << ", Upcast type:" << columnType->toString();
       child = BaseVector::create(columnType, originalColumn->size(), pool_);
-      child->copy(originalColumn.get(), 0, 0, originalColumn->size());
+      if (isIntegral(columnType) && isIntegral(originalColumn->type())) {
+        child->copy(originalColumn.get(), 0, 0, originalColumn->size());
+      }
+      else if (originalColumn->type()->isDate() && columnType->isTimestamp()) {
+        auto targetChildFlatVector = child->asFlatVector<Timestamp>();
+        const velox::DecodedVector decodedOriginalVector(*originalColumn);
+        static const int64_t kMillisPerDay{86'400'000};
+        const tz::TimeZone* timeZone = nullptr;
+
+        if (connectorQueryCtx_->adjustTimestampToTimezone()) {
+          const auto sessionTzName = connectorQueryCtx_->sessionTimezone();
+          if (!sessionTzName.empty()) {
+            timeZone = tz::locateZone(sessionTzName);
+          }
+        }
+
+        for (vector_size_t j = 0; j < originalColumn->size(); ++j) {
+          const auto decodedIndex = decodedOriginalVector.index(j);
+          VLOG(2) << "Copying value at index " << j;
+          VLOG(2) << "DateToTimestamp: Value at index " << j << " is " << decodedOriginalVector.valueAt<int32_t>(decodedIndex);
+          auto timestamp = Timestamp::fromMillis(
+              decodedOriginalVector.valueAt<int32_t>(decodedIndex) * kMillisPerDay);
+          if (timeZone) {
+            VLOG(2) << "Timezone is " << timeZone->name();
+            timestamp.toGMT(*timeZone);
+          }
+          targetChildFlatVector->set(j, timestamp);
+        }
+      }
+      else if (originalColumn->type()->isVarchar() && columnType->isTimestamp()) {
+        const exec::PrestoCastHooks hooks(connectorQueryCtx_->isLegacyCast(),
+                                          connectorQueryCtx_->adjustTimestampToTimezone(),
+                                          connectorQueryCtx_->sessionTimezone());
+        auto targetChildFlatVector = child->asFlatVector<Timestamp>();
+        const velox::DecodedVector decodedOriginalVector(*originalColumn);
+
+        for (vector_size_t j = 0; j < originalColumn->size(); ++j) {
+          const auto decodedIndex = decodedOriginalVector.index(j);
+          VLOG(2) << "Copying value at index " << j;
+          VLOG(2) << "StringToTimestamp: Value at index " << j << " is " << decodedOriginalVector.valueAt<StringView>(decodedIndex);
+          targetChildFlatVector->set(j, hooks.castStringToTimestamp(decodedOriginalVector.valueAt<StringView>(decodedIndex)).value());
+        }
+      }
     } else {
       auto columnHandleIt = assignments_.find(columnName);
       VELOX_CHECK(
