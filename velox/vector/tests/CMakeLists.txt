@@ -103,3 +103,19 @@ target_link_libraries(
   glog::glog
   fmt::fmt
 )
+
+add_executable(rle_bp_vector_test RleBpVectorTest.cpp)
+
+add_test(rle_bp_vector_test rle_bp_vector_test)
+
+target_link_libraries(
+  rle_bp_vector_test
+  velox_vector
+  velox_buffer
+  velox_type
+  GTest::gtest
+  GTest::gtest_main
+  Folly::folly
+  glog::glog
+  fmt::fmt
+)

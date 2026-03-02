@@ -26,6 +26,7 @@ namespace facebook::velox::VectorEncoding {
 Simple mapNameToSimple(const std::string& name) {
   static folly::F14FastMap<std::string, Simple> vecNameMap{
       {"BIASED", Simple::BIASED},
+      {"RLE_BP", Simple::RLE_BP},
       {"CONSTANT", Simple::CONSTANT},
       {"DICTIONARY", Simple::DICTIONARY},
       {"FLAT", Simple::FLAT},
