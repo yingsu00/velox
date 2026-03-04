@@ -1883,3 +1883,100 @@ TEST_F(ParquetReaderTest, readRealColumnAsDoubleWithNulls) {
   assertReadWithReaderAndExpected(
       requestedSchema, *rowReader, expected, *leafPool_);
 }
+
+TEST_F(ParquetReaderTest, readDateColumnAsTimestamp) {
+  // Verify that a Parquet DATE (INT32, days-since-epoch) column can be read as
+  // TIMESTAMP via widening type coercion.  The on-disk values are stored as
+  // int32 day counts; the reader should produce Timestamp(days * 86400, 0).
+  auto sink = std::make_unique<MemorySink>(
+      1024 * 1024, dwio::common::FileSink::Options{.pool = leafPool_.get()});
+  auto sinkPtr = sink.get();
+
+  constexpr int kNumRows = 20;
+  // Values: days 1 through 20 (positive days since Unix epoch).
+  auto dateData = makeFlatVector<int32_t>(
+      kNumRows, [](auto row) { return row + 1; }, nullptr, DATE());
+  auto writeData = makeRowVector({dateData});
+
+  auto fileSchema = ROW({"dt"}, {DATE()});
+  parquet::WriterOptions writerOptions;
+  writerOptions.memoryPool = leafPool_.get();
+  auto writer = std::make_unique<facebook::velox::parquet::Writer>(
+      std::move(sink), writerOptions, rootPool_, fileSchema);
+  writer->write(writeData);
+  writer->close();
+
+  // Request the column as TIMESTAMP — a widening conversion from DATE.
+  auto requestedSchema = ROW({"dt"}, {TIMESTAMP()});
+  dwio::common::ReaderOptions readerOptions{leafPool_.get()};
+  readerOptions.setFileSchema(requestedSchema);
+
+  std::string dataBuf(sinkPtr->data(), sinkPtr->size());
+  auto file = std::make_shared<InMemoryReadFile>(std::move(dataBuf));
+  auto buffer =
+      std::make_unique<dwio::common::BufferedInput>(file, *leafPool_);
+  ParquetReader reader(std::move(buffer), readerOptions);
+
+  auto rowReaderOpts = getReaderOpts(requestedSchema);
+  rowReaderOpts.setScanSpec(makeScanSpec(requestedSchema));
+  auto rowReader = reader.createRowReader(rowReaderOpts);
+
+  // Expected: Timestamp(days * 86400, 0) for each day value.
+  constexpr int64_t kSecondsPerDay = 86400;
+  auto expected = makeRowVector({makeFlatVector<Timestamp>(
+      kNumRows,
+      [kSecondsPerDay](auto row) {
+        return Timestamp((row + 1) * kSecondsPerDay, 0);
+      })});
+
+  assertReadWithReaderAndExpected(
+      requestedSchema, *rowReader, expected, *leafPool_);
+}
+
+TEST_F(ParquetReaderTest, readDateColumnAsTimestampWithNulls) {
+  // Same as readDateColumnAsTimestamp but with null values interspersed to
+  // verify null handling is preserved during DATE→TIMESTAMP conversion.
+  auto sink = std::make_unique<MemorySink>(
+      1024 * 1024, dwio::common::FileSink::Options{.pool = leafPool_.get()});
+  auto sinkPtr = sink.get();
+
+  constexpr int kNumRows = 20;
+  // Every 3rd row is null.
+  auto dateData = makeFlatVector<int32_t>(
+      kNumRows, [](auto row) { return row + 1; }, nullEvery(3), DATE());
+  auto writeData = makeRowVector({dateData});
+
+  auto fileSchema = ROW({"dt"}, {DATE()});
+  parquet::WriterOptions writerOptions;
+  writerOptions.memoryPool = leafPool_.get();
+  auto writer = std::make_unique<facebook::velox::parquet::Writer>(
+      std::move(sink), writerOptions, rootPool_, fileSchema);
+  writer->write(writeData);
+  writer->close();
+
+  auto requestedSchema = ROW({"dt"}, {TIMESTAMP()});
+  dwio::common::ReaderOptions readerOptions{leafPool_.get()};
+  readerOptions.setFileSchema(requestedSchema);
+
+  std::string dataBuf(sinkPtr->data(), sinkPtr->size());
+  auto file = std::make_shared<InMemoryReadFile>(std::move(dataBuf));
+  auto buffer =
+      std::make_unique<dwio::common::BufferedInput>(file, *leafPool_);
+  ParquetReader reader(std::move(buffer), readerOptions);
+
+  auto rowReaderOpts = getReaderOpts(requestedSchema);
+  rowReaderOpts.setScanSpec(makeScanSpec(requestedSchema));
+  auto rowReader = reader.createRowReader(rowReaderOpts);
+
+  // Expected: Timestamp(days * 86400, 0) with the same null pattern.
+  constexpr int64_t kSecondsPerDay = 86400;
+  auto expected = makeRowVector({makeFlatVector<Timestamp>(
+      kNumRows,
+      [kSecondsPerDay](auto row) {
+        return Timestamp((row + 1) * kSecondsPerDay, 0);
+      },
+      nullEvery(3))});
+
+  assertReadWithReaderAndExpected(
+      requestedSchema, *rowReader, expected, *leafPool_);
+}

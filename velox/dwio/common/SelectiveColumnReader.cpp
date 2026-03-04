@@ -260,10 +260,91 @@ void SelectiveColumnReader::getIntValues(
           VELOX_FAIL("Unsupported value size: {}", valueSize_);
       }
       break;
+    case TypeKind::TIMESTAMP:
+      VELOX_CHECK(
+          fileType_->type()->isDate(),
+          "TIMESTAMP output is only supported when the file type is DATE, got: {}",
+          fileType_->type()->toString());
+      convertDateToTimestampValues(rows, result);
+      break;
     default:
       VELOX_FAIL(
           "Not a valid type for integer reader: {}", requestedType->toString());
   }
+}
+
+void SelectiveColumnReader::convertDateToTimestampValues(
+    const RowSet& rows,
+    VectorPtr* result) {
+  VELOX_CHECK_NE(valueSize_, kNoValueSize);
+  VELOX_CHECK(mayGetValues_);
+  mayGetValues_ = false;
+
+  if (allNull_) {
+    *result = std::make_shared<ConstantVector<Timestamp>>(
+        memoryPool_, rows.size(), true, TIMESTAMP(), Timestamp());
+    return;
+  }
+
+  // Convert int32 (days since Unix epoch) → Timestamp(seconds, nanos=0).
+  // The pattern mirrors upcastScalarValues: we work from sourceRows to map
+  // rawValues_ positions to the requested output row set.
+  static constexpr int64_t kSecondsPerDay = 86400;
+  std::vector<Timestamp> buf(rows.size());
+
+  if (values_) {
+    const auto* rawDays = reinterpret_cast<const int32_t*>(rawValues_);
+
+    RowSet sourceRows;
+    if (!valueRows_.empty()) {
+      sourceRows = valueRows_;
+    } else if (!outputRows_.empty()) {
+      sourceRows = outputRows_;
+    } else {
+      sourceRows = inputRows_;
+    }
+    if (valueRows_.empty()) {
+      valueRows_.resize(rows.size());
+    }
+
+    vector_size_t rowIndex = 0;
+    auto nextRow = rows[rowIndex];
+    const auto* moveNullsFrom = shouldMoveNulls(rows);
+    for (size_t i = 0; i < numValues_; ++i) {
+      if (sourceRows[i] < nextRow) {
+        continue;
+      }
+      VELOX_DCHECK_EQ(sourceRows[i], nextRow);
+      buf[rowIndex] =
+          Timestamp(kSecondsPerDay * static_cast<int64_t>(rawDays[i]), 0);
+      if (moveNullsFrom && rowIndex != i) {
+        bits::setBit(
+            rawResultNulls_, rowIndex, bits::isBitSet(moveNullsFrom, i));
+      }
+      valueRows_[rowIndex] = nextRow;
+      ++rowIndex;
+      if (rowIndex >= rows.size()) {
+        break;
+      }
+      nextRow = rows[rowIndex];
+    }
+    ensureValuesCapacity<Timestamp>(rows.size());
+    std::memcpy(rawValues_, buf.data(), rows.size() * sizeof(Timestamp));
+  }
+
+  numValues_ = rows.size();
+  valueRows_.resize(numValues_);
+  valueSize_ = sizeof(Timestamp);
+  if (values_) {
+    values_->setSize(numValues_ * sizeof(Timestamp));
+  }
+  *result = std::make_shared<FlatVector<Timestamp>>(
+      memoryPool_,
+      TIMESTAMP(),
+      resultNulls(),
+      numValues_,
+      values_,
+      std::vector<BufferPtr>{});
 }
 
 void SelectiveColumnReader::getUnsignedIntValues(
