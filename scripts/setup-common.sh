@@ -54,6 +54,7 @@ function install_folly {
     -DBUILD_TESTS=OFF
     -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
     -DFOLLY_HAVE_INT128_T=ON
+    -DFOLLY_USE_JEMALLOC=OFF
   )
   # When folly is static, use static gflags to avoid dual gflags flag
   # registration when .so plugins are dlopen'd (both the binary and plugin
