@@ -656,6 +656,35 @@ TEST_F(ParquetReaderWideningTest, smallintToDoubleWidening) {
   assertWideningReads(writeData, ROW({"col"}, {DOUBLE()}), expected);
 }
 
+// DATE -> TIMESTAMP widening: each day count d (days since Unix epoch) becomes
+// Timestamp(d * 86400, 0).
+TEST_F(ParquetReaderWideningTest, dateToTimestampWidening) {
+  constexpr int64_t kSecondsPerDay = 86'400;
+  auto writeData =
+      makeRowVector({makeFlatVector<int32_t>({0, 1, 2, 100, 19'000}, DATE())});
+  auto expected = makeRowVector({makeFlatVector<Timestamp>(
+      {Timestamp(0, 0),
+       Timestamp(kSecondsPerDay, 0),
+       Timestamp(2 * kSecondsPerDay, 0),
+       Timestamp(100 * kSecondsPerDay, 0),
+       Timestamp(19'000 * kSecondsPerDay, 0)})});
+  assertWideningReads(writeData, ROW("col", TIMESTAMP()), expected);
+}
+
+TEST_F(ParquetReaderWideningTest, dateToTimestampWideningWithNulls) {
+  constexpr int64_t kSecondsPerDay = 86'400;
+  auto writeData = makeRowVector({makeNullableFlatVector<int32_t>(
+      {std::nullopt, 1, std::nullopt, 100, 0, std::nullopt}, DATE())});
+  auto expected = makeRowVector({makeNullableFlatVector<Timestamp>(
+      {std::nullopt,
+       Timestamp(kSecondsPerDay, 0),
+       std::nullopt,
+       Timestamp(100 * kSecondsPerDay, 0),
+       Timestamp(0, 0),
+       std::nullopt})});
+  assertWideningReads(writeData, ROW("col", TIMESTAMP()), expected);
+}
+
 // INT -> Decimal with scale=0 (exact boundary: p-s=10 for INT32).
 TEST_F(ParquetReaderWideningTest, intToDecimalScale0Widening) {
   auto writeData =
