@@ -303,10 +303,110 @@ void SelectiveColumnReader::getIntValues(
           VELOX_FAIL("Unsupported value size: {}", valueSize_);
       }
       break;
+    case TypeKind::TIMESTAMP:
+      VELOX_CHECK(
+          fileType_->type()->isDate(),
+          "TIMESTAMP output is only supported when the file type is DATE, got: {}",
+          fileType_->type()->toString());
+      switch (valueSize_) {
+        case 4:
+          convertDateToTimestampValues(rows, result);
+          break;
+        default:
+          VELOX_FAIL(
+              "Unsupported value size for DATE->TIMESTAMP: {}", valueSize_);
+      }
+      break;
     default:
       VELOX_FAIL(
           "Not a valid type for integer reader: {}", requestedType->toString());
   }
+}
+
+void SelectiveColumnReader::convertDateToTimestampValues(
+    const RowSet& rows,
+    VectorPtr* result) {
+  VELOX_CHECK_EQ(valueSize_, sizeof(int32_t));
+  VELOX_CHECK(mayGetValues_);
+  mayGetValues_ = false;
+
+  if (allNull_) {
+    *result = std::make_shared<ConstantVector<Timestamp>>(
+        pool_, rows.size(), true, TIMESTAMP(), Timestamp());
+    return;
+  }
+  VELOX_CHECK_NOT_NULL(values_);
+
+  static constexpr int64_t kSecondsPerDay{86'400};
+
+  if (rows.size() == numValues_) {
+    ensureValuesCapacity<Timestamp>(rows.size(), true);
+    const auto* rawDays = reinterpret_cast<const int32_t*>(rawValues_);
+    auto* timestamps = reinterpret_cast<Timestamp*>(rawValues_);
+    for (auto i = rows.size(); i-- > 0;) {
+      timestamps[i] =
+          Timestamp(kSecondsPerDay * static_cast<int64_t>(rawDays[i]), 0);
+    }
+
+  } else {
+    const auto sourceRows = valueRows_.empty()
+        ? (outputRows_.empty() ? RowSet(inputRows_) : RowSet(outputRows_))
+        : RowSet(valueRows_);
+
+    const auto* rawDays = reinterpret_cast<const int32_t*>(rawValues_);
+    auto* compactDays = reinterpret_cast<int32_t*>(rawValues_);
+    const auto* moveNullsFrom = shouldMoveNulls(rows);
+    size_t sourceIndex{0};
+    if (moveNullsFrom) {
+      for (vector_size_t rowIndex = 0; rowIndex < rows.size();) {
+        const auto begin = rowIndex;
+        const auto end = std::min<vector_size_t>(begin + 64, rows.size());
+        uint64_t nulls = 0;
+        for (; rowIndex < end; ++rowIndex) {
+          while (sourceRows[sourceIndex] < rows[rowIndex]) {
+            ++sourceIndex;
+          }
+          VELOX_DCHECK_EQ(sourceRows[sourceIndex], rows[rowIndex]);
+          compactDays[rowIndex] = rawDays[sourceIndex];
+          nulls |=
+              static_cast<uint64_t>(bits::isBitSet(moveNullsFrom, sourceIndex))
+              << (rowIndex - begin);
+          ++sourceIndex;
+        }
+        rawResultNulls_[begin / 64] = nulls;
+      }
+    } else {
+      for (vector_size_t rowIndex = 0; rowIndex < rows.size(); ++rowIndex) {
+        while (sourceRows[sourceIndex] < rows[rowIndex]) {
+          ++sourceIndex;
+        }
+        VELOX_DCHECK_EQ(sourceRows[sourceIndex], rows[rowIndex]);
+        compactDays[rowIndex] = rawDays[sourceIndex++];
+      }
+    }
+
+    auto timestampValues = AlignedBuffer::allocate<Timestamp>(
+        rows.size() + simd::kPadding / sizeof(Timestamp), pool_);
+    auto* timestamps = timestampValues->asMutable<Timestamp>();
+    for (auto i = 0; i < rows.size(); ++i) {
+      timestamps[i] =
+          Timestamp(kSecondsPerDay * static_cast<int64_t>(rawDays[i]), 0);
+    }
+
+    values_ = std::move(timestampValues);
+    rawValues_ = values_->asMutable<char>();
+  }
+
+  numValues_ = rows.size();
+  valueSize_ = sizeof(Timestamp);
+  values_->setSize(numValues_ * sizeof(Timestamp));
+  *result = std::make_shared<FlatVector<Timestamp>>(
+      pool_,
+      TIMESTAMP(),
+      resultNulls(),
+      numValues_,
+      values_,
+      std::vector<BufferPtr>{});
 }
 
 void SelectiveColumnReader::getUnsignedIntValues(
