@@ -303,6 +303,20 @@ void SelectiveColumnReader::getIntValues(
           VELOX_FAIL("Unsupported value size: {}", valueSize_);
       }
       break;
+    case TypeKind::TIMESTAMP:
+      VELOX_CHECK(
+          fileType_->type()->isDate(),
+          "TIMESTAMP output is only supported when the file type is DATE, got: {}",
+          fileType_->type()->toString());
+      if (valueSize_ == sizeof(Timestamp)) {
+        // A prior convertDateToTimestampValues call already bulk-transmuted
+        // the int32 days buffer to Timestamps; further extractions are plain
+        // Timestamp compactions.
+        getFlatValues<Timestamp, Timestamp>(rows, result, TIMESTAMP());
+      } else {
+        convertDateToTimestampValues(rows, result);
+      }
+      break;
     default:
       VELOX_FAIL(
           "Not a valid type for integer reader: {}", requestedType->toString());
@@ -450,6 +464,108 @@ void SelectiveColumnReader::compactScalarValues<bool, bool>(
   numValues_ = rows.size();
   outputRows_.resize(numValues_);
   values_->setSize(bits::nbytes(numValues_));
+}
+
+void SelectiveColumnReader::convertDateToTimestampValues(
+    const RowSet& rows,
+    VectorPtr* result,
+    bool isFinal) {
+  VELOX_CHECK_EQ(valueSize_, sizeof(int32_t));
+  VELOX_CHECK(mayGetValues_);
+
+  if (allNull_) {
+    *result = std::make_shared<ConstantVector<Timestamp>>(
+        pool_, rows.size(), true, TIMESTAMP(), Timestamp());
+    if (isFinal) {
+      mayGetValues_ = false;
+    }
+    return;
+  }
+  VELOX_CHECK_NOT_NULL(values_);
+
+  static constexpr int64_t kSecondsPerDay{86'400};
+
+  // Bulk path: this single call asks for at least half of the read values.
+  // Transmute all numValues_ days to Timestamps in place (amortizing the
+  // conversion), transition to State B, then emit the requested slice via
+  // standard Timestamp extraction. Iterates backwards so the wider
+  // Timestamp writes don't clobber int32 source bytes we haven't read yet.
+  if (rows.size() >= numValues_ / 2) {
+    ensureValuesCapacity<Timestamp>(numValues_, true);
+    const auto* rawDays = reinterpret_cast<const int32_t*>(rawValues_);
+    auto* timestamps = reinterpret_cast<Timestamp*>(rawValues_);
+    for (auto i = numValues_; i-- > 0;) {
+      timestamps[i] =
+          Timestamp(kSecondsPerDay * static_cast<int64_t>(rawDays[i]), 0);
+    }
+    valueSize_ = sizeof(Timestamp);
+    values_->setSize(numValues_ * sizeof(Timestamp));
+    getFlatValues<Timestamp, Timestamp>(rows, result, TIMESTAMP(), isFinal);
+    return;
+  }
+
+  // Small-subset path: leave the int32 days buffer intact and emit a
+  // freshly-allocated Timestamp vector for just rows.size(). Multi-call
+  // safe because values_, valueSize_, valueRows_ are untouched.
+  const auto sourceRows = valueRows_.empty()
+      ? (outputRows_.empty() ? RowSet(inputRows_) : RowSet(outputRows_))
+      : RowSet(valueRows_);
+  const auto* rawDays = reinterpret_cast<const int32_t*>(rawValues_);
+
+  auto timestampValues = AlignedBuffer::allocate<Timestamp>(
+      rows.size() + simd::kPadding / sizeof(Timestamp), pool_);
+  auto* timestamps = timestampValues->asMutable<Timestamp>();
+
+  const auto* moveNullsFrom = shouldMoveNulls(rows);
+  BufferPtr localNullsBuffer;
+  uint64_t* localNulls = nullptr;
+  if (moveNullsFrom) {
+    localNullsBuffer = AlignedBuffer::allocate<bool>(rows.size(), pool_);
+    localNulls = localNullsBuffer->asMutable<uint64_t>();
+  }
+
+  size_t sourceIndex{0};
+  if (moveNullsFrom) {
+    for (vector_size_t rowIndex = 0; rowIndex < rows.size();) {
+      const auto begin = rowIndex;
+      const auto end = std::min<vector_size_t>(begin + 64, rows.size());
+      uint64_t nulls = 0;
+      for (; rowIndex < end; ++rowIndex) {
+        while (sourceRows[sourceIndex] < rows[rowIndex]) {
+          ++sourceIndex;
+        }
+        VELOX_DCHECK_EQ(sourceRows[sourceIndex], rows[rowIndex]);
+        timestamps[rowIndex] = Timestamp(
+            kSecondsPerDay * static_cast<int64_t>(rawDays[sourceIndex]), 0);
+        nulls |=
+            static_cast<uint64_t>(bits::isBitSet(moveNullsFrom, sourceIndex))
+            << (rowIndex - begin);
+        ++sourceIndex;
+      }
+      localNulls[begin / 64] = nulls;
+    }
+  } else {
+    for (vector_size_t rowIndex = 0; rowIndex < rows.size(); ++rowIndex) {
+      while (sourceRows[sourceIndex] < rows[rowIndex]) {
+        ++sourceIndex;
+      }
+      VELOX_DCHECK_EQ(sourceRows[sourceIndex], rows[rowIndex]);
+      timestamps[rowIndex] = Timestamp(
+          kSecondsPerDay * static_cast<int64_t>(rawDays[sourceIndex++]), 0);
+    }
+  }
+
+  *result = std::make_shared<FlatVector<Timestamp>>(
+      pool_,
+      TIMESTAMP(),
+      moveNullsFrom ? localNullsBuffer : resultNulls(),
+      rows.size(),
+      std::move(timestampValues),
+      std::vector<BufferPtr>{});
+
+  if (isFinal) {
+    mayGetValues_ = false;
+  }
 }
 
 char* SelectiveColumnReader::copyStringValue(std::string_view value) {

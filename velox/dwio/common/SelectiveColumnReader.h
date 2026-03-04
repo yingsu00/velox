@@ -595,6 +595,23 @@ class SelectiveColumnReader {
   template <typename T, typename TVector>
   void upcastScalarValues(const RowSet& rows);
 
+  /// Reads DATE (int32 days-since-epoch) values and converts them to
+  /// Timestamp (seconds = days × 86400, nanoseconds = 0).
+  /// Emits Timestamps for 'rows' from a buffer of int32 days-since-epoch read
+  /// by prepareRead<int32_t>. Reentrant: can be called multiple times for
+  /// disjoint subsets of 'rows' from the same read, mirroring getFlatValues.
+  /// If rows.size() >= numValues_/2 the int32 buffer is transmuted to
+  /// Timestamps in place (amortizing the conversion) and valueSize_ becomes
+  /// sizeof(Timestamp); subsequent extractions should use
+  /// getFlatValues<Timestamp, Timestamp> directly. Otherwise emits a fresh
+  /// Timestamp vector and leaves the source buffer intact. Caller (getIntValues)
+  /// dispatches on valueSize_ before calling. Pass isFinal=true on the last
+  /// call to release the mayGetValues_ lock.
+  void convertDateToTimestampValues(
+      const RowSet& rows,
+      VectorPtr* result,
+      bool isFinal = false);
+
   // For complex type column, we need to compact only nulls if the rows are
   // shrinked.  Child fields are handled recursively in their own column
   // readers.

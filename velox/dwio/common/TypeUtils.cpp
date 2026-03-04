@@ -130,7 +130,14 @@ void checkTypeCompatibility(
     const FKind& kind,
     const FShouldRead& shouldRead,
     const std::function<std::string()>& exceptionMessageCreator) {
-  if (shouldRead(to) && !isCompatible(from.kind(), kind(to))) {
+  // Special case: DATE (stored as int32 days-since-epoch) may be widened to
+  // TIMESTAMP (seconds-since-epoch).  The semantic conversion (days × 86400)
+  // is performed at read time by convertDateToTimestampValues().
+  const bool isDateToTimestamp =
+      from.isDate() && kind(to) == TypeKind::TIMESTAMP;
+
+  if (shouldRead(to) && !isDateToTimestamp &&
+      !isCompatible(from.kind(), kind(to))) {
     VELOX_SCHEMA_MISMATCH_ERROR(
         fmt::format(
             "{}, From Kind: {}, To Kind: {}",
