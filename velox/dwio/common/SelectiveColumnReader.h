@@ -571,6 +571,10 @@ class SelectiveColumnReader {
       const TypePtr& requestedType,
       VectorPtr* result);
 
+  /// Reads DATE (int32 days-since-epoch) values and converts them to
+  /// Timestamp (seconds = days × 86400, nanoseconds = 0).
+  void convertDateToTimestampValues(const RowSet& rows, VectorPtr* result);
+
   /// Returns integer values for 'rows' cast to the width of 'requestedType' in
   /// '*result', the related fileDataType is unsigned int type.
   void getUnsignedIntValues(
