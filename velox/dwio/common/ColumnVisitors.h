@@ -1169,15 +1169,15 @@ template <
 DictionaryColumnVisitor<T, TFilter, ExtractValues, isDense>
 ColumnVisitor<T, TFilter, ExtractValues, isDense, hasBulkPath>::
     toDictionaryColumnVisitor() {
-  if constexpr (!kHasBulkPath) {
-    // Only DWRF integer dictionary is using this, which should not disable bulk
-    // path at decoder level.
-    VELOX_UNREACHABLE();
+  if constexpr (kHasBulkPath) {
+    auto result = DictionaryColumnVisitor<T, TFilter, ExtractValues, isDense>(
+        filter_, reader_, RowSet(rows_ + rowIndex_, numRows_), values_);
+    result.numValuesBias_ = numValuesBias_;
+    return result;
   }
-  auto result = DictionaryColumnVisitor<T, TFilter, ExtractValues, isDense>(
-      filter_, reader_, RowSet(rows_ + rowIndex_, numRows_), values_);
-  result.numValuesBias_ = numValuesBias_;
-  return result;
+  // Only DWRF integer dictionary is using this, which should not disable bulk
+  // path at decoder level.
+  VELOX_UNREACHABLE();
 }
 
 template <
