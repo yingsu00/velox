@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 #include "velox/exec/LocalPlanner.h"
+#include "velox/exec/OptimizedDriver.h"
 #include "velox/core/PlanFragment.h"
 #include "velox/exec/ArrowStream.h"
 #include "velox/exec/AssignUniqueId.h"
@@ -473,7 +474,11 @@ std::shared_ptr<Driver> DriverFactory::createDriver(
     std::shared_ptr<ExchangeClient> exchangeClient,
     std::shared_ptr<PipelinePushdownFilters> filters,
     std::function<int(int pipelineId)> numDrivers) {
-  auto driver = std::shared_ptr<Driver>(new Driver());
+  auto driver = DriverFactory::driverAllocator
+      ? DriverFactory::driverAllocator()
+      : (ctx->task->queryCtx()->queryConfig().useOptimizedDriver()
+             ? OptimizedDriver::create()
+             : std::shared_ptr<Driver>(new Driver()));
   ctx->driver = driver.get();
   std::vector<std::unique_ptr<Operator>> operators;
   operators.reserve(planNodes.size());

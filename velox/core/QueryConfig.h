@@ -890,6 +890,12 @@ class QueryConfig {
   static constexpr const char* kMarkSortedZeroCopyThreshold =
       "mark_sorted_zero_copy_threshold";
 
+  /// Whether to use OptimizedDriver instead of the base Driver for query
+  /// execution. OptimizedDriver replaces the O(N) backward scan with a
+  /// bitmask-based active operator set for O(1) operator selection. True by
+  /// default.
+  static constexpr const char* kUseOptimizedDriver = "use_optimized_driver";
+
   enum class RowSizeTrackingMode {
     DISABLED = 0,
     EXCLUDE_DELTA_SPLITS = 1,
@@ -1574,6 +1580,10 @@ class QueryConfig {
 
   int32_t markSortedZeroCopyThreshold() const {
     return get<int32_t>(kMarkSortedZeroCopyThreshold, 1000);
+  }
+
+  bool useOptimizedDriver() const {
+    return get<bool>(kUseOptimizedDriver, true);
   }
 
   template <typename T>

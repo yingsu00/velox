@@ -19,6 +19,7 @@
 #include <atomic>
 
 #include "velox/common/process/TraceContext.h"
+#include "velox/exec/DriverInl.h"
 #include "velox/exec/Operator.h"
 #include "velox/exec/OperatorType.h"
 #include "velox/exec/Task.h"
@@ -195,6 +196,9 @@ std::optional<common::SpillConfig> DriverCtx::makeSpillConfig(
 }
 
 std::atomic_uint64_t BlockingState::numBlockedDrivers_{0};
+
+// static
+std::function<std::shared_ptr<Driver>()> DriverFactory::driverAllocator;
 
 BlockingState::BlockingState(
     std::shared_ptr<Driver> driver,
@@ -1271,32 +1275,6 @@ folly::dynamic Driver::toJson() const {
   obj["operators"] = operatorsObj;
 
   return obj;
-}
-
-template <typename Func>
-void Driver::withDeltaCpuWallTimer(
-    Operator* op,
-    TimingMemberPtr opTimingMember,
-    Func&& opFunction) {
-  // If 'trackOperatorCpuUsage_' is true, create and initialize the timer object
-  // to track cpu and wall time of the opFunction.
-  if (!trackOperatorCpuUsage_) {
-    opFunction();
-    return;
-  }
-
-  // The delta CpuWallTiming object would be recorded to the corresponding
-  // 'opTimingMember' upon destruction of the timer when withDeltaCpuWallTimer
-  // ends. The timer is created on the stack to avoid heap allocation
-  auto f = [op, opTimingMember, this](const CpuWallTiming& elapsedTime) {
-    auto elapsedSelfTime = processLazyIoStats(*op, elapsedTime);
-    op->stats().withWLock([&](auto& lockedStats) {
-      (lockedStats.*opTimingMember).add(elapsedSelfTime);
-    });
-  };
-  DeltaCpuWallTimer<decltype(f)> timer(std::move(f));
-
-  opFunction();
 }
 
 void Driver::validateOperatorOutputResult(
