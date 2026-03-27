@@ -350,7 +350,7 @@ using PipelinePushdownFilters =
 
 class Driver : public std::enable_shared_from_this<Driver> {
  public:
-  ~Driver();
+  virtual ~Driver();
 
   // Disable copy and move
   Driver(const Driver&) = delete;
@@ -550,7 +550,7 @@ class Driver : public std::enable_shared_from_this<Driver> {
     return std::shared_ptr<Driver>(driver);
   }
 
- private:
+ protected:
   // Ensures that the thread is removed from its Task's thread count on exit.
   class CancelGuard {
    public:
@@ -584,6 +584,56 @@ class Driver : public std::enable_shared_from_this<Driver> {
   // Invoked to record the driver cpu yield count.
   static void recordYieldCount();
 
+  /// Core scheduling loop. Subclasses may override to provide alternative
+  /// scheduling strategies while reusing all surrounding infrastructure.
+  virtual StopReason runInternal(
+      std::shared_ptr<Driver>& self,
+      std::shared_ptr<BlockingState>& blockingState,
+      RowVectorPtr& result);
+
+  void close();
+
+  using TimingMemberPtr = CpuWallTiming OperatorStats::*;
+
+  /// Calls opFunction and, when CPU-usage tracking is enabled, records the
+  /// elapsed wall/CPU time into op's opTimingMember stat field.
+  ///
+  /// The body is defined in DriverInl.h (included by Driver.cpp and
+  /// OptimizedDriver.cpp) to avoid a circular include with Operator.h.
+  template <typename Func>
+  void withDeltaCpuWallTimer(
+      Operator* op,
+      TimingMemberPtr opTimingMember,
+      Func&& opFunction);
+
+  CpuWallTiming processLazyIoStats(Operator& op, const CpuWallTiming& timing);
+
+  void validateOperatorOutputResult(
+      const RowVectorPtr& result,
+      const Operator& op);
+
+  StopReason blockDriver(
+      const std::shared_ptr<Driver>& self,
+      size_t blockedOperatorId,
+      ContinueFuture&& future,
+      std::shared_ptr<BlockingState>& blockingState,
+      CancelGuard& guard);
+
+  // Protected data members accessed by the scheduling loop and subclasses.
+  std::atomic_bool closed_{false};
+  size_t queueTimeStartUs_{0};
+  // Id (index in the vector) of the current operator being run.
+  size_t curOperatorId_{0};
+  std::vector<std::unique_ptr<Operator>> operators_; // NOLINT
+  BlockingReason blockingReason_{BlockingReason::kNotBlocked};
+  // Stores the operator index where the driver was last blocked.
+  size_t blockedOperatorId_{0};
+  // If set during trace replay, fed to the next operator on resume.
+  RowVectorPtr traceInput_;
+  bool trackOperatorCpuUsage_;
+  OpCallStatus opCallStatus_;
+
+ private:
   void init(
       std::unique_ptr<DriverCtx> driverCtx,
       std::vector<std::unique_ptr<Operator>> operators);
@@ -591,11 +641,6 @@ class Driver : public std::enable_shared_from_this<Driver> {
   void enqueueInternal();
 
   static void run(std::shared_ptr<Driver> self);
-
-  StopReason runInternal(
-      std::shared_ptr<Driver>& self,
-      std::shared_ptr<BlockingState>& blockingState,
-      RowVectorPtr& result);
 
   void updateStats();
 
@@ -638,36 +683,9 @@ class Driver : public std::enable_shared_from_this<Driver> {
   // draining signal to consumer driver pipeline through connected queues.
   void finishBarrier();
 
-  void close();
-
-  using TimingMemberPtr = CpuWallTiming OperatorStats::*;
-  template <typename Func>
-  void withDeltaCpuWallTimer(
-      Operator* op,
-      TimingMemberPtr opTimingMember,
-      Func&& opFunction);
-
-  // Adjusts 'timing' by removing the lazy load wall time, CPU time, and input
-  // bytes accrued since last time timing information was recorded for 'op'. The
-  // accrued lazy load times are credited to the source operator of 'this'. The
-  // per-operator runtimeStats for lazy load are left in place to reflect which
-  // operator triggered the load but these do not bias the op's timing.
-  CpuWallTiming processLazyIoStats(Operator& op, const CpuWallTiming& timing);
-
-  inline void validateOperatorOutputResult(
-      const RowVectorPtr& result,
-      const Operator& op);
-
-  inline StopReason blockDriver(
-      const std::shared_ptr<Driver>& self,
-      size_t blockedOperatorId,
-      ContinueFuture&& future,
-      std::shared_ptr<BlockingState>& blockingState,
-      CancelGuard& guard);
-
-  // Returns the operator to start from. The Driver always start the driver
-  // pipeline from the consumer (leaf), then walk backwards to the root based on
-  // whether they are ready to consume data, and the previous is ready to
+  // Returns the operator to start from. The Driver always starts the driver
+  // pipeline from the consumer (leaf), then walks backwards to the root based
+  // on whether they are ready to consume data, and the previous is ready to
   // produce data.
   //
   // The only exception is when resuming from a trace, in which case the Driver
@@ -685,39 +703,11 @@ class Driver : public std::enable_shared_from_this<Driver> {
 
   bool operatorsInitialized_{false};
 
-  std::atomic_bool closed_{false};
-
   // The driver barrier processing state.
   BarrierState barrier_;
 
-  OpCallStatus opCallStatus_;
-
   // Set via Task and serialized by Task's mutex.
   ThreadState state_;
-
-  // Timer used to track down the time we are sitting in the driver queue.
-  size_t queueTimeStartUs_{0};
-
-  // Id (index in the vector) of the current operator to run (or the 1st one if
-  // we haven't started yet). Used to determine which operator's queueTime we
-  // should update.
-  size_t curOperatorId_{0};
-
-  std::vector<std::unique_ptr<Operator>> operators_; // NOLINT
-
-  BlockingReason blockingReason_{BlockingReason::kNotBlocked};
-
-  // Stores the operator where the driver was last blocked. Note that the driver
-  // always resumes at the leaf (consumer) to prioritize getting data out of the
-  // task. The only exception is when resuming from a trace.
-  size_t blockedOperatorId_{0};
-
-  // If this driver is being traced, store a pointer to the current data. Once
-  // the trace client unblocks the driver, we will feed this vector to the next
-  // operator in the pipeline.
-  RowVectorPtr traceInput_;
-
-  bool trackOperatorCpuUsage_;
 
   // Indicates that a DriverAdapter can rearrange Operators. Set to false at end
   // of DriverFactory::createDriver().
@@ -760,6 +750,11 @@ struct DriverFactory {
   /// Function that will generate the final operator of a driver being
   /// constructed.
   OperatorSupplier operatorSupplier;
+
+  /// Optional override for driver allocation. When set, createDriver() uses
+  /// this function instead of allocating a plain Driver. Used in tests to
+  /// inject Driver subclasses such as OptimizedDriver.
+  static std::function<std::shared_ptr<Driver>()> driverAllocator;
   /// Maximum number of drivers that can be run concurrently in this pipeline.
   uint32_t maxDrivers;
   /// Number of drivers that will be run concurrently in this pipeline for one

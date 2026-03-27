@@ -29,6 +29,7 @@ velox_add_library(
   ContainerRowSerde.cpp
   DistinctAggregations.cpp
   Driver.cpp
+  OptimizedDriver.cpp
   EnforceSingleRow.cpp
   Exchange.cpp
   ExchangeClient.cpp

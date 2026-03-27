@@ -416,6 +416,55 @@ if(VELOX_ENABLE_BENCHMARKS)
   )
 endif()
 
+add_executable(
+  velox_optimized_driver_test
+  OptimizedDriverTest.cpp
+  Main.cpp
+)
+
+add_test(
+  NAME velox_optimized_driver_test
+  COMMAND velox_optimized_driver_test
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+target_link_libraries(
+  velox_optimized_driver_test
+  velox_dwio_common
+  velox_dwio_common_exception
+  velox_dwio_common_test_utils
+  velox_exec
+  velox_exec_test_lib
+  velox_fuzzer_util
+  velox_functions_lib
+  velox_functions_prestosql
+  velox_functions_test_lib
+  velox_window
+  velox_hive_connector
+  velox_memory
+  velox_serialization
+  velox_test_util
+  velox_type
+  velox_vector
+  velox_vector_fuzzer
+  velox_presto_serializer
+  velox_dwio_dwrf_writer
+  Boost::atomic
+  Boost::context
+  Boost::date_time
+  Boost::filesystem
+  Boost::program_options
+  Boost::thread
+  Boost::system
+  GTest::gtest
+  GTest::gtest_main
+  GTest::gmock
+  Folly::folly
+  gflags::gflags
+  glog::glog
+  fmt::fmt
+)
+
 add_executable(velox_driver_test OperatorReplacementTest.cpp Main.cpp)
 add_test(
   NAME velox_driver_test
