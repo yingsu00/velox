@@ -890,6 +890,9 @@ class QueryConfig {
   static constexpr const char* kMarkSortedZeroCopyThreshold =
       "mark_sorted_zero_copy_threshold";
 
+  static constexpr const char* kOptimizedPartitionedOutputEnabled =
+      "optimized_repartitioning";
+
   enum class RowSizeTrackingMode {
     DISABLED = 0,
     EXCLUDE_DELTA_SPLITS = 1,
@@ -1574,6 +1577,10 @@ class QueryConfig {
 
   int32_t markSortedZeroCopyThreshold() const {
     return get<int32_t>(kMarkSortedZeroCopyThreshold, 1000);
+  }
+
+  bool optimizedPartitionedOutputEnabled() const {
+    return get<bool>(kOptimizedPartitionedOutputEnabled, false);
   }
 
   template <typename T>
