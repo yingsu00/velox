@@ -89,6 +89,7 @@ set(
   FunctionResolutionTest.cpp
   SpillStatsTest.cpp
   MarkSortedTest.cpp
+  OptimizedPartitionedOutputTest.cpp
   PartitionedOutputTest.cpp
   # group3 (~584s): SpillerTest 584 + 9 lightweight
   SpillerTest.cpp
