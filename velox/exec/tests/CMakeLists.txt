@@ -82,6 +82,7 @@ set(
   NestedLoopJoinTest.cpp
   OrderByTest.cpp
   OperatorTraceTest.cpp
+  OptimizedPartitionedOutputTest.cpp
   OutputBufferManagerTest.cpp
   ParallelProjectTest.cpp
   PartitionedOutputTest.cpp
