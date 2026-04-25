@@ -74,6 +74,13 @@ class PrestoIterativePartitioningSerializer {
   }
 
  private:
+  struct SerializerContext {
+    std::vector<vector_size_t> rowCounts;
+    std::vector<BufferPtr> parentNulls;
+    std::vector<std::vector<vector_size_t>> parentNullCounts;
+    bool hasParentNulls{false};
+  };
+
   std::map<uint32_t, std::pair<std::unique_ptr<folly::IOBuf>, vector_size_t>>
   flushUncompressed();
   std::map<uint32_t, std::pair<std::unique_ptr<folly::IOBuf>, vector_size_t>>
@@ -93,33 +100,51 @@ class PrestoIterativePartitioningSerializer {
       const std::vector<PartitionedVectorPtr>& partitionedVectors,
       const RowType& rowSchema,
       const std::vector<uint32_t>& nonEmptyPartitions,
-      const std::vector<IOBufOutputStream*>& outputStreams) const;
+      const std::vector<IOBufOutputStream*>& outputStreams,
+      const SerializerContext& context) const;
 
   void flushColumn(
       const std::vector<PartitionedVectorPtr>& partitionedVectors,
       const TypePtr& colType,
       const std::vector<uint32_t>& nonEmptyPartitions,
-      const std::vector<IOBufOutputStream*>& outputStreams) const;
+      const std::vector<IOBufOutputStream*>& outputStreams,
+      const SerializerContext& context) const;
 
   void flushSimpleColumn(
       const std::vector<PartitionedVectorPtr>& partitionedVectors,
       const TypePtr& colType,
       const std::vector<uint32_t>& nonEmptyPartitions,
-      const std::vector<IOBufOutputStream*>& outputStreams) const;
+      const std::vector<IOBufOutputStream*>& outputStreams,
+      const SerializerContext& context) const;
+
+  /// Serializes a nested ROW column block. Writes the "ROW" encoding header,
+  /// numFields, all child columns recursively, and the Presto ROW block footer
+  /// (numRows, sequential offsets, hasNulls flag, optional null bitmap).
+  void flushRowColumn(
+      const std::vector<PartitionedVectorPtr>& partitionedVectors,
+      const TypePtr& colType,
+      const std::vector<uint32_t>& nonEmptyPartitions,
+      const std::vector<IOBufOutputStream*>& outputStreams,
+      const SerializerContext& context) const;
 
   void flushSingleSimpleVector(
       const PartitionedVectorPtr& partitionedVector,
-      const std::vector<IOBufOutputStream*>& outputStreams) const;
+      const std::vector<IOBufOutputStream*>& outputStreams,
+      const uint64_t* parentNulls,
+      const std::vector<vector_size_t>* parentNullCounts) const;
 
   template <TypeKind kind>
   void flushSingleFlatVector(
       const PartitionedVectorPtr& partitionedVector,
-      const std::vector<IOBufOutputStream*>& outputStreams) const;
+      const std::vector<IOBufOutputStream*>& outputStreams,
+      const uint64_t* parentNulls) const;
 
   template <TypeKind kind>
   void flushSingleConstantVector(
       const PartitionedVectorPtr& partitionedVector,
-      const std::vector<IOBufOutputStream*>& outputStreams) const;
+      const std::vector<IOBufOutputStream*>& outputStreams,
+      const uint64_t* parentNulls,
+      const std::vector<vector_size_t>* parentNullCountsPerPartition) const;
 
   void flushHeader(
       std::string_view name,
@@ -128,29 +153,20 @@ class PrestoIterativePartitioningSerializer {
 
   void flushRowCounts(
       const std::vector<uint32_t>& nonEmptyPartitions,
-      const std::vector<IOBufOutputStream*>& outputStreams) const;
+      const std::vector<IOBufOutputStream*>& outputStreams,
+      const SerializerContext& context) const;
 
   void flushNulls(
       const std::vector<PartitionedVectorPtr>& partitionedVectors,
       const std::vector<uint32_t>& nonEmptyPartitions,
-      const std::vector<IOBufOutputStream*>& outputStreams) const;
-
-  static void flushSimpleVectorNulls(
-      const PartitionedVectorPtr& partitionedVector,
-      const std::vector<uint32_t>& nonEmptyPartitions,
-      std::vector<std::vector<uint8_t>>& bitmaps,
-      std::vector<vector_size_t>& destBitOffsets);
-
-  static void flushConstantVectorNulls(
-      const PartitionedVectorPtr& partitionedVector,
-      const std::vector<uint32_t>& nonEmptyPartitions,
-      std::vector<std::vector<uint8_t>>& bitmaps,
-      std::vector<vector_size_t>& destBitOffsets);
+      const std::vector<IOBufOutputStream*>& outputStreams,
+      const SerializerContext& context) const;
 
   template <typename T>
   void flushFlatValues(
       const T* partitionedValues,
       const uint64_t* rawNulls,
+      const uint64_t* parentNulls,
       const vector_size_t* partitionOffsets,
       const std::vector<IOBufOutputStream*>& outputStreams) const;
 

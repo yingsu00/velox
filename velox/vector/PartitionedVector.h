@@ -155,6 +155,12 @@ class PartitionedVector {
     return numNullsPerPartition_[partition];
   }
 
+  /// Sets the number of null rows in the given partition.
+  void setNumNullsAt(uint32_t partition, vector_size_t numNulls) {
+    VELOX_DCHECK_LT(partition, numPartitions_);
+    numNullsPerPartition_[partition] = numNulls;
+  }
+
   TypeKind typeKind() const {
     return vector_->typeKind();
   }

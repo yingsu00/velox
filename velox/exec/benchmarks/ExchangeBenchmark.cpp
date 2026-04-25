@@ -311,6 +311,20 @@ void runBenchmarks(bool optimizedPartitionedOutputEnabled = false) {
             MAP(BIGINT(),
                 ROW({{"s2_int", INTEGER()}, {"s2_string", VARCHAR()}})))}});
 
+  // 1-, 2-, and 3-level nested ROW types. Each has a BIGINT "c0" partition
+  // key followed by a value column "v" that is N levels of single-field ROW
+  // wrapping a BIGINT leaf.
+  auto makeNestedType = [](int level) {
+    TypePtr inner = BIGINT();
+    for (int i = 0; i < level; ++i) {
+      inner = ROW({"r"}, {inner});
+    }
+    return ROW({"c0", "v"}, {BIGINT(), inner});
+  };
+  auto nested1Type = makeNestedType(1);
+  auto nested2Type = makeNestedType(2);
+  auto nested3Type = makeNestedType(3);
+
   std::vector<RowVectorPtr> flat10k(
       bm->makeRows(flatType, 10, 10000, FLAGS_dict_pct));
   std::vector<RowVectorPtr> deep10k(
@@ -321,13 +335,22 @@ void runBenchmarks(bool optimizedPartitionedOutputEnabled = false) {
       bm->makeRows(deepType, 2000, 50, FLAGS_dict_pct));
   std::vector<RowVectorPtr> struct1k(
       bm->makeRows(structType, 100, 1000, FLAGS_dict_pct));
+  std::vector<RowVectorPtr> nested1_1k(
+      bm->makeRows(nested1Type, 100, 1000, FLAGS_dict_pct));
+  std::vector<RowVectorPtr> nested2_1k(
+      bm->makeRows(nested2Type, 100, 1000, FLAGS_dict_pct));
+  std::vector<RowVectorPtr> nested3_1k(
+      bm->makeRows(nested3Type, 100, 1000, FLAGS_dict_pct));
 
   std::vector<std::pair<std::string, std::vector<RowVectorPtr>*>> exchangeCases{
       {"Flat10K", &flat10k},
       {"Flat50", &flat50},
       {"Deep10K", &deep10k},
       {"Deep50", &deep50},
-      {"Struct1K", &struct1k}};
+      {"Struct1K", &struct1k},
+      {"Nested1_1K", &nested1_1k},
+      {"Nested2_1K", &nested2_1k},
+      {"Nested3_1K", &nested3_1k}};
 
   std::vector<ExchangeRunStats> normalPartitionedOutputStats(
       exchangeCases.size());
