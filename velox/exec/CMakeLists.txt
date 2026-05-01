@@ -72,6 +72,7 @@ velox_add_library(
   OperatorTraceWriter.cpp
   OperatorUtils.cpp
   OptimizedPartitionedOutput.cpp
+  OptimizedVectorHasher.cpp
   OrderBy.cpp
   OutputBuffer.cpp
   OutputBufferManager.cpp
@@ -177,6 +178,7 @@ velox_add_library(
   OperatorTraceWriter.h
   OperatorType.h
   OperatorUtils.h
+  OptimizedVectorHasher.h
   OrderBy.h
   OutputBuffer.h
   OutputBufferManager.h
