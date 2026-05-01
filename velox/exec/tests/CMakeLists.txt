@@ -149,6 +149,7 @@ set(
   FilterProjectTest.cpp
   AsyncConnectorTest.cpp
   OptimizedPartitionedOutputTest.cpp
+  OptimizedVectorHasherTest.cpp
 )
 
 set(
