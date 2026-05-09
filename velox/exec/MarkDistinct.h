@@ -106,7 +106,7 @@ class MarkDistinct : public Operator {
 
   SpillPartitionSet spillInputPartitionSet_;
 
-  std::unique_ptr<HashPartitionFunction> spillHashFunction_;
+  std::unique_ptr<HashPartitionFunctionBase> spillHashFunction_;
 
   SpillPartitionSet spillHashTablePartitionSet_;
 
