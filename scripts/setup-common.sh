@@ -49,7 +49,12 @@ function install_fmt {
 
 function install_folly {
   wget_and_untar https://github.com/facebook/folly/archive/refs/tags/"${FB_OS_VERSION}".tar.gz folly
-  local FOLLY_FLAGS=(-DBUILD_SHARED_LIBS="$VELOX_BUILD_SHARED" -DBUILD_TESTS=OFF -DFOLLY_HAVE_INT128_T=ON)
+  local FOLLY_FLAGS=(
+    -DBUILD_SHARED_LIBS="$VELOX_BUILD_SHARED"
+    -DBUILD_TESTS=OFF
+    -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
+    -DFOLLY_HAVE_INT128_T=ON
+  )
   # When folly is static, use static gflags to avoid dual gflags flag
   # registration when .so plugins are dlopen'd (both the binary and plugin
   # would register the same flags in a shared gflags registry).
@@ -103,7 +108,7 @@ function install_fbthrift {
     FBTHRIFT_EXTRA_CXXFLAGS=" -D_LIBCPP_HAS_NO_ASAN"
   fi
   EXTRA_PKG_CXXFLAGS="$FBTHRIFT_EXTRA_CXXFLAGS" \
-    cmake_install_dir fbthrift -Denable_tests=OFF -DBUILD_TESTS=OFF -DBUILD_SHARED_LIBS=OFF
+    cmake_install_dir fbthrift -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}" -Denable_tests=OFF -DBUILD_TESTS=OFF -DBUILD_SHARED_LIBS=OFF
 }
 
 function install_duckdb {
