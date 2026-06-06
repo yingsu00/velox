@@ -17,6 +17,7 @@
 
 #include <set>
 
+#include "velox/core/Expressions.h"
 #include "velox/core/PlanFragment.h"
 #include "velox/exec/ArrowStream.h"
 #include "velox/exec/AssignUniqueId.h"
@@ -282,7 +283,9 @@ OperatorSupplier makeOperatorSupplier(const PlanNodePtr& planNode) {
 //   }
 // }
 
-bool isWideningIntegerCast(const TypePtr& outputType, const TypePtr& inputType) {
+bool isWideningIntegerCast(
+    const TypePtr& outputType,
+    const TypePtr& inputType) {
   if (!isIntegral(outputType) || !isIntegral(inputType)) {
     return false;
   }
@@ -299,16 +302,21 @@ bool isWideningDateCast(const TypePtr& outputType, const TypePtr& inputType) {
   return false;
 }
 
-
-bool isVarcharToTimestampCast(const TypePtr& outputType, const TypePtr& inputType) {
+bool isVarcharToTimestampCast(
+    const TypePtr& outputType,
+    const TypePtr& inputType) {
   if (outputType->isTimestamp() && inputType->isVarchar()) {
     return true;
   }
   return false;
 }
 
-bool isWideningCastOperation(const TypePtr& outputType, const TypePtr& inputType) {
-  return isWideningIntegerCast(outputType, inputType) || isWideningDateCast(outputType, inputType) || isVarcharToTimestampCast(outputType, inputType);
+bool isWideningCastOperation(
+    const TypePtr& outputType,
+    const TypePtr& inputType) {
+  return isWideningIntegerCast(outputType, inputType) ||
+      isWideningDateCast(outputType, inputType) ||
+      isVarcharToTimestampCast(outputType, inputType);
 }
 
 bool isWideningCastOperation(const core::ITypedExpr& expr) {
@@ -321,7 +329,6 @@ bool isWideningCastOperation(const core::ITypedExpr& expr) {
   }
   return isWideningCastOperation(expr.type(), inputExpr->type());
 }
-
 
 void plan(
     const PlanNodePtr& planNode,
@@ -455,6 +462,26 @@ PlanNodePtr rewriteProjectNode(
       projectNode->id(), newNames, newProjections, newSources[0]);
 }
 
+PlanNodePtr rewriteFilterNode(
+    core::FilterNodePtr filterNode,
+    ExprMap& castExprs,
+    const std::vector<PlanNodePtr>& newSources) {
+  auto newFilter =
+      filterNode->filter()->rewriteCastExprsWithUpcastName(castExprs);
+  auto it = castExprs.begin();
+  while (it != castExprs.end()) {
+    if (it->second.second == filterNode->id()) {
+      castExprs.erase(it);
+      break;
+    }
+    ++it;
+  }
+
+  VLOG(2) << "Created new filter: " << newFilter->toString();
+  return std::make_shared<core::FilterNode>(
+      filterNode->id(), newFilter, newSources[0]);
+}
+
 PlanNodePtr rewriteTableScanNode(
     core::TableScanNodePtr scan,
     const ExprMap& castExprs) {
@@ -574,45 +601,104 @@ struct NodeAnalysis {
   std::set<int> projectionsToReplace; // indices of projections to replace
 };
 
+class CastExprVisitor : public core::DefaultTypedExprVisitor {
+ public:
+  class CastExprVisitorContext : public core::ITypedExprVisitorContext {
+   public:
+    CastExprVisitorContext(
+        ExprMap& castExprsToPush,
+        NodeAnalysis& analysis,
+        const std::string& nodeId)
+        : castExprsToPush_(castExprsToPush),
+          nodeId_(nodeId),
+          analysis_(analysis) {}
+
+    void addCastExprsToPush(
+        const std::string& name,
+        core::TypedExprPtr castExpr) {
+      castExprsToPush_.emplace(name, std::make_pair(castExpr, nodeId_));
+    }
+
+    NodeAnalysis& analysis() {
+      return analysis_;
+    }
+
+    const std::string& planNodeId() {
+      return nodeId_;
+    }
+
+   private:
+    ExprMap& castExprsToPush_;
+    const std::string& nodeId_;
+    NodeAnalysis& analysis_;
+  };
+
+  void visit(
+      const core::CastTypedExpr& expr,
+      core::ITypedExprVisitorContext& ctx) const override {
+    auto& myCtx = static_cast<CastExprVisitorContext&>(ctx);
+    if (isWideningCastOperation(expr)) {
+      VELOX_CHECK_EQ(expr.inputs().size(), 1);
+      auto input = std::dynamic_pointer_cast<const core::FieldAccessTypedExpr>(
+          expr.inputs()[0]);
+      VELOX_CHECK(input);
+      auto castExpr = std::make_shared<core::CastTypedExpr>(
+          expr.type(), expr.inputs(), expr.isTryCast());
+      myCtx.addCastExprsToPush(input->name(), castExpr);
+      VLOG(2) << "Pushdown cast " << castExpr->toString()
+              << " → child: " << input->name();
+      visitInputs(expr, ctx);
+    }
+  }
+};
+
 NodeAnalysis preAnalyzeNode(const PlanNodePtr& node, ExprMap& exprsToPush) {
   NodeAnalysis analysis;
 
-  auto project = std::dynamic_pointer_cast<const core::ProjectNode>(node);
-  if (!project) {
-    return analysis;
-  }
+  if (auto project = std::dynamic_pointer_cast<const core::ProjectNode>(node)) {
+    VELOX_CHECK_EQ(project->sources().size(), 1);
 
-  VELOX_CHECK_EQ(project->sources().size(), 1);
+    const auto& names = project->names();
+    const auto& exprs = project->projections();
 
-  const auto& names = project->names();
-  const auto& exprs = project->projections();
+    for (int i = 0; i < names.size(); i++) {
+      const auto& projection = exprs[i];
 
-  for (int i = 0; i < names.size(); i++) {
-    const auto& projection = exprs[i];
+      if (!isWideningCastOperation(*projection)) {
+        continue;
+      }
 
-    if (!isWideningCastOperation(*projection)) {
-      continue;
+      VELOX_CHECK_EQ(projection->inputs().size(), 1);
+
+      auto input = std::dynamic_pointer_cast<const core::FieldAccessTypedExpr>(
+          projection->inputs()[0]);
+      VELOX_CHECK(input);
+
+      if (!canPushUpcastThrough(node->sources()[0], input->name())) {
+        // block this cast from being pushed down
+        continue;
+      }
+
+      // We use the field name (input->name()) as the key to push down the
+      // cast expression. E.g. provider_id -> (Cast(provider_id as bigint), 22)
+      exprsToPush.emplace(input->name(), std::make_pair(projection, node->id()));
+      analysis.projectionsToReplace.insert(i);
+      analysis.needRewrite = true;
+
+      //    VLOG(2) << "Pushdown cast " << names[i] << " → child: " <<
+      //    input->name();
     }
-
-    VELOX_CHECK_EQ(projection->inputs().size(), 1);
-
-    auto input = std::dynamic_pointer_cast<const core::FieldAccessTypedExpr>(
-        projection->inputs()[0]);
-    VELOX_CHECK(input);
-
-    if (!canPushUpcastThrough(node->sources()[0], input->name())) {
-      // block this cast from being pushed down
-      continue;
+  } else if (
+      auto filterNode =
+          std::dynamic_pointer_cast<const core::FilterNode>(node)) {
+    auto filter = filterNode->filter();
+    CastExprVisitor::CastExprVisitorContext ctx(
+        exprsToPush, analysis, node->id());
+    CastExprVisitor visitor;
+    filter->accept(visitor, ctx);
+    if (exprsToPush.size() > 0) {
+      analysis.needRewrite = true;
     }
-
-    // We use the field name (input->name()) as the key to push down the
-    // cast expression. E.g. provider_id -> (Cast(provider_id as bigint), 22)
-    exprsToPush.emplace(input->name(), std::make_pair(projection, node->id()));
-    analysis.projectionsToReplace.insert(i);
-    analysis.needRewrite = true;
-
-    //    VLOG(2) << "Pushdown cast " << names[i] << " → child: " <<
-    //    input->name();
   }
 
   return analysis;
@@ -640,6 +726,12 @@ PlanNodePtr rewriteNode(
         const_cast<ExprMap&>(exprsToPush),
         analysis.projectionsToReplace,
         newSources);
+  }
+
+  // Filter
+  if (auto filter = std::dynamic_pointer_cast<const core::FilterNode>(node)) {
+    return rewriteFilterNode(
+        filter, const_cast<ExprMap&>(exprsToPush), newSources);
   }
 
   // Generic
