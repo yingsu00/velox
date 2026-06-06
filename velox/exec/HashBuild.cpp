@@ -117,6 +117,19 @@ HashBuild::HashBuild(
 
   tableType_ = hashJoinTableType(joinNode_);
 
+//  // log tableType_ for debugging.
+//  VLOG(2) << "HashBuild planNodeId_: " << joinNode_->id()
+//          << " left source id " << joinNode_->sources()[0]->id()
+//          << " left output type: "
+//          << joinNode_->sources()[0]->outputType()->toString()
+//          << " right source id " << joinNode_->sources()[1]->id()
+//          << " right output type: "
+//          << joinNode_->sources()[1]->outputType()->toString()
+//          << " inputType: " << inputType->toString()
+//          << " tableType_: " << tableType_->toString()
+//          << " keyChannels_: " << folly::join(", ", keyChannels_)
+//          << " dependentChannels_: " << folly::join(", ", dependentChannels_);
+  
   stateCleared_ = false;
 }
 
@@ -436,6 +449,11 @@ void HashBuild::addInput(RowVectorPtr input) {
       (cacheEntry_->builderTaskId == taskId() && !cacheEntry_->buildComplete));
 
   ensureInputFits(input);
+
+//  // Log input data type and size for debugging.
+//  VLOG(2) << "HashBuild addInput: "
+//          << " input data type: " << input->type()->toString()
+//          << " input size: " << input->size();
 
   TestValue::adjust("facebook::velox::exec::HashBuild::addInput", this);
 

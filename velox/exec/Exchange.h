@@ -67,8 +67,9 @@ class Exchange : public SourceOperator {
 
  protected:
   virtual VectorSerde* getSerde();
+  void widenResults();
 
-  // When 'estimatedRowSize_' is unset, meaning we haven't materialized
+      // When 'estimatedRowSize_' is unset, meaning we haven't materialized
   // and returned any output from this exchange operator, we return this
   // conservative number of output rows, to make sure memory does not grow too
   // much.
@@ -95,6 +96,8 @@ class Exchange : public SourceOperator {
 
   RowVectorPtr getOutputFromRowPages(VectorSerde* serde);
 
+  RowTypePtr outputTypeWithoutUpcasts_;
+
   const uint64_t preferredOutputBatchBytes_;
 
   const std::string serdeKind_;
@@ -109,6 +112,8 @@ class Exchange : public SourceOperator {
 
   bool noMoreSplits_ = false;
 
+  bool pushDownCasts_ = false;
+
   std::shared_ptr<ExchangeClient> exchangeClient_;
 
   // A future received from Task::getSplitOrFuture(). It will be complete when
@@ -117,6 +122,7 @@ class Exchange : public SourceOperator {
 
   // Reusable result vector.
   RowVectorPtr result_;
+  RowVectorPtr resultWithoutUpcasts_;
 
   std::vector<std::unique_ptr<SerializedPageBase>> currentPages_;
   bool atEnd_{false};

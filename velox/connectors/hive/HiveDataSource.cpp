@@ -32,7 +32,8 @@ HiveDataSource::HiveDataSource(
     FileHandleFactory* fileHandleFactory,
     folly::Executor* ioExecutor,
     const ConnectorQueryCtx* connectorQueryCtx,
-    const std::shared_ptr<HiveConfig>& hiveConfig)
+    const std::shared_ptr<HiveConfig>& hiveConfig,
+    bool pushdownCasts)
     : FileDataSource(
           outputType,
           tableHandle,
@@ -40,7 +41,8 @@ HiveDataSource::HiveDataSource(
           fileHandleFactory,
           ioExecutor,
           connectorQueryCtx,
-          hiveConfig),
+          hiveConfig,
+          pushdownCasts),
       hiveConfig_(hiveConfig) {}
 
 std::vector<column_index_t> HiveDataSource::setupBucketConversion() {
@@ -60,11 +62,12 @@ std::vector<column_index_t> HiveDataSource::setupBucketConversion() {
     if (subfields_.erase(handle->name()) > 0) {
       rebuildScanSpec = true;
     }
-    auto index = readerOutputType_->getChildIdxIfExists(handle->name());
+    auto index =
+        readerOutputTypeWithoutUpcasts_->getChildIdxIfExists(handle->name());
     if (!index.has_value()) {
       if (names.empty()) {
-        names = readerOutputType_->names();
-        types = readerOutputType_->children();
+        names = readerOutputTypeWithoutUpcasts_->names();
+        types = readerOutputTypeWithoutUpcasts_->children();
       }
       index = names.size();
       names.push_back(handle->name());
@@ -74,11 +77,11 @@ std::vector<column_index_t> HiveDataSource::setupBucketConversion() {
     bucketChannels.push_back(*index);
   }
   if (!names.empty()) {
-    readerOutputType_ = ROW(std::move(names), std::move(types));
+    readerOutputTypeWithoutUpcasts_ = ROW(std::move(names), std::move(types));
   }
   if (rebuildScanSpec) {
     auto newScanSpec = makeScanSpec(
-        readerOutputType_,
+        readerOutputTypeWithoutUpcasts_,
         subfields_,
         filters_,
         /*indexColumns=*/{},
@@ -102,7 +105,8 @@ void HiveDataSource::setupRowIdColumn() {
   auto* rowId = scanSpec_->childByName(*specialColumns_.rowId);
   VELOX_CHECK_NOT_NULL(rowId);
   auto& rowIdType =
-      readerOutputType_->findChild(*specialColumns_.rowId)->asRow();
+      readerOutputTypeWithoutUpcasts_->findChild(*specialColumns_.rowId)
+          ->asRow();
   auto rowGroupId = split_->getFileName();
   rowId->childByName(rowIdType.nameOf(1))
       ->setConstantValue<StringView>(
@@ -137,13 +141,19 @@ std::unique_ptr<FileSplitReader> HiveDataSource::createSplitReader() {
   auto bucketChannels = prepareSplit();
   auto hiveSplit = checkedPointerCast<const HiveConnectorSplit>(split_);
 
+  // When pushdownCasts_ is true the file reader must produce raw, pre-cast
+  // column types (and a deduplicated schema). The upcast columns live only in
+  // outputType_/readerOutputType_; FileDataSource::next() materializes them
+  // from the raw output.
+  const auto& splitReaderOutputType =
+      pushdownCasts_ ? readerOutputTypeWithoutUpcasts_ : readerOutputType_;
   return std::make_unique<HiveSplitReader>(
       hiveSplit,
       tableHandle_,
       &partitionKeys_,
       connectorQueryCtx_,
       fileConfig_,
-      readerOutputType_,
+      splitReaderOutputType,
       dataIoStats_,
       metadataIoStats_,
       ioStats_,
@@ -191,7 +201,7 @@ std::shared_ptr<wave::WaveDataSource> HiveDataSource::toWaveDataSource() {
     waveDataSource_ = waveDelegateHook_(
         hiveTableHandle,
         scanSpec_,
-        readerOutputType_,
+        readerOutputTypeWithoutUpcasts_,
         &partitionKeys_,
         fileHandleFactory_,
         ioExecutor_,

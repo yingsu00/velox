@@ -30,7 +30,8 @@ std::unique_ptr<DataSource> PaimonConnector::createDataSource(
     const RowTypePtr& outputType,
     const ConnectorTableHandlePtr& tableHandle,
     const ColumnHandleMap& columnHandles,
-    ConnectorQueryCtx* connectorQueryCtx) {
+    ConnectorQueryCtx* connectorQueryCtx,
+    bool pushdownCasts) {
   return std::make_unique<PaimonDataSource>(
       outputType,
       tableHandle,
@@ -38,7 +39,8 @@ std::unique_ptr<DataSource> PaimonConnector::createDataSource(
       &fileHandleFactory_,
       ioExecutor_,
       connectorQueryCtx,
-      paimonConfig_);
+      paimonConfig_,
+      pushdownCasts);
 }
 
 } // namespace facebook::velox::connector::hive::paimon

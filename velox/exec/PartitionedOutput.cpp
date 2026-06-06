@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #include "velox/exec/PartitionedOutput.h"
 #include "velox/exec/OperatorType.h"
 #include "velox/exec/OperatorUtils.h"
@@ -158,6 +157,15 @@ BlockingReason Destination::flush(
   bytesInCurrent_ = 0;
   rowsInCurrent_ = 0;
   setTargetSizePct();
+
+  auto serializedpage = std::make_unique<SerializedPage>(
+      stream.getIOBuf(bufferReleaseFn), nullptr, flushedRows);
+  //  LOG(INFO) << "Sending SerializedPage For Task " << taskId_ << "
+  //  destination " << destination_
+  //            << " serializedPage size " << serializedpage->size()
+  //            << " serializedPage numRows "
+  //            << serializedpage->numRows().value_or(-1) << " flushed "
+  //            << flushedRows << " rows, " << flushedBytes << " bytes";
 
   bool blocked = bufferManager.enqueue(
       taskId_,
@@ -338,6 +346,10 @@ void PartitionedOutput::estimateRowSizes() {
 }
 
 void PartitionedOutput::addInput(RowVectorPtr input) {
+//  VLOG(google::INFO) << "PartitionedOutput::addInput with " << input->size()
+//          << " rows, type " << input->type()->kind()  << " value:"
+//          << input->childAt(0)->asFlatVector<int64_t>()->valueAt(0);
+
   initializeInput(std::move(input));
   initializeDestinations();
   initializeSizeBuffers();
@@ -480,7 +492,7 @@ RowVectorPtr PartitionedOutput::getOutput() {
     }
     return nullptr;
   }
-  // All of 'output_' is written into the destinations. We are finishing, hence
+  // All of 'outputWithoutUpcasts_' is written into the destinations. We are finishing, hence
   // move all the destinations to the output queue. This will not grow memory
   // and hence does not need blocking.
   if (noMoreInput_) {

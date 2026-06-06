@@ -68,6 +68,13 @@ class FileDataSource : public DataSource {
   static constexpr std::string_view kNumRamRead{"numRamRead"};
   static constexpr std::string_view kRamReadBytes{"ramReadBytes"};
   static constexpr std::string_view kReadGapBytes{"readGapBytes"};
+  /// Counts the number of output columns materialized via a pushed-down
+  /// widening cast (i.e. the cherry-pick that adds the "_upcast" suffix in
+  /// FileDataSource::materializeOutputColumn). Tests use this metric to
+  /// verify that the LocalPlanner rewrite + FileDataSource path actually
+  /// fired, since a misconfigured pushdown still yields correct results via
+  /// the downstream Project.
+  static constexpr std::string_view kNumPushdownUpcasts{"numPushdownUpcasts"};
 
   FileDataSource(
       const RowTypePtr& outputType,
@@ -76,7 +83,8 @@ class FileDataSource : public DataSource {
       FileHandleFactory* fileHandleFactory,
       folly::Executor* ioExecutor,
       const ConnectorQueryCtx* connectorQueryCtx,
-      const std::shared_ptr<FileConfig>& fileConfig);
+      const std::shared_ptr<FileConfig>& fileConfig,
+      bool pushdownCasts = false);
 
   void addSplit(std::shared_ptr<ConnectorSplit> split) override;
 
@@ -118,6 +126,10 @@ class FileDataSource : public DataSource {
  protected:
   virtual std::unique_ptr<FileSplitReader> createSplitReader();
 
+  /// Column handle assignments keyed on output column name. Kept around so
+  /// next() can resolve the underlying ColumnHandle (and its source column
+  /// name) when materializing pushdown-cast columns from outputType_.
+  const connector::ColumnHandleMap assignments_;
   FileHandleFactory* const fileHandleFactory_;
   folly::Executor* const ioExecutor_;
   const ConnectorQueryCtx* const connectorQueryCtx_;
@@ -127,6 +139,10 @@ class FileDataSource : public DataSource {
   std::shared_ptr<FileConnectorSplit> split_;
   FileTableHandlePtr tableHandle_;
   std::shared_ptr<common::ScanSpec> scanSpec_;
+  /// Buffer holding values produced by the reader before column upcasts are
+  /// applied. When pushdownCasts_ is false this stays null and output_ is used
+  /// directly by the reader.
+  VectorPtr outputWithoutUpcasts_;
   VectorPtr output_;
   std::unique_ptr<FileSplitReader> splitReader_;
 
@@ -134,6 +150,9 @@ class FileDataSource : public DataSource {
   /// it contains column names before assignment, and columns that are only used
   /// in the remaining filter.
   RowTypePtr readerOutputType_;
+  /// Same as readerOutputType_ but with ColumnHandle (pre-upcast) names.
+  /// Populated when pushdownCasts_ is true.
+  RowTypePtr readerOutputTypeWithoutUpcasts_;
 
   /// Column handles for the partition key columns keyed on partition key column
   /// name.
@@ -171,6 +190,15 @@ class FileDataSource : public DataSource {
   folly::F14FastMap<column_index_t, const FileColumnHandle*> extractionColumns_;
 
   dwio::common::RuntimeStatistics runtimeStats_;
+  /// Running count of output columns produced via a pushed-down widening
+  /// cast. Exposed under kNumPushdownUpcasts. See the constant for why.
+  int64_t numPushdownUpcasts_{0};
+
+  /// Whether the source has been asked to apply widening casts (e.g.
+  /// INTEGER -> BIGINT) inline while reading columns. Driven by the
+  /// `pushdown_integer_upcasts_to_source` query config. Subclasses read this
+  /// when overriding createSplitReader() to pick the right reader schema.
+  const bool pushdownCasts_;
 
  private:
   // Configure extraction columns on the ScanSpec and build
@@ -192,6 +220,21 @@ class FileDataSource : public DataSource {
   /// to hold adaptation.
   void resetSplit();
 
+  /// Returns the vector emitted at column index 'outputIdx' for the current
+  /// batch. Used only when pushdownCasts_ is true: 'rowVector' carries the
+  /// reader's raw output; this resolves the source column via assignments_
+  /// (stripping any "_upcast" suffix) and applies the pushdown cast for
+  /// upcast columns. Plain columns pass through.
+  VectorPtr materializeOutputColumn(
+      column_index_t outputIdx,
+      const RowVector& rowVector);
+
+  /// Applies a pushed-down widening cast from 'source' to 'targetType'.
+  /// Supports INTEGRAL -> INTEGRAL, DATE -> TIMESTAMP, and VARCHAR -> TIMESTAMP.
+  VectorPtr applyPushdownCast(
+      const VectorPtr& source,
+      const TypePtr& targetType);
+
   const RowVectorPtr& getEmptyOutput() {
     if (!emptyOutput_) {
       emptyOutput_ = RowVector::createEmpty(outputType_, pool_);
@@ -200,8 +243,12 @@ class FileDataSource : public DataSource {
   }
 
   /// The row type for the data source output, not including filter-only
-  /// columns.
+  /// columns. May be aliased when pushdownCasts_ is true (e.g.
+  /// `order_id`, `order_id_upcast`).
   const RowTypePtr outputType_;
+  /// Same as outputType_ but using ColumnHandle (pre-upcast) names. Populated
+  /// when pushdownCasts_ is true.
+  RowTypePtr outputTypeWithoutUpcasts_;
   core::ExpressionEvaluator* const expressionEvaluator_;
 
   std::vector<common::Subfield> remainingFilterSubfields_;
