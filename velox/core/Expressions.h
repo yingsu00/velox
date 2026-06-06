@@ -49,6 +49,13 @@ class InputTypedExpr : public ITypedExpr {
     return std::make_shared<InputTypedExpr>(type());
   }
 
+  TypedExprPtr rewriteCastExprsWithUpcastName(
+      const std::
+          multimap<std::string, std::pair<core::TypedExprPtr, std::string>>&
+              castExprsToRewrite) const override {
+    return std::make_shared<InputTypedExpr>(type());
+  }
+
   void accept(
       const ITypedExprVisitor& visitor,
       ITypedExprVisitorContext& context) const override;
@@ -129,6 +136,17 @@ class ConstantTypedExpr : public ITypedExpr {
   TypedExprPtr rewriteInputNames(
       const std::unordered_map<std::string, TypedExprPtr>& /*mapping*/)
       const override {
+    if (hasValueVector()) {
+      return std::make_shared<ConstantTypedExpr>(valueVector_);
+    } else {
+      return std::make_shared<ConstantTypedExpr>(type(), value_);
+    }
+  }
+
+  TypedExprPtr rewriteCastExprsWithUpcastName(
+      const std::
+          multimap<std::string, std::pair<core::TypedExprPtr, std::string>>&
+              castExprsToRewrite) const override {
     if (hasValueVector()) {
       return std::make_shared<ConstantTypedExpr>(valueVector_);
     } else {
@@ -226,6 +244,16 @@ class CallTypedExpr : public ITypedExpr {
         type(), rewriteInputsRecursive(mapping), name_);
   }
 
+  TypedExprPtr rewriteCastExprsWithUpcastName(
+      const std::
+          multimap<std::string, std::pair<core::TypedExprPtr, std::string>>&
+              castExprsToRewrite) const override {
+    return std::make_shared<CallTypedExpr>(
+        type(),
+        rewriteCastExprsWithUpcastNameRecursive(castExprsToRewrite),
+        name_);
+  }
+
   std::string toString() const override;
 
   size_t localHash() const override {
@@ -294,6 +322,13 @@ class FieldAccessTypedExpr : public ITypedExpr {
   TypedExprPtr rewriteInputNames(
       const std::unordered_map<std::string, TypedExprPtr>& mapping)
       const override;
+
+  TypedExprPtr rewriteCastExprsWithUpcastName(
+      const std::
+          multimap<std::string, std::pair<core::TypedExprPtr, std::string>>&
+              castExprsToRewrite) const override {
+    return std::make_shared<FieldAccessTypedExpr>(type(), name_);
+  }
 
   std::string toString() const override;
 
@@ -376,6 +411,13 @@ class DereferenceTypedExpr : public ITypedExpr {
     return std::make_shared<DereferenceTypedExpr>(type(), newInputs[0], index_);
   }
 
+  TypedExprPtr rewriteCastExprsWithUpcastName(
+      const std::
+          multimap<std::string, std::pair<core::TypedExprPtr, std::string>>&
+              castExprsToRewrite) const override {
+    return std::make_shared<DereferenceTypedExpr>(type(), inputs()[0], index_);
+  }
+
   std::string toString() const override {
     const auto& fieldName = name();
     if (fieldName.empty()) {
@@ -436,6 +478,15 @@ class ConcatTypedExpr : public ITypedExpr {
       const override {
     return std::make_shared<ConcatTypedExpr>(
         type()->asRow().names(), rewriteInputsRecursive(mapping));
+  }
+
+  TypedExprPtr rewriteCastExprsWithUpcastName(
+      const std::
+          multimap<std::string, std::pair<core::TypedExprPtr, std::string>>&
+              castExprs) const override {
+    return std::make_shared<ConcatTypedExpr>(
+        type()->asRow().names(),
+        rewriteCastExprsWithUpcastNameRecursive(castExprs));
   }
 
   std::string toString() const override;
@@ -499,6 +550,14 @@ class LambdaTypedExpr : public ITypedExpr {
   TypedExprPtr rewriteInputNames(
       const std::unordered_map<std::string, TypedExprPtr>& mapping)
       const override;
+
+  TypedExprPtr rewriteCastExprsWithUpcastName(
+      const std::
+          multimap<std::string, std::pair<core::TypedExprPtr, std::string>>&
+              castExprs) const override {
+    return std::make_shared<LambdaTypedExpr>(
+        signature_, body_->rewriteCastExprsWithUpcastName(castExprs));
+  }
 
   std::string toString() const override {
     return fmt::format(
@@ -568,6 +627,25 @@ class CastTypedExpr : public ITypedExpr {
         type(), rewriteInputsRecursive(mapping), isTryCast_);
   }
 
+  TypedExprPtr rewriteCastExprsWithUpcastName(
+      const std::
+          multimap<std::string, std::pair<core::TypedExprPtr, std::string>>&
+              castExprsToRewrite) const override {
+    for (auto castExprToRewrite : castExprsToRewrite) {
+      if (*castExprToRewrite.second.first == *this) {
+        VELOX_CHECK(
+            castExprToRewrite.second.first->inputs()[0]->isFieldAccessKind());
+        auto fieldAccessTypedExpr =
+            std::dynamic_pointer_cast<const core::FieldAccessTypedExpr>(
+                castExprToRewrite.second.first->inputs()[0]);
+        return std::make_shared<FieldAccessTypedExpr>(
+            castExprToRewrite.second.first->type(),
+            fieldAccessTypedExpr->name() + "_upcast");
+      }
+    }
+    return std::make_shared<CastTypedExpr>(type(), inputs(), isTryCast_);
+  }
+
   std::string toString() const override;
 
   size_t localHash() const override {
@@ -634,6 +712,16 @@ class NullIfTypedExpr : public ITypedExpr {
   TypedExprPtr rewriteInputNames(
       const std::unordered_map<std::string, TypedExprPtr>& mapping)
       const override;
+
+  TypedExprPtr rewriteCastExprsWithUpcastName(
+      const std::
+          multimap<std::string, std::pair<core::TypedExprPtr, std::string>>&
+              castExprs) const override {
+    auto rewritten = rewriteCastExprsWithUpcastNameRecursive(castExprs);
+    VELOX_CHECK_EQ(rewritten.size(), 2);
+    return std::make_shared<NullIfTypedExpr>(
+        rewritten[0], rewritten[1], commonType_);
+  }
 
   std::string toString() const override;
 
