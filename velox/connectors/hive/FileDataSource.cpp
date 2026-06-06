@@ -26,6 +26,7 @@
 #include "velox/connectors/hive/ExtractionUtils.h"
 #include "velox/connectors/hive/FileConfig.h"
 #include "velox/expression/FieldReference.h"
+#include "velox/expression/PrestoCastHooks.h"
 
 using facebook::velox::common::testutil::TestValue;
 
@@ -760,6 +761,46 @@ VectorPtr FileDataSource::applyPushdownCast(
   auto child = BaseVector::create(targetType, source->size(), pool_);
   if (isIntegral(targetType) && isIntegral(source->type())) {
     child->copy(source.get(), 0, 0, source->size());
+    return child;
+  }
+  if (source->type()->isDate() && targetType->isTimestamp()) {
+    static constexpr int64_t kMillisPerDay{86'400'000};
+    const tz::TimeZone* timeZone = nullptr;
+    if (connectorQueryCtx_->adjustTimestampToTimezone()) {
+      const auto& sessionTzName = connectorQueryCtx_->sessionTimezone();
+      if (!sessionTzName.empty()) {
+        timeZone = tz::locateZone(sessionTzName);
+      }
+    }
+    auto target = child->asFlatVector<Timestamp>();
+    DecodedVector decodedSource(*source);
+    for (vector_size_t j = 0; j < source->size(); ++j) {
+      const auto decodedIndex = decodedSource.index(j);
+      auto timestamp = Timestamp::fromMillis(
+          decodedSource.valueAt<int32_t>(decodedIndex) * kMillisPerDay);
+      if (timeZone) {
+        timestamp.toGMT(*timeZone);
+      }
+      target->set(j, timestamp);
+    }
+    return child;
+  }
+  if (source->type()->isVarchar() && targetType->isTimestamp()) {
+    const exec::PrestoCastHooks hooks(
+        connectorQueryCtx_->isLegacyCast(),
+        connectorQueryCtx_->adjustTimestampToTimezone(),
+        connectorQueryCtx_->sessionTimezone());
+    auto target = child->asFlatVector<Timestamp>();
+    DecodedVector decodedSource(*source);
+    for (vector_size_t j = 0; j < source->size(); ++j) {
+      const auto decodedIndex = decodedSource.index(j);
+      target->set(
+          j,
+          hooks
+              .castStringToTimestamp(
+                  decodedSource.valueAt<StringView>(decodedIndex))
+              .value());
+    }
     return child;
   }
   VELOX_USER_FAIL(

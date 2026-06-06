@@ -1894,10 +1894,14 @@ bool isIntegral(const TypePtr& type) {
 }
 
 bool isWideningIntegerType(const TypePtr& inputType, const TypePtr& outputType) {
-  if (!isIntegral(outputType) || !isIntegral(inputType)) {
-    return false;
+  VLOG(2) << "OutputType: " << outputType->toString() << ", InputType: " << inputType->toString();
+  if (isIntegral(outputType) && isIntegral(inputType)) {
+    if (outputType->cppSizeInBytes() < inputType->cppSizeInBytes()) {
+      return true;
+    }
   }
-  if (outputType->cppSizeInBytes() < inputType->cppSizeInBytes()) {
+
+  if (inputType->isTimestamp() && outputType->isDate()) {
     return true;
   }
   return false;

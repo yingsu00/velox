@@ -282,14 +282,7 @@ OperatorSupplier makeOperatorSupplier(const PlanNodePtr& planNode) {
 //   }
 // }
 
-bool isWideningIntegerCast(const core::TypedExprPtr& expr) {
-  auto castExpr = std::dynamic_pointer_cast<const core::CastTypedExpr>(expr);
-  if (!castExpr) {
-    return false;
-  }
-
-  auto outputType = castExpr->type();
-  auto inputType = castExpr->inputs()[0]->type();
+bool isWideningIntegerCast(const TypePtr& outputType, const TypePtr& inputType) {
   if (!isIntegral(outputType) || !isIntegral(inputType)) {
     return false;
   }
@@ -298,6 +291,37 @@ bool isWideningIntegerCast(const core::TypedExprPtr& expr) {
   }
   return false;
 }
+
+bool isWideningDateCast(const TypePtr& outputType, const TypePtr& inputType) {
+  if (outputType->isTimestamp() && inputType->isDate()) {
+    return true;
+  }
+  return false;
+}
+
+
+bool isVarcharToTimestampCast(const TypePtr& outputType, const TypePtr& inputType) {
+  if (outputType->isTimestamp() && inputType->isVarchar()) {
+    return true;
+  }
+  return false;
+}
+
+bool isWideningCastOperation(const TypePtr& outputType, const TypePtr& inputType) {
+  return isWideningIntegerCast(outputType, inputType) || isWideningDateCast(outputType, inputType) || isVarcharToTimestampCast(outputType, inputType);
+}
+
+bool isWideningCastOperation(const core::ITypedExpr& expr) {
+  if (!expr.isCastKind()) {
+    return false;
+  }
+  auto inputExpr = expr.inputs()[0];
+  if (!inputExpr->isFieldAccessKind()) {
+    return false;
+  }
+  return isWideningCastOperation(expr.type(), inputExpr->type());
+}
+
 
 void plan(
     const PlanNodePtr& planNode,
@@ -366,7 +390,7 @@ PlanNodePtr rewriteProjectNode(
 
     // Case 1: replaced by its input expression
     if (exprReplaceIdx.count(i)) {
-      VELOX_CHECK(isWideningIntegerCast(proj));
+      VELOX_CHECK(isWideningCastOperation(*proj));
       VELOX_CHECK_EQ(proj->inputs().size(), 1);
 
       auto field = std::dynamic_pointer_cast<const core::FieldAccessTypedExpr>(
@@ -566,7 +590,7 @@ NodeAnalysis preAnalyzeNode(const PlanNodePtr& node, ExprMap& exprsToPush) {
   for (int i = 0; i < names.size(); i++) {
     const auto& projection = exprs[i];
 
-    if (!isWideningIntegerCast(projection)) {
+    if (!isWideningCastOperation(*projection)) {
       continue;
     }
 
