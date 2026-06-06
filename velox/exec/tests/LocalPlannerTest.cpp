@@ -229,6 +229,48 @@ TEST_F(LocalPlannerCastPushdownTest, mixedUpcastAndPassThroughVarchar) {
       {"cast(a as BIGINT) as a_big", "b"});
 }
 
+TEST_F(LocalPlannerCastPushdownTest, elidesDeadNarrowSourceColumn) {
+  // When the narrow source column has no remaining downstream FieldAccess
+  // reference after the cast-pushdown rewrite (e.g. SELECT cast(c0 as BIGINT)
+  // FROM t — c0 is only read so the Project can apply the widening cast),
+  // the LocalPlanner drops it from the scan's output. The scan reads only
+  // the source column once and emits the widened result as "c0_upcast".
+  //
+  // Pinned via FileDataSource::kNumReaderColumns: with pushdown ON and the
+  // narrow elided the reader is asked for 1 file column; with pushdown OFF
+  // the reader is also asked for 1 (no upcast at all). The interesting case
+  // would be 2 — which is what we got before the optimization fired.
+  constexpr int32_t kSize = 100;
+  auto fileData = makeRowVector(
+      {"c0"},
+      {makeFlatVector<int32_t>(kSize, [](auto row) { return row; })});
+  auto file = TempFilePath::create();
+  writeToFile(file->getPath(), {fileData});
+
+  auto plan = PlanBuilder(pool_.get())
+                  .startTableScan()
+                  .outputType(ROW({"c0"}, {INTEGER()}))
+                  .endTableScan()
+                  .project({"cast(c0 as BIGINT) as c0_big"})
+                  .planNode();
+  const auto scanNodeId = findTableScanNodeId(plan);
+  auto task = assertResultsMatchAcrossConfig(
+      plan, {{scanNodeId, {file->getPath()}}});
+
+  // After elision the scan reads a single file column.
+  auto planStats = toPlanStats(task->taskStats());
+  auto it = planStats.find(scanNodeId);
+  ASSERT_NE(it, planStats.end());
+  auto statIt = it->second.customStats.find(
+      std::string(connector::hive::FileDataSource::kNumReaderColumns));
+  ASSERT_NE(statIt, it->second.customStats.end())
+      << "FileDataSource did not emit kNumReaderColumns runtime stat.";
+  EXPECT_EQ(statIt->second.max, 1)
+      << "Expected scan to read 1 column after eliding the dead narrow c0; "
+         "got "
+      << statIt->second.max;
+}
+
 // --- Join tests --------------------------------------------------------------
 //
 // canPushUpcastThrough() in LocalPlanner.cpp recurses through join nodes by
