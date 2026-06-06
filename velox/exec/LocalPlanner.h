@@ -23,6 +23,14 @@ struct PlanFragment;
 
 namespace facebook::velox::exec {
 
+using PlanNodePtr = std::shared_ptr<const core::PlanNode>;
+// E.g. provider_id -> (Cast(provider_id as bigint), 22). There could be
+// multiple entries for the same field name, eg. provider_id ->
+// (Cast(provider_id as bigint), 1943) because there could be multiple widening
+// integer casts on the same field on different PlanNodes in the plan.
+using ExprMap =
+    std::multimap<std::string, std::pair<core::TypedExprPtr, core::PlanNodeId>>;
+
 class LocalPlanner {
  public:
   static void plan(
@@ -31,6 +39,15 @@ class LocalPlanner {
       std::vector<std::unique_ptr<DriverFactory>>* driverFactories,
       const core::QueryConfig& queryConfig,
       uint32_t maxDrivers);
+
+  static
+  PlanNodePtr planWithCastPushdown(
+      PlanNodePtr node,
+      bool newPipeline,
+      const PlanNodePtr& consumerNode,
+      OperatorSupplier incomingSupplier,
+      std::vector<std::unique_ptr<DriverFactory>>* driverFactories,
+      ExprMap& exprsToPush);
 
   // Determine which pipelines should run Grouped Execution.
   static void determineGroupedExecutionPipelines(

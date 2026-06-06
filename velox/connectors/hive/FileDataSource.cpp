@@ -33,6 +33,11 @@ namespace facebook::velox::connector::hive {
 
 namespace {
 
+// Suffix planner appends to projection aliases that should be materialized via
+// a pushed-down widening cast (e.g. INTEGER -> BIGINT, DATE -> TIMESTAMP). The
+// underlying source column is shared with the non-suffixed projection.
+constexpr std::string_view kUpcastSuffix{"_upcast"};
+
 inline void addIoCounterMetric(
     io::IoCounter& counter,
     const std::string& key,
@@ -186,14 +191,17 @@ FileDataSource::FileDataSource(
     FileHandleFactory* fileHandleFactory,
     folly::Executor* ioExecutor,
     const ConnectorQueryCtx* connectorQueryCtx,
-    const std::shared_ptr<FileConfig>& fileConfig)
-    : fileHandleFactory_(fileHandleFactory),
+    const std::shared_ptr<FileConfig>& fileConfig,
+    bool pushdownCasts)
+    : assignments_(assignments),
+      fileHandleFactory_(fileHandleFactory),
       ioExecutor_(ioExecutor),
       connectorQueryCtx_(connectorQueryCtx),
       fileConfig_(fileConfig),
       pool_(connectorQueryCtx->memoryPool()),
       outputType_(outputType),
-      expressionEvaluator_(connectorQueryCtx->expressionEvaluator()) {
+      expressionEvaluator_(connectorQueryCtx->expressionEvaluator()),
+      pushdownCasts_(pushdownCasts) {
   tableHandle_ = checkedPointerCast<const FileTableHandle>(tableHandle);
 
   folly::F14FastMap<std::string_view, const FileColumnHandle*> columnHandles;
@@ -225,9 +233,41 @@ FileDataSource::FileDataSource(
   }
 
   std::vector<std::string> readColumnNames;
-  auto readColumnTypes = outputType_->children();
-  for (const auto& outputName : outputType_->names()) {
-    auto it = assignments.find(outputName);
+  std::vector<TypePtr> readColumnTypes;
+  readColumnNames.reserve(outputType_->size());
+  readColumnTypes.reserve(outputType_->size());
+  // For pushdownCasts_, the upcast columns share their source column with a
+  // non-upcast output and must not be passed to the file reader. We build a
+  // deduplicated read schema here and use it to drive scanSpec_ below.
+  std::vector<std::string> readColumnNamesWithoutUpcasts;
+  std::vector<TypePtr> readColumnTypesWithoutUpcasts;
+  // Column names emitted to downstream operators with the upcast suffix stripped.
+  std::vector<std::string> outputNamesWithoutUpcasts;
+  std::vector<TypePtr> outputTypesWithoutUpcasts;
+  if (pushdownCasts_) {
+    readColumnNamesWithoutUpcasts.reserve(outputType_->size());
+    readColumnTypesWithoutUpcasts.reserve(outputType_->size());
+    outputNamesWithoutUpcasts.reserve(outputType_->size());
+    outputTypesWithoutUpcasts.reserve(outputType_->size());
+  }
+
+  for (column_index_t i = 0; i < outputType_->size(); ++i) {
+    auto outputName = outputType_->nameOf(i);
+    const auto& outputColumnType = outputType_->childAt(i);
+
+    // When pushdownCasts_ is true, an "_upcast"-suffixed output column maps to
+    // the same source column as the non-upcast version. Strip the suffix to
+    // locate the corresponding ColumnHandle in assignments.
+    std::string lookupName{outputName};
+    const bool isUpcastColumn = pushdownCasts_ &&
+        outputName.size() > kUpcastSuffix.size() &&
+        outputName.ends_with(kUpcastSuffix);
+    if (isUpcastColumn) {
+      lookupName =
+          outputName.substr(0, outputName.size() - kUpcastSuffix.size());
+    }
+
+    auto it = assignments.find(lookupName);
     VELOX_CHECK(
         it != assignments.end(),
         "ColumnHandle is missing for output column: {}",
@@ -235,12 +275,22 @@ FileDataSource::FileDataSource(
 
     auto* handle = static_cast<const FileColumnHandle*>(it->second.get());
     readColumnNames.push_back(handle->name());
-    for (auto& subfield : handle->requiredSubfields()) {
-      VELOX_USER_CHECK_EQ(
-          getColumnName(subfield),
-          handle->name(),
-          "Required subfield does not match column name");
-      subfields_[handle->name()].push_back(&subfield);
+    readColumnTypes.push_back(outputColumnType);
+
+    if (!isUpcastColumn) {
+      if (pushdownCasts_) {
+        readColumnNamesWithoutUpcasts.push_back(handle->name());
+        readColumnTypesWithoutUpcasts.push_back(outputColumnType);
+        outputNamesWithoutUpcasts.emplace_back(outputName);
+        outputTypesWithoutUpcasts.push_back(outputColumnType);
+      }
+      for (auto& subfield : handle->requiredSubfields()) {
+        VELOX_USER_CHECK_EQ(
+            getColumnName(subfield),
+            handle->name(),
+            "Required subfield does not match column name");
+        subfields_[handle->name()].push_back(&subfield);
+      }
     }
     columnPostProcessors_.push_back(handle->postProcessor());
   }
@@ -285,6 +335,12 @@ FileDataSource::FileDataSource(
       // Make sure to add these columns to readerOutputType_.
       readColumnNames.push_back(input->field());
       readColumnTypes.push_back(input->type());
+      // Filter-only columns are never produced as pushdown-cast columns, so
+      // they participate in the reader's read schema in both modes.
+      if (pushdownCasts_) {
+        readColumnNamesWithoutUpcasts.push_back(input->field());
+        readColumnTypesWithoutUpcasts.push_back(input->type());
+      }
     }
     remainingFilterSubfields_ = remainingFilterExpr->extractSubfields();
     if (VLOG_IS_ON(1)) {
@@ -309,8 +365,21 @@ FileDataSource::FileDataSource(
 
   readerOutputType_ =
       ROW(std::move(readColumnNames), std::move(readColumnTypes));
+  if (pushdownCasts_) {
+    readerOutputTypeWithoutUpcasts_ = ROW(
+        std::move(readColumnNamesWithoutUpcasts),
+        std::move(readColumnTypesWithoutUpcasts));
+    outputTypeWithoutUpcasts_ = ROW(
+        std::move(outputNamesWithoutUpcasts),
+        std::move(outputTypesWithoutUpcasts));
+  }
+  // Drive scanSpec_ from the deduplicated, raw-type schema. When pushdownCasts_
+  // is false, readerOutputType_ already has the raw types and unique names so
+  // the two are equivalent.
+  const auto& scanSpecType =
+      pushdownCasts_ ? readerOutputTypeWithoutUpcasts_ : readerOutputType_;
   scanSpec_ = makeScanSpec(
-      readerOutputType_,
+      scanSpecType,
       subfields_,
       filters_,
       /*indexColumns=*/{},
@@ -327,8 +396,20 @@ FileDataSource::FileDataSource(
   }
 
   // Detect extraction columns and reconfigure scanSpec_ if needed.
+  // Extraction pushdown is not yet wired through the upcast path because both
+  // features rewrite the reader's output type; bail out if a query has both.
   bool hasExtractions = false;
   readColumnTypes = readerOutputType_->children();
+  if (pushdownCasts_) {
+    for (const auto& [_, columnHandle] : assignments) {
+      auto* handle =
+          static_cast<const FileColumnHandle*>(columnHandle.get());
+      VELOX_USER_CHECK(
+          handle->extractions().empty(),
+          "Extraction pushdown is not supported together with pushdown integer/widening casts: {}",
+          handle->name());
+    }
+  }
   for (int outputIdx = 0; outputIdx < outputType->size(); ++outputIdx) {
     const auto& outputName = outputType->nameOf(outputIdx);
     auto it = assignments.find(outputName);
@@ -484,13 +565,18 @@ void FileDataSource::configureExtractionColumns() {
 }
 
 std::unique_ptr<FileSplitReader> FileDataSource::createSplitReader() {
+  // When pushdownCasts_ is true the file reader reads raw (pre-cast) types via
+  // readerOutputTypeWithoutUpcasts_; next() applies the cast to produce
+  // outputType_.
+  const auto& splitReaderOutputType =
+      pushdownCasts_ ? readerOutputTypeWithoutUpcasts_ : readerOutputType_;
   return FileSplitReader::create(
       split_,
       tableHandle_,
       &partitionKeys_,
       connectorQueryCtx_,
       fileConfig_,
-      readerOutputType_,
+      splitReaderOutputType,
       dataIoStats_,
       metadataIoStats_,
       ioStats_,
@@ -518,7 +604,11 @@ void FileDataSource::addSplit(std::shared_ptr<ConnectorSplit> split) {
   // so we initialize it beforehand.
   splitReader_->configureReaderOptions(randomSkip_);
   splitReader_->prepareSplit(metadataFilter_, runtimeStats_);
-  readerOutputType_ = splitReader_->readerOutputType();
+  if (pushdownCasts_) {
+    readerOutputTypeWithoutUpcasts_ = splitReader_->readerOutputType();
+  } else {
+    readerOutputType_ = splitReader_->readerOutputType();
+  }
 }
 
 std::optional<RowVectorPtr> FileDataSource::next(
@@ -535,19 +625,22 @@ std::optional<RowVectorPtr> FileDataSource::next(
     return nullptr;
   }
 
-  // Subclass reader may add extra columns to reader output (e.g. for bucket
-  // conversion or delta update).
-  auto& outputRowType =
-      readerProducedType_ ? readerProducedType_ : readerOutputType_;
+  // When pushdownCasts_ is true the reader fills outputWithoutUpcasts_ using
+  // the raw, pre-cast types; the per-column materialization loop below applies
+  // the cast to produce outputType_. Otherwise read directly into output_.
+  VectorPtr& readBuffer = pushdownCasts_ ? outputWithoutUpcasts_ : output_;
+  const auto& readBufferType = pushdownCasts_
+      ? readerOutputTypeWithoutUpcasts_
+      : (readerProducedType_ ? readerProducedType_ : readerOutputType_);
   auto needsExtraColumn = [&] {
-    return output_->asUnchecked<RowVector>()->childrenSize() <
-        outputRowType->size();
+    return readBuffer->asUnchecked<RowVector>()->childrenSize() <
+        readBufferType->size();
   };
-  if (!output_ || needsExtraColumn()) {
-    output_ = BaseVector::create(outputRowType, 0, pool_);
+  if (!readBuffer || needsExtraColumn()) {
+    readBuffer = BaseVector::create(readBufferType, 0, pool_);
   }
 
-  const auto rowsScanned = splitReader_->next(size, output_);
+  const auto rowsScanned = splitReader_->next(size, readBuffer);
   completedRows_ += rowsScanned;
   if (rowsScanned == 0) {
     splitReader_->updateRuntimeStats(runtimeStats_);
@@ -556,14 +649,14 @@ std::optional<RowVectorPtr> FileDataSource::next(
   }
 
   VELOX_CHECK(
-      !output_->mayHaveNulls(), "Top-level row vector cannot have nulls");
-  auto rowsRemaining = output_->size();
+      !readBuffer->mayHaveNulls(), "Top-level row vector cannot have nulls");
+  auto rowsRemaining = readBuffer->size();
   if (rowsRemaining == 0) {
     // no rows passed the pushed down filters.
     return getEmptyOutput();
   }
 
-  auto rowVector = std::dynamic_pointer_cast<RowVector>(output_);
+  auto rowVector = std::dynamic_pointer_cast<RowVector>(readBuffer);
 
   // In case there is a remaining filter that excludes some but not all
   // rows, collect the indices of the passing rows. If there is no filter,
@@ -592,8 +685,13 @@ std::optional<RowVectorPtr> FileDataSource::next(
 
   std::vector<VectorPtr> outputColumns;
   outputColumns.reserve(outputType_->size());
-  for (int i = 0; i < outputType_->size(); ++i) {
-    auto& child = rowVector->childAt(i);
+  for (column_index_t i = 0; i < outputType_->size(); ++i) {
+    VectorPtr child;
+    if (pushdownCasts_) {
+      child = materializeOutputColumn(i, *rowVector);
+    } else {
+      child = rowVector->childAt(i);
+    }
     if (remainingIndices) {
       // Disable dictionary values caching in expression eval so that we
       // don't need to reallocate the result for every batch.
@@ -608,6 +706,59 @@ std::optional<RowVectorPtr> FileDataSource::next(
 
   return std::make_shared<RowVector>(
       pool_, outputType_, BufferPtr(nullptr), rowsRemaining, outputColumns);
+}
+
+VectorPtr FileDataSource::materializeOutputColumn(
+    column_index_t outputIdx,
+    const RowVector& rowVector) {
+  const auto outputName = outputType_->nameOf(outputIdx);
+  const auto& outputColumnType = outputType_->childAt(outputIdx);
+
+  // Locate the underlying source column in the reader's output. The reader's
+  // schema uses ColumnHandle names with the upcast suffix stripped.
+  std::string_view lookupName{outputName};
+  const bool isUpcastColumn = outputName.size() > kUpcastSuffix.size() &&
+      outputName.ends_with(kUpcastSuffix);
+  if (isUpcastColumn) {
+    lookupName.remove_suffix(kUpcastSuffix.size());
+  }
+  auto handleIt = assignments_.find(std::string{lookupName});
+  VELOX_CHECK(
+      handleIt != assignments_.end(),
+      "Cannot find column handle for output column: {}",
+      outputName);
+  const auto& sourceColumnName =
+      static_cast<const FileColumnHandle*>(handleIt->second.get())->name();
+  const auto sourceIdx =
+      readerOutputTypeWithoutUpcasts_->getChildIdxIfExists(sourceColumnName);
+  VELOX_CHECK(
+      sourceIdx.has_value(),
+      "Source column missing from reader output: {} (for output column {})",
+      sourceColumnName,
+      outputName);
+  auto sourceColumn = rowVector.childAt(*sourceIdx);
+
+  if (!isUpcastColumn) {
+    return sourceColumn;
+  }
+
+  // Apply the pushed-down widening cast in place.
+  ++numPushdownUpcasts_;
+  return applyPushdownCast(sourceColumn, outputColumnType);
+}
+
+VectorPtr FileDataSource::applyPushdownCast(
+    const VectorPtr& source,
+    const TypePtr& targetType) {
+  auto child = BaseVector::create(targetType, source->size(), pool_);
+  if (isIntegral(targetType) && isIntegral(source->type())) {
+    child->copy(source.get(), 0, 0, source->size());
+    return child;
+  }
+  VELOX_USER_FAIL(
+      "Unsupported pushdown cast: {} -> {}",
+      source->type()->toString(),
+      targetType->toString());
 }
 
 void FileDataSource::addDynamicFilter(
@@ -645,6 +796,10 @@ FileDataSource::getRuntimeStats() {
   auto res = runtimeStats_.toRuntimeMetricMap();
   addIoStatsToRuntimeStats(*dataIoStats_, "", res);
   addIoStatsToRuntimeStats(*metadataIoStats_, kMetadataPrefix, res);
+  if (numPushdownUpcasts_ > 0) {
+    res.emplace(
+        std::string(kNumPushdownUpcasts), RuntimeMetric(numPushdownUpcasts_));
+  }
   res.insert(
       {{std::string(Connector::kTotalRemainingFilterTime),
         RuntimeMetric(
@@ -679,6 +834,8 @@ void FileDataSource::setFromDataSource(
   runtimeStats_.processedSplits += source->runtimeStats_.processedSplits;
   runtimeStats_.skippedSplitBytes += source->runtimeStats_.skippedSplitBytes;
   readerOutputType_ = std::move(source->readerOutputType_);
+  readerOutputTypeWithoutUpcasts_ =
+      std::move(source->readerOutputTypeWithoutUpcasts_);
   readerProducedType_ = std::move(source->readerProducedType_);
   extractionColumns_ = std::move(source->extractionColumns_);
   source->scanSpec_->moveAdaptationFrom(*scanSpec_);

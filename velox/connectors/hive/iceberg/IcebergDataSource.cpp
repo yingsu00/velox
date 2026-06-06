@@ -28,7 +28,8 @@ IcebergDataSource::IcebergDataSource(
     FileHandleFactory* fileHandleFactory,
     folly::Executor* ioExecutor,
     const ConnectorQueryCtx* connectorQueryCtx,
-    const std::shared_ptr<HiveConfig>& hiveConfig)
+    const std::shared_ptr<HiveConfig>& hiveConfig,
+    bool pushdownCasts)
     : HiveDataSource(
           outputType,
           tableHandle,
@@ -36,7 +37,8 @@ IcebergDataSource::IcebergDataSource(
           fileHandleFactory,
           ioExecutor,
           connectorQueryCtx,
-          hiveConfig),
+          hiveConfig,
+          pushdownCasts),
       columnHandles_(std::make_shared<ColumnHandleMap>(assignments)) {}
 
 std::unique_ptr<FileSplitReader> IcebergDataSource::createSplitReader() {

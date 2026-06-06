@@ -1389,6 +1389,17 @@ class QueryConfig {
       1'000'000,
       "Max distinct values to keep when merging vector hashers in join HashBuild.")
 
+  /// If true, push down integer upcasts (e.g., INTEGER -> BIGINT) to source
+  /// operators (TableScan, Exchange) instead of evaluating them in a
+  /// downstream Project.
+  VELOX_QUERY_CONFIG(
+      kPushdownIntegerUpcastsToSource,
+      pushdownIntegerUpcastsToSource,
+      "pushdown_integer_upcasts_to_source",
+      bool,
+      false,
+      "Push down integer upcasts to source operators (TableScan, Exchange).")
+
   /// Batch size threshold for zero-copy optimization in MarkSorted operator.
   VELOX_QUERY_CONFIG(
       kMarkSortedZeroCopyThreshold,

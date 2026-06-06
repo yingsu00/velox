@@ -937,7 +937,6 @@ void readArrayVector(
   ArrayVector* arrayVector = result->as<ArrayVector>();
 
   const auto resultElementsOffset = arrayVector->elements()->size();
-
   std::vector<TypePtr> childTypes = {type->childAt(0)};
   std::vector<VectorPtr> children{arrayVector->elements()};
   readColumns(
@@ -1091,7 +1090,6 @@ void readRowVector(
 
   source->read<int32_t>(); // numChildren
   auto& children = row->children();
-
   const auto& childTypes = type->asRow().children();
   readColumns(
       source,
@@ -1316,6 +1314,8 @@ void readColumns(
     auto& columnResult = results[i];
 
     const auto encoding = readLengthPrefixedString(source);
+    //    LOG(INFO) << "Column " << i << " encoding: " << encoding;
+
     if (encoding == kRLE) {
       readConstantVector(
           source,

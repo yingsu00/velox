@@ -28,7 +28,8 @@ PaimonDataSource::PaimonDataSource(
     FileHandleFactory* fileHandleFactory,
     folly::Executor* ioExecutor,
     const ConnectorQueryCtx* connectorQueryCtx,
-    const std::shared_ptr<PaimonConfig>& paimonConfig)
+    const std::shared_ptr<PaimonConfig>& paimonConfig,
+    bool pushdownCasts)
     : FileDataSource(
           outputType,
           tableHandle,
@@ -36,7 +37,8 @@ PaimonDataSource::PaimonDataSource(
           fileHandleFactory,
           ioExecutor,
           connectorQueryCtx,
-          paimonConfig) {}
+          paimonConfig,
+          pushdownCasts) {}
 
 void PaimonDataSource::addSplit(std::shared_ptr<ConnectorSplit> split) {
   paimonSplit_ = checkedPointerCast<PaimonConnectorSplit>(split);
