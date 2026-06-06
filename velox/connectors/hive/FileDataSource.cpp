@@ -194,15 +194,19 @@ FileDataSource::FileDataSource(
     const ConnectorQueryCtx* connectorQueryCtx,
     const std::shared_ptr<FileConfig>& fileConfig,
     bool pushdownCasts)
+    // Initializer order must match the declaration order in FileDataSource.h
+    // (GCC -Werror=reorder): assignments_/fileHandleFactory_/ioExecutor_/
+    // connectorQueryCtx_/fileConfig_/pool_ (140-145), then pushdownCasts_
+    // (209), then outputType_ (256), then expressionEvaluator_ (260).
     : assignments_(assignments),
       fileHandleFactory_(fileHandleFactory),
       ioExecutor_(ioExecutor),
       connectorQueryCtx_(connectorQueryCtx),
       fileConfig_(fileConfig),
       pool_(connectorQueryCtx->memoryPool()),
+      pushdownCasts_(pushdownCasts),
       outputType_(outputType),
-      expressionEvaluator_(connectorQueryCtx->expressionEvaluator()),
-      pushdownCasts_(pushdownCasts) {
+      expressionEvaluator_(connectorQueryCtx->expressionEvaluator()) {
   tableHandle_ = checkedPointerCast<const FileTableHandle>(tableHandle);
 
   folly::F14FastMap<std::string_view, const FileColumnHandle*> columnHandles;
@@ -252,6 +256,12 @@ FileDataSource::FileDataSource(
     outputTypesWithoutUpcasts.reserve(outputType_->size());
   }
 
+  // Tracks the file-column names that have already been added to the reader's
+  // (without-upcast) read schema. When the LocalPlanner elides a narrow
+  // column whose only use was the pushed-down cast, the upcast output is the
+  // sole reference to the underlying file column and we still need to read
+  // it.
+  folly::F14FastSet<std::string> readColumnNamesWithoutUpcastsSeen;
   for (column_index_t i = 0; i < outputType_->size(); ++i) {
     auto outputName = outputType_->nameOf(i);
     const auto& outputColumnType = outputType_->childAt(i);
@@ -279,12 +289,30 @@ FileDataSource::FileDataSource(
     readColumnTypes.push_back(outputColumnType);
 
     if (!isUpcastColumn) {
-      if (pushdownCasts_) {
+      if (pushdownCasts_ &&
+          readColumnNamesWithoutUpcastsSeen.insert(handle->name()).second) {
         readColumnNamesWithoutUpcasts.push_back(handle->name());
         readColumnTypesWithoutUpcasts.push_back(outputColumnType);
         outputNamesWithoutUpcasts.emplace_back(outputName);
         outputTypesWithoutUpcasts.push_back(outputColumnType);
       }
+      for (auto& subfield : handle->requiredSubfields()) {
+        VELOX_USER_CHECK_EQ(
+            getColumnName(subfield),
+            handle->name(),
+            "Required subfield does not match column name");
+        subfields_[handle->name()].push_back(&subfield);
+      }
+    } else if (
+        pushdownCasts_ &&
+        readColumnNamesWithoutUpcastsSeen.insert(handle->name()).second) {
+      // Narrow companion was elided by the LocalPlanner. Add the source
+      // column to the read schema so the reader still produces it (with the
+      // ColumnHandle's raw dataType) — applyPushdownCast then widens it.
+      readColumnNamesWithoutUpcasts.push_back(handle->name());
+      readColumnTypesWithoutUpcasts.push_back(handle->dataType());
+      outputNamesWithoutUpcasts.emplace_back(handle->name());
+      outputTypesWithoutUpcasts.push_back(handle->dataType());
       for (auto& subfield : handle->requiredSubfields()) {
         VELOX_USER_CHECK_EQ(
             getColumnName(subfield),
@@ -840,6 +868,14 @@ FileDataSource::getRuntimeStats() {
   if (numPushdownUpcasts_ > 0) {
     res.emplace(
         std::string(kNumPushdownUpcasts), RuntimeMetric(numPushdownUpcasts_));
+  }
+  const auto& readerType = pushdownCasts_ && readerOutputTypeWithoutUpcasts_
+      ? readerOutputTypeWithoutUpcasts_
+      : readerOutputType_;
+  if (readerType) {
+    res.emplace(
+        std::string(kNumReaderColumns),
+        RuntimeMetric(static_cast<int64_t>(readerType->size())));
   }
   res.insert(
       {{std::string(Connector::kTotalRemainingFilterTime),

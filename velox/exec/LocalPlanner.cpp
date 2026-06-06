@@ -796,6 +796,230 @@ uint32_t maxDrivers(
   }
   return count;
 }
+
+// Increments refs[name] for every input-column FieldAccess reachable from
+// 'expr'. Computed expressions (FieldAccess with inputs, e.g. dereference)
+// have their inputs visited but the FieldAccess itself is not counted.
+void countFieldAccess(
+    const core::TypedExprPtr& expr,
+    folly::F14FastMap<std::string, int>& refs) {
+  if (!expr) {
+    return;
+  }
+  if (auto field =
+          std::dynamic_pointer_cast<const core::FieldAccessTypedExpr>(expr)) {
+    if (field->isInputColumn()) {
+      ++refs[field->name()];
+      return;
+    }
+  }
+  for (const auto& input : expr->inputs()) {
+    countFieldAccess(input, refs);
+  }
+}
+
+// Counts FieldAccess references in 'node's own expressions. For node types we
+// do not handle explicitly, conservatively counts every column in the node's
+// outputType as a reference so that unknown nodes never trigger an unsafe
+// elision.
+void countNodeFieldAccess(
+    const core::PlanNodePtr& node,
+    folly::F14FastMap<std::string, int>& refs) {
+  using namespace facebook::velox::core;
+  if (auto project = std::dynamic_pointer_cast<const ProjectNode>(node)) {
+    for (const auto& p : project->projections()) {
+      countFieldAccess(p, refs);
+    }
+    return;
+  }
+  if (auto filter = std::dynamic_pointer_cast<const FilterNode>(node)) {
+    countFieldAccess(filter->filter(), refs);
+    return;
+  }
+  // For join nodes, the outputLayout names act as implicit FieldAccess
+  // pass-throughs from the left/right sources — they're emitted by the join
+  // operator. We count them as references so the scan/exchange below can
+  // not elide a narrow column the join is asked to emit.
+  auto countJoinOutputPassthroughs = [&](const core::PlanNodePtr& jn) {
+    for (const auto& name : jn->outputType()->names()) {
+      for (const auto& source : jn->sources()) {
+        if (source->outputType()->containsChild(name)) {
+          ++refs[name];
+          break;
+        }
+      }
+    }
+  };
+  if (auto join = std::dynamic_pointer_cast<const AbstractJoinNode>(node)) {
+    for (const auto& key : join->leftKeys()) {
+      countFieldAccess(key, refs);
+    }
+    for (const auto& key : join->rightKeys()) {
+      countFieldAccess(key, refs);
+    }
+    countFieldAccess(join->filter(), refs);
+    countJoinOutputPassthroughs(node);
+    return;
+  }
+  if (auto nlj = std::dynamic_pointer_cast<const NestedLoopJoinNode>(node)) {
+    countFieldAccess(nlj->joinCondition(), refs);
+    countJoinOutputPassthroughs(node);
+    return;
+  }
+  if (auto orderBy = std::dynamic_pointer_cast<const OrderByNode>(node)) {
+    for (const auto& key : orderBy->sortingKeys()) {
+      countFieldAccess(key, refs);
+    }
+    return;
+  }
+  if (auto topN = std::dynamic_pointer_cast<const TopNNode>(node)) {
+    for (const auto& key : topN->sortingKeys()) {
+      countFieldAccess(key, refs);
+    }
+    return;
+  }
+  if (auto lm = std::dynamic_pointer_cast<const LocalMergeNode>(node)) {
+    for (const auto& key : lm->sortingKeys()) {
+      countFieldAccess(key, refs);
+    }
+    return;
+  }
+  if (std::dynamic_pointer_cast<const TableScanNode>(node) ||
+      std::dynamic_pointer_cast<const ExchangeNode>(node) ||
+      std::dynamic_pointer_cast<const LimitNode>(node) ||
+      std::dynamic_pointer_cast<const LocalPartitionNode>(node)) {
+    return;
+  }
+  // Unknown node type — conservatively pin every column it emits as live.
+  for (const auto& name : node->outputType()->names()) {
+    ++refs[name];
+  }
+}
+
+// Removes 'deadNarrows' from 'type' and returns the resulting RowType.
+RowTypePtr dropDeadNarrows(
+    const RowTypePtr& type,
+    const folly::F14FastSet<std::string>& deadNarrows) {
+  std::vector<std::string> names;
+  std::vector<TypePtr> types;
+  names.reserve(type->size());
+  types.reserve(type->size());
+  for (column_index_t i = 0; i < type->size(); ++i) {
+    const auto& name = type->nameOf(i);
+    if (deadNarrows.contains(name)) {
+      continue;
+    }
+    names.push_back(name);
+    types.push_back(type->childAt(i));
+  }
+  return ROW(std::move(names), std::move(types));
+}
+
+// After the cast-pushdown rewrite, walks each pipeline and identifies narrow
+// columns that have a pushed-down "_upcast" companion in some scan/exchange
+// but no remaining FieldAccess reference anywhere in the rewritten plan.
+// Those narrows are dead — the scan/exchange reads them only to discard them
+// in the next operator. Rebuilds the scan/exchange nodes with the dead
+// narrows elided, plus every downstream node that referenced the elided
+// scan/exchange via PlanNode::sources(), so the plan tree stays internally
+// consistent.
+//
+// Conservative: a column is treated as live whenever an unknown node type
+// emits it, so a missing analysis path can only cause us to over-emit, never
+// to drop a column that is actually used.
+void elideDeadNarrows(
+    std::vector<std::unique_ptr<DriverFactory>>* driverFactories) {
+  // Skip elision when the plan has cross-pipeline local-exchange nodes —
+  // safely identifying dead narrows across the LocalPartition/LocalMerge
+  // boundary requires more bookkeeping than the simple in-pipeline rebuild
+  // below, and getting it wrong corrupts the partition function spec.
+  // TODO: extend the analysis to cover LocalPartition/LocalMerge.
+  for (const auto& factory : *driverFactories) {
+    for (const auto& node : factory->planNodes) {
+      if (std::dynamic_pointer_cast<const core::LocalPartitionNode>(node) ||
+          std::dynamic_pointer_cast<const core::LocalMergeNode>(node)) {
+        return;
+      }
+    }
+  }
+
+  // 1. Count FieldAccess references across every pipeline.
+  folly::F14FastMap<std::string, int> refs;
+  for (const auto& factory : *driverFactories) {
+    for (const auto& node : factory->planNodes) {
+      countNodeFieldAccess(node, refs);
+    }
+  }
+
+  // 2. For each scan/exchange in every pipeline, determine which narrow
+  //    columns are dead. A narrow column 'X' is dead when 'X_upcast' also
+  //    appears in the same node's outputType and refs[X] == 0. Then rebuild
+  //    every node downstream (i.e., later in this factory's planNodes that
+  //    has the rebuilt node in its sources) via copyWithNewSources, so
+  //    Operator construction sees a consistent tree.
+  folly::F14FastMap<const core::PlanNode*, core::PlanNodePtr> replacements;
+  for (auto& factory : *driverFactories) {
+    for (auto& node : factory->planNodes) {
+      // First, swap any source pointer that was replaced earlier (either in
+      // this pipeline or a feeder pipeline that has been rewritten already).
+      bool sourcesChanged = false;
+      std::vector<core::PlanNodePtr> newSources;
+      newSources.reserve(node->sources().size());
+      for (const auto& src : node->sources()) {
+        auto it = replacements.find(src.get());
+        if (it != replacements.end()) {
+          newSources.push_back(it->second);
+          sourcesChanged = true;
+        } else {
+          newSources.push_back(src);
+        }
+      }
+      if (sourcesChanged) {
+        auto rebuilt = node->copyWithNewSources(std::move(newSources));
+        replacements.emplace(node.get(), rebuilt);
+        node = std::move(rebuilt);
+      }
+
+      // Then, if this is a scan/exchange that has dead narrows, elide.
+      const auto isScan =
+          std::dynamic_pointer_cast<const core::TableScanNode>(node) != nullptr;
+      const auto isExchange =
+          std::dynamic_pointer_cast<const core::ExchangeNode>(node) != nullptr;
+      if (!isScan && !isExchange) {
+        continue;
+      }
+      const auto& type = node->outputType();
+      folly::F14FastSet<std::string> deadNarrows;
+      for (column_index_t i = 0; i < type->size(); ++i) {
+        const auto& name = type->nameOf(i);
+        const auto upcastName = name + "_upcast";
+        if (!type->containsChild(upcastName)) {
+          continue;
+        }
+        if (refs[name] == 0) {
+          deadNarrows.insert(name);
+        }
+      }
+      if (deadNarrows.empty()) {
+        continue;
+      }
+      auto newType = dropDeadNarrows(type, deadNarrows);
+      core::PlanNodePtr rebuiltLeaf;
+      if (isScan) {
+        auto scan = std::dynamic_pointer_cast<const core::TableScanNode>(node);
+        core::TableScanNode::Builder builder(*scan);
+        rebuiltLeaf = builder.outputType(newType).build();
+      } else {
+        auto exch = std::dynamic_pointer_cast<const core::ExchangeNode>(node);
+        core::ExchangeNode::Builder builder(*exch);
+        rebuiltLeaf = builder.outputType(newType).build();
+      }
+      replacements.emplace(node.get(), rebuiltLeaf);
+      node = std::move(rebuiltLeaf);
+    }
+  }
+}
+
 } // namespace detail
 
 PlanNodePtr LocalPlanner::planWithCastPushdown(
@@ -924,6 +1148,11 @@ void LocalPlanner::plan(
         detail::makeOperatorSupplier(std::move(consumerSupplier)),
         driverFactories,
         exprsToBePushedDown);
+    // After the cast-pushdown rewrite, drop narrow source columns that no
+    // longer have any downstream FieldAccess reference. Without this, a
+    // query like 'SELECT cast(c0 as BIGINT) FROM t' would read 'c0' and
+    // emit it from the scan only to have the immediate Project discard it.
+    detail::elideDeadNarrows(driverFactories);
   } else {
     detail::plan(
         planFragment.planNode,
