@@ -164,6 +164,41 @@ TEST_F(LocalPlannerCastPushdownTest, smallintToBigint) {
       {"cast(c0 as BIGINT) as c0_big"});
 }
 
+TEST_F(LocalPlannerCastPushdownTest, dateToTimestamp) {
+  constexpr int32_t kSize = 200;
+  // DATE values are stored as int32 days since the epoch.
+  auto fileData = makeRowVector(
+      {"d"},
+      {makeFlatVector<int32_t>(
+          kSize,
+          [](auto row) { return row; },
+          /*isNullAt=*/nullptr,
+          DATE())});
+
+  runAndVerifyUpcast(
+      fileData,
+      ROW({"d"}, {DATE()}),
+      {"cast(d as TIMESTAMP) as d_ts"});
+}
+
+TEST_F(LocalPlannerCastPushdownTest, varcharToTimestamp) {
+  // ISO-8601 timestamp strings — what PrestoCastHooks::castStringToTimestamp
+  // accepts.
+  std::vector<std::string> values = {
+      "2024-01-01 00:00:00",
+      "2024-06-15 12:30:45",
+      "2025-12-31 23:59:59",
+      "1970-01-01 00:00:00",
+  };
+  auto fileData = makeRowVector(
+      {"s"}, {makeFlatVector<std::string>(values)});
+
+  runAndVerifyUpcast(
+      fileData,
+      ROW({"s"}, {VARCHAR()}),
+      {"cast(s as TIMESTAMP) as s_ts"});
+}
+
 TEST_F(LocalPlannerCastPushdownTest, mixedUpcastAndPassThroughInteger) {
   // Project an upcast column alongside an untouched BIGINT. Verifies that
   // non-upcast columns are still read correctly when pushdownCasts_ is on.

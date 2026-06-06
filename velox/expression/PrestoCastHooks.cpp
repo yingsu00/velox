@@ -26,17 +26,20 @@
 
 namespace facebook::velox::exec {
 
-PrestoCastHooks::PrestoCastHooks(const core::QueryConfig& config)
-    : CastHooks(), legacyCast_(config.isLegacyCast()) {
+PrestoCastHooks::PrestoCastHooks(bool isLegacyCast, bool adjustTimestampToTimezone, const std::string& sessionTimezone)
+    : CastHooks(), legacyCast_(isLegacyCast) {
   if (!legacyCast_) {
     options_.zeroPaddingYear = true;
     options_.dateTimeSeparator = ' ';
-    const auto sessionTzName = config.sessionTimezone();
-    if (config.adjustTimestampToTimezone() && !sessionTzName.empty()) {
+    const auto sessionTzName = sessionTimezone;
+    if (adjustTimestampToTimezone && !sessionTzName.empty()) {
       options_.timeZone = tz::locateZone(sessionTzName);
     }
   }
 }
+
+PrestoCastHooks::PrestoCastHooks(const core::QueryConfig& config)
+    : PrestoCastHooks(config.isLegacyCast(), config.adjustTimestampToTimezone(), config.sessionTimezone()) {}
 
 Expected<Timestamp> PrestoCastHooks::castStringToTimestamp(
     const StringView& view) const {

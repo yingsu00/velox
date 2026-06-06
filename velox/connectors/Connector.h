@@ -461,7 +461,8 @@ class ConnectorQueryCtx {
       const std::string& sessionTimezone,
       bool adjustTimestampToTimezone = false,
       folly::CancellationToken cancellationToken = {},
-      std::shared_ptr<filesystems::TokenProvider> tokenProvider = {})
+      std::shared_ptr<filesystems::TokenProvider> tokenProvider = {},
+      bool isLegacyCast = false)
       : operatorPool_(operatorPool),
         connectorPool_(connectorPool),
         sessionProperties_(sessionProperties),
@@ -477,7 +478,8 @@ class ConnectorQueryCtx {
         sessionTimezone_(sessionTimezone),
         adjustTimestampToTimezone_(adjustTimestampToTimezone),
         cancellationToken_(std::move(cancellationToken)),
-        fsTokenProvider_(std::move(tokenProvider)) {
+        fsTokenProvider_(std::move(tokenProvider)),
+        isLegacyCast_(isLegacyCast) {
     VELOX_CHECK_NOT_NULL(sessionProperties);
   }
 
@@ -552,6 +554,10 @@ class ConnectorQueryCtx {
     return adjustTimestampToTimezone_;
   }
 
+  bool isLegacyCast() const {
+    return isLegacyCast_;
+  }
+
   /// Returns the cancellation token associated with this task.
   const folly::CancellationToken& cancellationToken() const {
     return cancellationToken_;
@@ -599,6 +605,7 @@ class ConnectorQueryCtx {
   bool selectiveNimbleReaderEnabled_{false};
   core::QueryConfig::RowSizeTrackingMode rowSizeTrackingEnabled_{
       core::QueryConfig::RowSizeTrackingMode::ENABLED_FOR_ALL};
+  bool isLegacyCast_;
 };
 
 class Connector;
