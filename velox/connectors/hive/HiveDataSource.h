@@ -34,7 +34,8 @@ class HiveDataSource : public FileDataSource {
       FileHandleFactory* fileHandleFactory,
       folly::Executor* ioExecutor,
       const ConnectorQueryCtx* connectorQueryCtx,
-      const std::shared_ptr<HiveConfig>& hiveConfig);
+      const std::shared_ptr<HiveConfig>& hiveConfig,
+      bool pushdownCasts = false);
 
   std::unordered_map<std::string, RuntimeMetric> getRuntimeStats() override;
 

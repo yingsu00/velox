@@ -56,7 +56,8 @@ std::unique_ptr<DataSource> IcebergConnector::createDataSource(
     const RowTypePtr& outputType,
     const ConnectorTableHandlePtr& tableHandle,
     const ColumnHandleMap& columnHandles,
-    ConnectorQueryCtx* connectorQueryCtx) {
+    ConnectorQueryCtx* connectorQueryCtx,
+    bool pushdownCasts) {
   return std::make_unique<IcebergDataSource>(
       outputType,
       tableHandle,
@@ -64,7 +65,8 @@ std::unique_ptr<DataSource> IcebergConnector::createDataSource(
       &fileHandleFactory_,
       ioExecutor_,
       connectorQueryCtx,
-      hiveConfig_);
+      hiveConfig_,
+      pushdownCasts);
 }
 
 std::unique_ptr<DataSink> IcebergConnector::createDataSink(

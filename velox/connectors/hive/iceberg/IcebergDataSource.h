@@ -35,7 +35,8 @@ class IcebergDataSource : public HiveDataSource {
       FileHandleFactory* fileHandleFactory,
       folly::Executor* ioExecutor,
       const ConnectorQueryCtx* connectorQueryCtx,
-      const std::shared_ptr<HiveConfig>& hiveConfig);
+      const std::shared_ptr<HiveConfig>& hiveConfig,
+      bool pushdownCasts = false);
 
  protected:
   /// Creates an IcebergSplitReader for reading Iceberg data files.

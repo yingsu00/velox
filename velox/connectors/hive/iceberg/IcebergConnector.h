@@ -43,7 +43,8 @@ class IcebergConnector final : public HiveConnector {
       const RowTypePtr& outputType,
       const ConnectorTableHandlePtr& tableHandle,
       const ColumnHandleMap& columnHandles,
-      ConnectorQueryCtx* connectorQueryCtx) override;
+      ConnectorQueryCtx* connectorQueryCtx,
+      bool pushdownCasts = false) override;
 
   /// Creates IcebergDataSink for writing to Iceberg tables.
   ///

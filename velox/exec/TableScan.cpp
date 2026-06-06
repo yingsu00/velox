@@ -32,9 +32,10 @@ std::unique_ptr<connector::DataSource> createDataSource(
     const RowTypePtr& outputType,
     const connector::ConnectorTableHandlePtr& tableHandle,
     const connector::ColumnHandleMap& columnHandles,
-    connector::ConnectorQueryCtx* connectorQueryCtx) {
+    connector::ConnectorQueryCtx* connectorQueryCtx,
+    bool pushdownCasts) {
   auto dataSource = connector.createDataSource(
-      outputType, tableHandle, columnHandles, connectorQueryCtx);
+      outputType, tableHandle, columnHandles, connectorQueryCtx, pushdownCasts);
   auto* staticFilters = dataSource->getFilters();
   if (!staticFilters) {
     VELOX_CHECK(!connector.canAddDynamicFilter());
@@ -52,7 +53,11 @@ std::unique_ptr<connector::DataSource> createDataSource(
   auto lk = pushdownFilters.wlock();
   if (!lk->staticFiltersInitialized) {
     for (column_index_t i = 0, size = outputType->size(); i < size; ++i) {
-      auto handle = columnHandles.find(outputType->nameOf(i));
+      std::string columnName = outputType->nameOf(i);
+      if (columnName.ends_with("_upcast")) {
+        columnName = columnName.substr(0, columnName.size() - 7);
+      }
+      auto handle = columnHandles.find(columnName);
       VELOX_CHECK(handle != columnHandles.end());
       auto field = common::Subfield::create(handle->second->name());
       if (auto it = staticFilters->find(*field); it != staticFilters->end()) {
@@ -371,7 +376,8 @@ bool TableScan::getSplit() {
         outputType_,
         tableHandle_,
         columnHandles_,
-        connectorQueryCtx_.get());
+        connectorQueryCtx_.get(),
+        driverCtx_->queryConfig().pushdownIntegerUpcastsToSource());
     if (const auto& callback =
             operatorCtx_->driverCtx()->task->queryCtx()->scanBatchCallback()) {
       dataSource_->setScanBatchCallback(callback);
@@ -465,6 +471,8 @@ void TableScan::preload(
            split->connectorId, planNodeId(), connectorPool_),
        task = operatorCtx_->task(),
        pushdownFilters = driverCtx_->driver->pushdownFilters(),
+       pushdownCasts =
+           driverCtx_->queryConfig().pushdownIntegerUpcastsToSource(),
        split]() -> std::unique_ptr<connector::DataSource> {
         if (task->isCancelled()) {
           return nullptr;
@@ -483,7 +491,8 @@ void TableScan::preload(
             type,
             table,
             columns,
-            ctx.get());
+            ctx.get(),
+            pushdownCasts);
         if (task->isCancelled()) {
           return nullptr;
         }

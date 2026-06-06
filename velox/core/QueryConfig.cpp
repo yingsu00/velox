@@ -253,6 +253,9 @@ const std::vector<config::ConfigProperty>& QueryConfig::registeredProperties() {
     // Join build.
     VELOX_REGISTER_QUERY_CONFIG(kJoinBuildVectorHasherMaxNumDistinct);
 
+    // Pushdown integer upcasts to source operators.
+    VELOX_REGISTER_QUERY_CONFIG(kPushdownIntegerUpcastsToSource);
+
     // Mark sorted.
     VELOX_REGISTER_QUERY_CONFIG(kMarkSortedZeroCopyThreshold);
 

@@ -60,6 +60,7 @@ set(
   # group0 (~784s): IndexLookupJoinTest 783 + 9 lightweight
   IndexLookupJoinTest.cpp
   ConcatFilesSpillMergeStreamTest.cpp
+  LocalPlannerTest.cpp
   MixedUnionWithTableScanTest.cpp
   MemoryReclaimerTest.cpp
   EnforceDistinctTest.cpp
