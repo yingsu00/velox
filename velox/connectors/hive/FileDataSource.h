@@ -76,6 +76,14 @@ class FileDataSource : public DataSource {
   /// the downstream Project.
   static constexpr std::string_view kNumPushdownUpcasts{"numPushdownUpcasts"};
 
+  /// Number of distinct file columns the underlying reader was asked to read
+  /// for this scan, i.e. readerOutputTypeWithoutUpcasts_->size() when
+  /// pushdownCasts_ is true, otherwise readerOutputType_->size(). Lets tests
+  /// observe the LocalPlanner narrow-column elision optimization — a query
+  /// like 'SELECT cast(c0 as BIGINT) FROM t' should read only one column
+  /// (c0, returned as BIGINT) when the optimization fires.
+  static constexpr std::string_view kNumReaderColumns{"numReaderColumns"};
+
   FileDataSource(
       const RowTypePtr& outputType,
       const connector::ConnectorTableHandlePtr& tableHandle,
