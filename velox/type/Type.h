@@ -2664,7 +2664,6 @@ std::string stringifyTruncatedElementList(
 bool isIntegral(const TypePtr& type);
 
 bool isWideningIntegerType(const TypePtr& inputType, const TypePtr& outputType);
-
 } // namespace facebook::velox
 
 namespace std {
