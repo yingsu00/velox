@@ -1345,6 +1345,23 @@ void Expr::evalWithMemo(
         dictionaryCache_->resize(uncached->end());
       }
       dictionaryCache_->copy(result.get(), *uncached, nullptr);
+
+      // Bound the number of string buffers held by `dictionaryCache_`. The
+      // copy above calls acquireSharedStringBuffers, which appends the fresh
+      // string buffer produced this batch by the evaluated expression. For a
+      // stable dictionary base (e.g. CAST(date_col AS VARCHAR) on a low-
+      // cardinality partition column) the cache is never reset, so the
+      // buffer count would otherwise grow by one per batch and turn each
+      // subsequent `result->copy(dictionaryCache_, ...)` into an O(buffers)
+      // operation - O(batches^2) total. Compacting consolidates live string
+      // bytes into a single buffer; the amortized cost is bounded by the
+      // total live byte count in the cache.
+      constexpr int32_t kStringBufferCompactThreshold = 8;
+      if (auto* flat = dictionaryCache_->asFlatVector<StringView>()) {
+        if (flat->stringBuffers().size() > kStringBufferCompactThreshold) {
+          flat->compactStringBuffers();
+        }
+      }
     }
   }
   context.releaseVector(base);

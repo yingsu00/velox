@@ -2412,6 +2412,71 @@ TEST_F(VectorTest, acquireSharedStringBuffers) {
   ASSERT_NO_THROW(flatVector->acquireSharedStringBuffers(unkownVector.get()));
 }
 
+TEST_F(VectorTest, compactStringBuffers) {
+  // Build a vector whose StringViews point into five distinct buffers, then
+  // verify compactStringBuffers consolidates them into a single buffer while
+  // preserving values, inline entries, and nulls.
+  const std::vector<std::string> values = {
+      "long-string-value-zero",
+      "long-string-value-one",
+      "long-string-value-two",
+      "long-string-value-three",
+      "long-string-value-four",
+  };
+  const int32_t kInlineRow = 5;
+  const int32_t kNullRow = 6;
+  const int32_t kRows = 7;
+  const std::string kInline = "ab";
+
+  std::vector<BufferPtr> buffers;
+  for (const auto& v : values) {
+    auto buffer = AlignedBuffer::allocate<char>(v.size(), pool());
+    memcpy(buffer->asMutable<char>(), v.data(), v.size());
+    buffer->setSize(v.size());
+    buffers.push_back(buffer);
+  }
+
+  auto vector = BaseVector::create(VARCHAR(), kRows, pool());
+  auto* flat = vector->as<FlatVector<StringView>>();
+  flat->setStringBuffers(buffers);
+  auto* raw = flat->mutableRawValues();
+  for (size_t i = 0; i < values.size(); ++i) {
+    raw[i] = StringView(buffers[i]->as<char>(), buffers[i]->size());
+  }
+  raw[kInlineRow] = StringView(kInline);
+  flat->setNull(kNullRow, true);
+
+  ASSERT_EQ(flat->stringBuffers().size(), values.size());
+
+  flat->compactStringBuffers();
+
+  EXPECT_EQ(flat->stringBuffers().size(), 1);
+  for (size_t i = 0; i < values.size(); ++i) {
+    EXPECT_FALSE(flat->isNullAt(i));
+    EXPECT_EQ(flat->valueAt(i), StringView(values[i]));
+  }
+  EXPECT_EQ(flat->valueAt(kInlineRow), StringView(kInline));
+  EXPECT_TRUE(flat->isNullAt(kNullRow));
+
+  size_t expectedBytes = 0;
+  for (const auto& v : values) {
+    expectedBytes += v.size();
+  }
+  EXPECT_EQ(flat->stringBuffers()[0]->size(), expectedBytes);
+
+  // All-inline / all-null compaction drops the buffers entirely.
+  flat->setStringBuffers(buffers);
+  ASSERT_EQ(flat->stringBuffers().size(), values.size());
+  for (size_t i = 0; i < values.size(); ++i) {
+    raw[i] = StringView(kInline);
+  }
+  flat->compactStringBuffers();
+  EXPECT_TRUE(flat->stringBuffers().empty());
+  for (size_t i = 0; i < values.size(); ++i) {
+    EXPECT_EQ(flat->valueAt(i), StringView(kInline));
+  }
+}
+
 TEST_F(VectorTest, acquireSharedStringBuffersRecursive) {
   auto vector = BaseVector::create(VARCHAR(), 100, pool());
   auto flatVector = vector->as<FlatVector<StringView>>();

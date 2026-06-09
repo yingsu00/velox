@@ -480,6 +480,20 @@ class FlatVector final : public SimpleVector<T> {
   /// lazy.
   void acquireSharedStringBuffersRecursive(const BaseVector* source);
 
+  /// Consolidates the bytes referenced by all non-null, non-inline
+  /// StringViews into a single freshly-allocated buffer and rewrites the
+  /// StringViews to point into it. Releases references to the old string
+  /// buffers. Inline StringViews and null entries are not touched.
+  ///
+  /// Intended for long-lived VARCHAR/VARBINARY vectors that accumulate
+  /// string buffers via acquireSharedStringBuffers (for example
+  /// Expr::dictionaryCache_ in evalWithMemo). The operation copies the
+  /// live bytes once: O(length + sum_of_live_string_bytes).
+  ///
+  /// Requires that values_ is uniquely owned and writable. No-op for
+  /// non-string types.
+  void compactStringBuffers() {}
+
   /// This API is available only for string vectors (T = StringView).
   /// Prefer getRawStringBufferWithSpace(bytes) API as it is easier to use
   /// safely.
@@ -671,6 +685,9 @@ char* FlatVector<StringView>::getRawStringBufferWithSpace(
 
 template <>
 void FlatVector<StringView>::prepareForReuse();
+
+template <>
+void FlatVector<StringView>::compactStringBuffers();
 
 template <>
 VectorPtr FlatVector<StringView>::testingCopyPreserveEncodings(

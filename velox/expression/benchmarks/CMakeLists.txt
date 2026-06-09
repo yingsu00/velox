@@ -58,3 +58,6 @@ target_compile_definitions(
 
 add_executable(velox_benchmark_variadic VariadicBenchmark.cpp)
 target_link_libraries(velox_benchmark_variadic ${BENCHMARK_DEPENDENCIES})
+
+add_executable(velox_benchmark_memo MemoBenchmark.cpp)
+target_link_libraries(velox_benchmark_memo ${BENCHMARK_DEPENDENCIES})

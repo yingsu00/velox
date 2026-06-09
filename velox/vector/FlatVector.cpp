@@ -242,6 +242,57 @@ void FlatVector<StringView>::acquireSharedStringBuffersRecursive(
 }
 
 template <>
+void FlatVector<StringView>::compactStringBuffers() {
+  if (stringBuffers_.empty()) {
+    return;
+  }
+
+  // Total bytes referenced by non-null, non-inline StringViews.
+  size_t totalBytes = 0;
+  for (vector_size_t i = 0; i < BaseVector::length_; ++i) {
+    if (BaseVector::isNullAt(i)) {
+      continue;
+    }
+    const auto& view = rawValues_[i];
+    if (!view.isInline()) {
+      totalBytes += view.size();
+    }
+  }
+
+  if (totalBytes == 0) {
+    // All live strings are inline or null; the buffers hold nothing reachable.
+    stringBuffers_.clear();
+    stringBufferSet_.clear();
+    return;
+  }
+
+  // Allocate a single buffer sized to the live bytes and copy strings in.
+  BufferPtr newBuffer = AlignedBuffer::allocate<char>(totalBytes, pool());
+  newBuffer->setSize(totalBytes);
+  char* const base = newBuffer->asMutable<char>();
+  size_t offset = 0;
+  for (vector_size_t i = 0; i < BaseVector::length_; ++i) {
+    if (BaseVector::isNullAt(i)) {
+      continue;
+    }
+    auto& view = rawValues_[i];
+    if (view.isInline()) {
+      continue;
+    }
+    const auto size = view.size();
+    memcpy(base + offset, view.data(), size);
+    view = StringView(base + offset, size);
+    offset += size;
+  }
+  VELOX_DCHECK_EQ(offset, totalBytes);
+
+  stringBuffers_.clear();
+  stringBufferSet_.clear();
+  stringBuffers_.push_back(std::move(newBuffer));
+  stringBufferSet_.insert(stringBuffers_.back().get());
+}
+
+template <>
 void FlatVector<StringView>::copy(
     const BaseVector* source,
     const SelectivityVector& rows,

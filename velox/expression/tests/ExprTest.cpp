@@ -2576,6 +2576,53 @@ TEST_F(ExprTest, memo) {
   VELOX_CHECK_EQ(base.use_count(), 1);
 }
 
+// Regression test for unbounded growth of Expr::dictionaryCache_'s string
+// buffer list. For a stable dictionary base (e.g. partition column) where
+// each batch reveals a few new unique base values, the cache would acquire a
+// new string buffer per batch, turning subsequent
+// result->copy(dictionaryCache_, ...) into an O(buffers) operation per batch.
+// The fix bounds the buffer count by compacting once it crosses a threshold.
+TEST_F(ExprTest, memoStringBufferAccumulation) {
+  // Base cardinality larger than the number of batches so each batch keeps
+  // discovering new uncached values.
+  constexpr int32_t kBaseSize = 1'000;
+  constexpr int32_t kBatchSize = 128;
+  constexpr int32_t kNumBatches = 50;
+  constexpr int32_t kShift = 10;
+
+  auto base = makeFlatVector<int64_t>(
+      kBaseSize, [](auto row) { return 1'000'000 + row; });
+  auto rowType = ROW({"c0"}, {base->type()});
+  auto exprSet = compileExpression("cast(c0 as varchar)", rowType);
+
+  size_t maxStringBuffers = 0;
+  for (int32_t batch = 0; batch < kNumBatches; ++batch) {
+    const int32_t offset = batch * kShift;
+    auto indices = makeIndices(
+        kBatchSize, [&](auto row) { return (row + offset) % kBaseSize; });
+    auto input = makeRowVector({wrapInDictionary(indices, kBatchSize, base)});
+    auto result = evaluate(exprSet.get(), input);
+
+    std::vector<std::string> expectedStrings(kBatchSize);
+    for (int32_t row = 0; row < kBatchSize; ++row) {
+      expectedStrings[row] =
+          std::to_string(1'000'000 + ((row + offset) % kBaseSize));
+    }
+    auto expected = makeFlatVector<std::string>(expectedStrings);
+    assertEqualVectors(expected, result);
+
+    auto* flat = result->wrappedVector()->asFlatVector<StringView>();
+    ASSERT_NE(flat, nullptr);
+    maxStringBuffers = std::max(maxStringBuffers, flat->stringBuffers().size());
+  }
+
+  // Compaction threshold is 8 and one fresh buffer is allocated per batch by
+  // the cast evaluation, so the observed flat-result buffer count should stay
+  // around the threshold (well below kNumBatches). Without the fix this would
+  // grow to ~kNumBatches.
+  EXPECT_LE(maxStringBuffers, 16u);
+}
+
 // This test triggers the situation when peelEncodings() produces an empty
 // selectivity vector, which if passed to evalWithMemo() causes the latter to
 // produce null Expr::dictionaryCache_, which leads to a crash in evaluation
