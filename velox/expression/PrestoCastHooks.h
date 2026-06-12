@@ -76,6 +76,15 @@ class PrestoCastHooks final : public CastHooks {
     return false;
   }
 
+  /// Specialized vector-level DATE -> TIMESTAMP path that inlines
+  /// Timestamp::toGMT directly, avoiding the per-row virtual call
+  /// through castDateTimestampToGMT.
+  void castDateToTimestampVector(
+      const SelectivityVector& rows,
+      const SimpleVector<int32_t>& input,
+      FlatVector<Timestamp>& result,
+      const tz::TimeZone* timeZone) const override;
+
  private:
   const bool legacyCast_;
   TimestampToStringOptions options_ = {
