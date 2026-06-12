@@ -1293,6 +1293,64 @@ void Expr::evalWithMemo(
 
   ++baseOfDictionaryRepeats_;
 
+  // Eager full-base fill: on the second (or later) sighting of a stable
+  // base, expressions whose per-row cost is trivial (see
+  // isCheapToReevaluate, currently CastExpr's fast numeric upcasts) gain
+  // by paying one full-base compute once and turning every subsequent
+  // batch over this base into an O(1) dictionary wrap of the cache. The
+  // alternative incremental path below allocates a fresh `result`,
+  // copies cached values into it, evaluates uncached rows, and copies
+  // back into the cache every batch - all of which is more work per
+  // batch than the cast itself for these types.
+  //
+  // Only fires when isCheapToReevaluate() is true so we never surface
+  // errors from base positions that the caller did not request - the
+  // fast upcast path is non-throwing by construction.
+  if (isCheapToReevaluate()) {
+    const auto baseSize = base->size();
+    LocalSelectivityVector toFillHolder(context, baseSize);
+    auto* toFill = toFillHolder.get();
+    toFill->setAll();
+    if (cachedDictionaryIndices_->size() > 0) {
+      toFill->deselect(*cachedDictionaryIndices_);
+    }
+    if (toFill->hasSelections()) {
+      if (dictionaryCache_->size() < baseSize) {
+        dictionaryCache_->resize(baseSize);
+      }
+      if (cachedDictionaryIndices_->size() < baseSize) {
+        cachedDictionaryIndices_->resize(baseSize, false);
+      }
+      LocalSelectivityVector writableHolder(context, baseSize);
+      auto* writable = writableHolder.get();
+      writable->setAll();
+      writable->deselect(*cachedDictionaryIndices_);
+      context.ensureWritable(*writable, type(), dictionaryCache_);
+
+      // Evaluate the cast on every uncached base position and write the
+      // results directly into the cache. ScopedFinalSelectionSetter
+      // widens the finalSelection so the child evaluator does not
+      // narrow back to `rows`.
+      ScopedFinalSelectionSetter scopedFinalSelectionSetter(
+          context, &rows, /*newFinalSelection=*/true);
+      VectorPtr fillResult;
+      evalWithNulls(*toFill, context, fillResult);
+      context.deselectErrors(*toFill);
+      if (toFill->hasSelections()) {
+        dictionaryCache_->copy(fillResult.get(), *toFill, nullptr);
+        cachedDictionaryIndices_->select(*toFill);
+      }
+      context.releaseVector(fillResult);
+    }
+    // Hand back the (now-complete-for-this-base) cache as the peeled
+    // result. evalEncodings re-wraps with the original dictionary
+    // indices; subsequent batches with the same base hit this branch
+    // again with `toFill` empty and return in O(1).
+    result = dictionaryCache_;
+    context.releaseVector(base);
+    return;
+  }
+
   if (cachedDictionaryIndices_) {
     LocalSelectivityVector cachedHolder(context, rows);
     auto cached = cachedHolder.get();
