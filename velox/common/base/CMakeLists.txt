@@ -88,6 +88,14 @@ velox_link_libraries(
   PRIVATE velox_caching velox_common_compression velox_process velox_test_util glog::glog
 )
 
+# YyFlexLexerShim.cpp needs the FlexLexer.h that matches the FLEX_EXECUTABLE
+# located by find_package(FLEX). On macOS the SDK ships a FlexLexer.h whose
+# LexerInput/LexerOutput take size_t (not the int signatures the shim uses),
+# so without this the shim fails to compile against the SDK header.
+if(FLEX_INCLUDE_DIR)
+  target_include_directories(velox_common_base PRIVATE ${FLEX_INCLUDE_DIR})
+endif()
+
 if(${VELOX_BUILD_TESTING})
   add_subdirectory(tests)
 endif()
