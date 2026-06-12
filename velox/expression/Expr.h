@@ -327,6 +327,22 @@ class Expr {
     return false;
   }
 
+  /// Returns true if recomputing this expression on the peeled base is
+  /// cheap enough that proactively evaluating all uncached base positions
+  /// (rather than only the rows touched by the current input vector) is
+  /// a net win once the dictionary cache becomes complete. Used by
+  /// Expr::evalWithMemo's eager-fill path: on the second sighting of a
+  /// stable dictionary base, an expression that opts in pays the cost of
+  /// filling every base position once and turns every subsequent batch
+  /// over that base into an O(1) dictionary wrap of the cache (no
+  /// per-batch peel, evaluate, result allocation, or copy). Defaults to
+  /// false. Overridden by CastExpr to return true for fast numeric
+  /// upcasts (e.g. INT->BIGINT, REAL->DOUBLE) where the per-row cost is
+  /// a single static_cast.
+  virtual bool isCheapToReevaluate() const {
+    return false;
+  }
+
   bool hasConditionals() const {
     return hasConditionals_;
   }
