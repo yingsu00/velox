@@ -1064,13 +1064,36 @@ Expr::PeelEncodingsResult Expr::peelEncodings(
     return Expr::PeelEncodingsResult::empty();
   }
 
+  // Hot-cache bypass: when dictionaryCache_ already covers every
+  // position of the peeled base from a previous batch over the same
+  // base, the subsequent evalWithMemo call would just return the
+  // cached vector and never look at the inner rows. Skip both
+  // translateToInnerRows calls entirely - they would otherwise walk
+  // every selected outer row to (re)build a SelectivityVector that
+  // nothing reads. Signal the bypass through the result so
+  // evalEncodings wraps the cache directly without calling
+  // evalWithMemo.
+  bool cacheCoversBase = false;
+  if (context.dictionaryMemoizationEnabled() && distinctFields_.size() == 1 &&
+      peeledEncoding->wrapEncoding() == VectorEncoding::Simple::DICTIONARY &&
+      !peeledVectors[0]->memoDisabled() && isCheapToReevaluate() &&
+      baseOfDictionaryRawPtr_ == peeledVectors[0].get() &&
+      !baseOfDictionaryWeakPtr_.expired() && cachedDictionaryIndices_ != nullptr &&
+      cachedDictionaryIndices_->countSelected() >=
+          static_cast<vector_size_t>(peeledVectors[0]->size())) {
+    cacheCoversBase = true;
+  }
+
   // Translate the relevant rows.
   SelectivityVector* newFinalSelection = nullptr;
-  if (!context.isFinalSelection()) {
-    newFinalSelection = peeledEncoding->translateToInnerRows(
-        *context.finalSelection(), finalRowsHolder);
+  SelectivityVector* newRows = nullptr;
+  if (!cacheCoversBase) {
+    if (!context.isFinalSelection()) {
+      newFinalSelection = peeledEncoding->translateToInnerRows(
+          *context.finalSelection(), finalRowsHolder);
+    }
+    newRows = peeledEncoding->translateToInnerRows(rows, newRowsHolder);
   }
-  auto newRows = peeledEncoding->translateToInnerRows(rows, newRowsHolder);
 
   // Save context and set the peel, peeled fields and final selection (if
   // applicable).
@@ -1095,7 +1118,7 @@ Expr::PeelEncodingsResult Expr::peelEncodings(
 
   common::testutil::TestValue::adjust(
       "facebook::velox::exec::Expr::peelEncodings::mayCache", &mayCache);
-  return {newRows, finalRowsHolder.get(), mayCache};
+  return {newRows, finalRowsHolder.get(), mayCache, cacheCoversBase};
 }
 
 void Expr::evalEncodings(
@@ -1127,8 +1150,15 @@ void Expr::evalEncodings(
             decodedHolder,
             newRowsHolder,
             finalRowsHolder);
-        auto* newRows = peelEncodingsResult.newRows;
-        if (newRows) {
+        if (peelEncodingsResult.cacheCoversBase) {
+          // peelEncodings detected that dictionaryCache_ is already
+          // populated for the whole peeled base and skipped
+          // translateToInnerRows. Wrap the cache directly without
+          // running evalWithMemo/evalWithNulls - they would just
+          // return dictionaryCache_ anyway.
+          wrappedResult = context.getPeeledEncoding()->wrap(
+              this->type(), context.pool(), dictionaryCache_, rows);
+        } else if (auto* newRows = peelEncodingsResult.newRows) {
           VectorPtr peeledResult;
           // peelEncodings() can potentially produce an empty selectivity
           // vector if all selected values we are waiting for are nulls. So,
