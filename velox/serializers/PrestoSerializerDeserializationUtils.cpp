@@ -266,6 +266,19 @@ void readDictionaryVectorStructNulls(
 
 void checkTypeEncoding(std::string_view encoding, const TypePtr& type) {
   const auto kindEncoding = typeToEncodingName(type);
+  // PushDownWidenCast diagnostic: log every encoding-mismatch BEFORE we throw,
+  // so the worker stderr captures the (encoding, requested-type) pair and a
+  // backtrace pointer even when the runtime swallows the stack. Tag the line
+  // with [PDWC-debug] to make it easy to grep out. Remove once we stop
+  // chasing  "Expected LONG_ARRAY. Got INT_ARRAY"  in the field.
+  if (encoding != kindEncoding) {
+    LOG(ERROR) << "[PDWC-debug] checkTypeEncoding mismatch: "
+               << "requestedKind=" << type->kindName()
+               << " requestedType=" << type->toString()
+               << " requestedTypeIsDate=" << (type->isDate() ? 1 : 0)
+               << " kindEncoding=" << kindEncoding
+               << " gotEncoding=" << encoding;
+  }
   VELOX_USER_CHECK(
       encoding == kindEncoding,
       "Serialized encoding is not compatible with requested type: {}. Expected {}. Got {}.",
@@ -319,7 +332,16 @@ void readStructNullsColumns(
       // right number of *source* bytes here so the next pass can deserialize
       // with the matching `tryReadWidenedColumn` path. Without this, the
       // checkTypeEncoding call below throws on the first (null-tracking) pass.
+      const auto kindEncodingDbg = typeToEncodingName(columnType);
+      if (encoding != kindEncodingDbg) {
+        LOG(ERROR) << "[PDWC-debug] readStructNullsColumns mismatch: i=" << i
+                   << " requestedKind=" << columnType->kindName()
+                   << " kindEncoding=" << kindEncodingDbg
+                   << " gotEncoding=" << encoding;
+      }
       if (tryStructNullsSkipWidened(encoding, columnType, source, scratch)) {
+        LOG(ERROR) << "[PDWC-debug] readStructNullsColumns: widening SKIPPED bytes for "
+                   << columnType->kindName() << " from " << encoding;
         continue;
       }
       checkTypeEncoding(encoding, columnType);
@@ -1560,6 +1582,11 @@ void readColumns(
     } else {
       auto typeToEncoding = typeToEncodingName(columnType);
       if (encoding != typeToEncoding) {
+        LOG(ERROR) << "[PDWC-debug] readColumns mismatch BEFORE widening try: i=" << i
+                   << " requestedKind=" << columnType->kindName()
+                   << " requestedType=" << columnType->toString()
+                   << " kindEncoding=" << typeToEncoding
+                   << " gotEncoding=" << encoding;
         // Consumer-side widening (PushDownWidenCast). Check this BEFORE
         // tryReadNullColumn — tryReadNullColumn consumes bytes from the stream
         // (it reads the column as UNKNOWN to test if it's all-null), so if it
@@ -1574,8 +1601,13 @@ void readColumns(
                 numIncomingNulls,
                 pool,
                 columnResult)) {
+          LOG(ERROR) << "[PDWC-debug] readColumns: widening APPLIED for "
+                     << columnType->kindName() << " from " << encoding;
           continue;
         }
+        LOG(ERROR) << "[PDWC-debug] readColumns: widening REFUSED for "
+                   << columnType->kindName() << " from " << encoding
+                   << " (falling through to tryReadNullColumn / checkTypeEncoding)";
         if (encoding == kByteArray &&
             tryReadNullColumn(
                 source,
