@@ -1276,6 +1276,7 @@ void Expr::evalEncodings(
           // translateToInnerRows. Wrap the cache directly without
           // running evalWithMemo/evalWithNulls - they would just
           // return dictionaryCache_ anyway.
+          ++stats_.numMemoBypass;
           wrappedResult = context.getPeeledEncoding()->wrap(
               this->type(), context.pool(), dictionaryCache_, rows);
         } else if (auto* newRows = peelEncodingsResult.newRows) {
@@ -1397,6 +1398,7 @@ void Expr::evalWithMemo(
     const SelectivityVector& rows,
     EvalCtx& context,
     VectorPtr& result) {
+  ++stats_.numEvalWithMemo;
   VectorPtr base;
   distinctFields_[0]->evalSpecialForm(rows, context, base);
 
@@ -1414,6 +1416,7 @@ void Expr::evalWithMemo(
 
   if (base.get() != baseOfDictionaryRawPtr_ ||
       baseOfDictionaryWeakPtr_.expired()) {
+    ++stats_.numMemoBaseChange;
     baseOfDictionaryRepeats_ = 0;
     baseOfDictionaryWeakPtr_.reset();
     baseOfDictionaryRawPtr_ = nullptr;
@@ -1427,6 +1430,7 @@ void Expr::evalWithMemo(
   }
 
   if (baseOfDictionaryRepeats_ == 0) {
+    ++stats_.numMemoFirstRepeat;
     evalWithNulls(rows, context, result);
 
     ++baseOfDictionaryRepeats_;
@@ -1457,6 +1461,7 @@ void Expr::evalWithMemo(
   // errors from base positions that the caller did not request - the
   // fast upcast path is non-throwing by construction.
   if (isCheapToReevaluate()) {
+    ++stats_.numMemoEagerFill;
     const auto baseSize = base->size();
     LocalSelectivityVector toFillHolder(context, baseSize);
     auto* toFill = toFillHolder.get();
@@ -1475,7 +1480,10 @@ void Expr::evalWithMemo(
         : 0;
     const bool deselectCached = cachedCount * 2 >= baseSize;
     if (deselectCached) {
+      ++stats_.numEagerFillDeselect;
       toFill->deselect(*cachedDictionaryIndices_);
+    } else {
+      ++stats_.numEagerFillFullReeval;
     }
     if (toFill->hasSelections()) {
       if (dictionaryCache_->size() < baseSize) {
@@ -1499,6 +1507,15 @@ void Expr::evalWithMemo(
       ScopedFinalSelectionSetter scopedFinalSelectionSetter(
           context, &rows, /*newFinalSelection=*/true);
       VectorPtr fillResult;
+      // Rows being evaluated speculatively are those not in `rows` (the
+      // caller's selection). We can only know that approximately - rows
+      // is the outer-row selection, toFill is the inner-row selection -
+      // so use toFill's count minus rows' count as a coarse signal.
+      // Negative deltas (uncommon) clamp to zero.
+      const auto toFillCount = toFill->countSelected();
+      const auto callerCount = rows.countSelected();
+      stats_.numEagerFillSpeculativeRows +=
+          toFillCount > callerCount ? toFillCount - callerCount : 0;
       evalWithNulls(*toFill, context, fillResult);
       context.deselectErrors(*toFill);
       if (toFill->hasSelections()) {
@@ -1516,6 +1533,7 @@ void Expr::evalWithMemo(
     return;
   }
 
+  ++stats_.numMemoIncremental;
   if (cachedDictionaryIndices_) {
     LocalSelectivityVector cachedHolder(context, rows);
     auto cached = cachedHolder.get();
@@ -1979,6 +1997,13 @@ void Expr::applyFunction(
     VectorPtr& result) {
   stats_.numProcessedVectors += 1;
   stats_.numProcessedRows += rows.countSelected();
+  if (context.exprSet() != nullptr &&
+      context.exprSet()->operatorTrackExpressionStats()) {
+    if (!inputValues_.empty() && inputValues_[0]) {
+      updateInputVectorStats(rows, *inputValues_[0]);
+    }
+    updateDistinctBaseStats(context);
+  }
   auto timer = cpuWallTimer(context);
 
   computeIsAsciiForInputs(vectorFunction_.get(), inputValues_, rows);
@@ -2031,6 +2056,17 @@ void Expr::evalSpecialFormWithStats(
     VectorPtr& result) {
   stats_.numProcessedVectors += 1;
   stats_.numProcessedRows += rows.countSelected();
+  if (context.exprSet() != nullptr &&
+      context.exprSet()->operatorTrackExpressionStats()) {
+    if (!distinctFields_.empty()) {
+      const auto& field =
+          context.getField(distinctFields_[0]->index(context));
+      if (field != nullptr) {
+        updateInputVectorStats(rows, *field);
+      }
+    }
+    updateDistinctBaseStats(context);
+  }
   auto timer = cpuWallTimer(context);
 
   evalSpecialForm(rows, context, result);
@@ -2041,6 +2077,61 @@ void Expr::evalSpecialFormWithStats(
     finalizeAdaptiveCalibration(
         context.adaptiveCpuSamplingMaxOverheadPct(),
         context.timerOverheadNanos());
+  }
+}
+
+void Expr::updateInputVectorStats(
+    const SelectivityVector& rows,
+    const BaseVector& input) {
+  ++stats_.inputEncodingCounts[static_cast<int8_t>(input.encoding())];
+
+  // Walk the wrapping chain down to the base. wrappedVector() returns
+  // `this` at the leaf (Flat/Constant/etc.), which terminates the loop.
+  const BaseVector* current = &input;
+  uint32_t depth = 0;
+  while (true) {
+    const BaseVector* next = current->wrappedVector();
+    if (next == nullptr || next == current) {
+      break;
+    }
+    ++depth;
+    current = next;
+  }
+  stats_.numInputWrappings += depth;
+  stats_.numInputBaseRows += current->size();
+
+  const uint64_t evaluatedRows = rows.countSelected();
+  stats_.maxEvaluatedRows =
+      std::max(stats_.maxEvaluatedRows, evaluatedRows);
+  stats_.minEvaluatedRows =
+      std::min(stats_.minEvaluatedRows, evaluatedRows);
+
+  const uint64_t inputRows = input.size();
+  stats_.totalInputRows += inputRows;
+  stats_.maxInputRows = std::max(stats_.maxInputRows, inputRows);
+  stats_.minInputRows = std::min(stats_.minInputRows, inputRows);
+
+  const uint64_t bytes = input.retainedSize();
+  stats_.totalInputBytes += bytes;
+  stats_.maxBytes = std::max(stats_.maxBytes, bytes);
+  stats_.minBytes = std::min(stats_.minBytes, bytes);
+}
+
+void Expr::updateDistinctBaseStats(const EvalCtx& context) {
+  for (auto* field : distinctFields_) {
+    const auto& fieldVector = context.getField(field->index(context));
+    if (fieldVector == nullptr) {
+      continue;
+    }
+    const BaseVector* base = fieldVector.get();
+    while (true) {
+      const BaseVector* next = base->wrappedVector();
+      if (next == nullptr || next == base) {
+        break;
+      }
+      base = next;
+    }
+    stats_.distinctBasesByField[field->field()].insert(base);
   }
 }
 
@@ -2278,7 +2369,11 @@ ExprSet::ExprSet(
       adaptiveCpuSamplingMaxOverheadPct_(
           execCtx->queryCtx()
               ->queryConfig()
-              .exprAdaptiveCpuSamplingMaxOverheadPct()) {
+              .exprAdaptiveCpuSamplingMaxOverheadPct()),
+      operatorTrackExpressionStats_(
+          execCtx->queryCtx()
+              ->queryConfig()
+              .operatorTrackExpressionStats()) {
   exprs_ = compileExpressions(sources, execCtx, this, enableConstantFolding);
   if (lazyDereference_) {
     validateLazyDereference(exprs_);

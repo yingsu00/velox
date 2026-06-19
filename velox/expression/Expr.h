@@ -635,6 +635,20 @@ class Expr {
       EvalCtx& context,
       VectorPtr& result);
 
+  // Update per-batch input-vector diagnostic stats (encoding count,
+  // wrapping depth, base size, batch row-count and retained bytes). Called
+  // once per Expr::eval on the primary input vector from applyFunction()
+  // and evalSpecialFormWithStats().
+  void updateInputVectorStats(
+      const SelectivityVector& rows,
+      const BaseVector& input);
+
+  // Record the current base-vector pointer of each field in
+  // distinctFields_ into the per-field distinctBasesByField set. The
+  // per-field set size gives the number of distinct BaseVector* seen
+  // across batches.
+  void updateDistinctBaseStats(const EvalCtx& context);
+
  protected:
   void appendInputs(std::stringstream& stream) const;
 
@@ -909,6 +923,14 @@ class ExprSet {
     return execCtx_;
   }
 
+  /// Whether per-Expr diagnostic stats (memoization / input-vector /
+  /// distinct-base counters) should be collected on the hot path.
+  /// Cached from QueryConfig::operatorTrackExpressionStats() at
+  /// construction so callers can branch on a plain bool.
+  bool operatorTrackExpressionStats() const {
+    return operatorTrackExpressionStats_;
+  }
+
   auto size() const {
     return exprs_.size();
   }
@@ -992,6 +1014,7 @@ class ExprSet {
   // Cached from QueryConfig at construction time to avoid repeated map lookups.
   const bool adaptiveCpuSampling_;
   const double adaptiveCpuSamplingMaxOverheadPct_;
+  const bool operatorTrackExpressionStats_;
 
   // Measured CpuWallTimer overhead (nanos per invocation). Measured once on
   // the first eval() call and shared across all Expr nodes via EvalCtx.

@@ -14,11 +14,13 @@
  * limitations under the License.
  */
 #include "velox/exec/FilterProject.h"
+#include "velox/common/base/RuntimeMetrics.h"
 #include "velox/core/Expressions.h"
 #include "velox/exec/Driver.h"
 #include "velox/exec/OperatorType.h"
 #include "velox/expression/Expr.h"
 #include "velox/expression/FieldReference.h"
+#include "velox/vector/VectorEncoding.h"
 
 namespace facebook::velox::exec {
 namespace {
@@ -305,6 +307,76 @@ OperatorStats FilterProject::stats(bool clear) {
           .operatorTrackExpressionStats() &&
       exprs_ != nullptr) {
     stats.expressionStats = exprs_->stats(true /*excludeSpecialForm*/);
+
+    // Also project the per-expression stats into runtimeStats so they flow
+    // through to Prestissimo / Java coordinator via the standard runtime-
+    // stats path (which does not serialize expressionStats). Key format:
+    // "<exprName>.<counter>". Counters that vary per batch (row / byte
+    // sizes) are exposed as RuntimeMetric so min / max / sum / count are
+    // all preserved.
+    for (const auto& [exprName, es] : stats.expressionStats) {
+      const auto prefix = exprName + ".";
+      const auto set = [&](const std::string& suffix, int64_t sum) {
+        stats.runtimeStats[prefix + suffix] = RuntimeMetric(sum);
+      };
+      set("numProcessedVectors", es.numProcessedVectors);
+      set("numProcessedRows", es.numProcessedRows);
+      set("numEvalWithMemo", es.numEvalWithMemo);
+      set("numMemoBaseChange", es.numMemoBaseChange);
+      set("numMemoFirstRepeat", es.numMemoFirstRepeat);
+      set("numMemoEagerFill", es.numMemoEagerFill);
+      set("numMemoIncremental", es.numMemoIncremental);
+      set("numMemoBypass", es.numMemoBypass);
+      set("numEagerFillSpeculativeRows", es.numEagerFillSpeculativeRows);
+      set("numEagerFillDeselect", es.numEagerFillDeselect);
+      set("numEagerFillFullReeval", es.numEagerFillFullReeval);
+      set("numInputWrappings", es.numInputWrappings);
+      set("numInputBaseRows", es.numInputBaseRows);
+
+      // Preserve batch-level sum + count + min + max for row and byte
+      // sizes so max/min are visible in the Java-side runtime stats.
+      // numEvaluatedRows counts rows the Expr was asked to evaluate
+      // (rows.countSelected()); numInputRows counts positions the
+      // input vector had, including those skipped by the caller's
+      // selection.
+      if (es.numProcessedVectors > 0) {
+        stats.runtimeStats[prefix + "numEvaluatedRows"] = RuntimeMetric(
+            /*sum=*/static_cast<int64_t>(es.numProcessedRows),
+            /*count=*/es.numProcessedVectors,
+            /*min=*/static_cast<int64_t>(es.minEvaluatedRows),
+            /*max=*/static_cast<int64_t>(es.maxEvaluatedRows));
+        stats.runtimeStats[prefix + "numInputRows"] = RuntimeMetric(
+            /*sum=*/static_cast<int64_t>(es.totalInputRows),
+            /*count=*/es.numProcessedVectors,
+            /*min=*/static_cast<int64_t>(es.minInputRows),
+            /*max=*/static_cast<int64_t>(es.maxInputRows));
+        stats.runtimeStats[prefix + "inputBytes"] = RuntimeMetric(
+            /*sum=*/static_cast<int64_t>(es.totalInputBytes),
+            /*count=*/es.numProcessedVectors,
+            /*min=*/static_cast<int64_t>(es.minBytes),
+            /*max=*/static_cast<int64_t>(es.maxBytes),
+            RuntimeCounter::Unit::kBytes);
+      }
+
+      // One counter per encoding seen. Emitting only encodings that were
+      // actually observed keeps the key set small.
+      for (const auto& [encodingRaw, count] : es.inputEncodingCounts) {
+        const auto encoding =
+            static_cast<VectorEncoding::Simple>(encodingRaw);
+        stats.runtimeStats
+            [prefix + "inputEncoding." +
+             VectorEncoding::mapSimpleToName(encoding)] =
+                RuntimeMetric(static_cast<int64_t>(count));
+      }
+
+      // Number of distinct base vector pointers observed per leaf
+      // field. One key per field seen. A growing count over time
+      // signals base churn that memoization can't amortize.
+      for (const auto& [fieldName, bases] : es.distinctBasesByField) {
+        stats.runtimeStats[prefix + "numDistinctBases." + fieldName] =
+            RuntimeMetric(static_cast<int64_t>(bases.size()));
+      }
+    }
   }
   return stats;
 }
