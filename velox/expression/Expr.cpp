@@ -27,7 +27,6 @@
 #include "velox/common/testutil/TestValue.h"
 #include "velox/exec/trace/TraceCtx.h"
 #include "velox/expression/CastExpr.h"
-#include "velox/expression/CastExprV2.h"
 
 #include "velox/common/EnumDefine.h"
 #include "velox/expression/ConstantExpr.h"
@@ -280,8 +279,14 @@ void Expr::computeMetadata() {
   // (3) Compute propagatesNulls_.
   // propagatesNulls_ is true iff a null in any of the columns this
   // depends on makes the Expr null.
-  if (isSpecialForm() && !is<ConstantExpr>() && !is<FieldReference>() &&
-      !is<CastExpr>() && !is<CastExprV2>()) {
+  // Special-form kinds whose propagatesNulls is derived from the
+  // default-null logic below rather than from a per-form override.
+  // Checking by SpecialFormKind tag (rather than dynamic_cast) keeps
+  // Expr.cpp decoupled from concrete V2 subclasses such as CastExprV2.
+  if (isSpecialForm() &&
+      specialFormKind() != SpecialFormKind::kConstant &&
+      specialFormKind() != SpecialFormKind::kFieldAccess &&
+      specialFormKind() != SpecialFormKind::kCast) {
     as<SpecialForm>()->computePropagatesNulls();
   } else {
     if (vectorFunction_ && !vectorFunctionMetadata_.defaultNullBehavior) {
