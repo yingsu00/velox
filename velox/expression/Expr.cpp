@@ -27,6 +27,7 @@
 #include "velox/common/testutil/TestValue.h"
 #include "velox/exec/trace/TraceCtx.h"
 #include "velox/expression/CastExpr.h"
+#include "velox/expression/CastExprV2.h"
 
 #include "velox/common/EnumDefine.h"
 #include "velox/expression/ConstantExpr.h"
@@ -280,7 +281,7 @@ void Expr::computeMetadata() {
   // propagatesNulls_ is true iff a null in any of the columns this
   // depends on makes the Expr null.
   if (isSpecialForm() && !is<ConstantExpr>() && !is<FieldReference>() &&
-      !is<CastExpr>()) {
+      !is<CastExpr>() && !is<CastExprV2>()) {
     as<SpecialForm>()->computePropagatesNulls();
   } else {
     if (vectorFunction_ && !vectorFunctionMetadata_.defaultNullBehavior) {

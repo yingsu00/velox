@@ -15,6 +15,7 @@
  */
 
 #include "velox/expression/CastExpr.h"
+#include "velox/expression/CastExprV2.h"
 
 #include <fmt/format.h>
 #include <stdexcept>
@@ -1158,6 +1159,14 @@ ExprPtr CastCallToSpecialForm::constructSpecialForm(
         "Cannot cast {} to VARBINARY.",
         compiledChildren[0]->type()->toString());
   }
+  if (config.exprEvalV2()) {
+    return std::make_shared<CastExprV2>(
+        type,
+        std::move(compiledChildren[0]),
+        trackCpuUsage,
+        false,
+        std::make_shared<PrestoCastHooks>(config));
+  }
   return std::make_shared<CastExpr>(
       type,
       std::move(compiledChildren[0]),
@@ -1181,6 +1190,14 @@ ExprPtr TryCastCallToSpecialForm::constructSpecialForm(
       1,
       "TRY CAST statements expect exactly 1 argument, received {}.",
       compiledChildren.size());
+  if (config.exprEvalV2()) {
+    return std::make_shared<CastExprV2>(
+        type,
+        std::move(compiledChildren[0]),
+        trackCpuUsage,
+        true,
+        std::make_shared<PrestoCastHooks>(config));
+  }
   return std::make_shared<CastExpr>(
       type,
       std::move(compiledChildren[0]),
