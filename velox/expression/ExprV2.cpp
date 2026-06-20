@@ -21,6 +21,20 @@
 
 namespace facebook::velox::exec {
 
+// TODO: this adapter is transitional.  ExprV2::from exists only
+// because the compiler produces V1 Expr trees and the V2 evaluator
+// wants ExprV2 nodes.  Today's ExprV2 is a thin wrapper that carries
+// no per-node data the V1 Expr doesn't already expose; the actual V2
+// win (immutable nodes, mutable state in a side ExprRuntimeStateTree)
+// doesn't require a separate node type.
+//
+// When V1 is deleted, one of two things happens:
+//   1. ExprV2 is renamed to Expr and this adapter disappears with the
+//      old Expr class.
+//   2. ExprV2 is dropped entirely; the V2 evaluator switches to
+//      Expr& + ExprRuntimeStateTree& directly, and this adapter
+//      simply goes away.
+// Either path collapses this file to nothing.
 std::shared_ptr<ExprV2> ExprV2::from(const std::shared_ptr<Expr>& expr) {
   VELOX_CHECK_NOT_NULL(expr, "ExprV2::from requires a non-null Expr");
 
