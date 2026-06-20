@@ -77,7 +77,7 @@ void CastExprV2::applyToSelectedNoThrowLocal(
 /// @param input The input vector (of type FromKind)
 /// @param result The output vector (of type ToKind)
 template <TypeKind ToKind, TypeKind FromKind, typename TPolicy>
-void CastExprV2::applyCastKernel(
+void CastExprV2::castKernel(
     vector_size_t row,
     EvalCtx& context,
     const SimpleVector<typename TypeTraits<FromKind>::NativeType>* input,
@@ -226,7 +226,7 @@ void CastExprV2::applyCastKernel(
 }
 
 template <typename TInput, typename TOutput>
-void CastExprV2::applyDecimalCastKernel(
+void CastExprV2::castDecimalToDecimalKernel(
     const SelectivityVector& rows,
     const BaseVector& input,
     exec::EvalCtx& context,
@@ -265,7 +265,7 @@ void CastExprV2::applyDecimalCastKernel(
 }
 
 template <typename TInput, typename TOutput>
-void CastExprV2::applyIntToDecimalCastKernel(
+void CastExprV2::castIntToDecimalKernel(
     const SelectivityVector& rows,
     const BaseVector& input,
     exec::EvalCtx& context,
@@ -290,7 +290,7 @@ void CastExprV2::applyIntToDecimalCastKernel(
 }
 
 template <typename TInput, typename TOutput>
-void CastExprV2::applyFloatingPointToDecimalCastKernel(
+void CastExprV2::castFloatToDecimalKernel(
     const SelectivityVector& rows,
     const BaseVector& input,
     exec::EvalCtx& context,
@@ -322,7 +322,7 @@ void CastExprV2::applyFloatingPointToDecimalCastKernel(
 }
 
 template <typename T>
-void CastExprV2::applyVarcharToDecimalCastKernel(
+void CastExprV2::castVarcharToDecimalKernel(
     const SelectivityVector& rows,
     const BaseVector& input,
     exec::EvalCtx& context,
@@ -353,7 +353,7 @@ void CastExprV2::applyVarcharToDecimalCastKernel(
 }
 
 template <typename FromNativeType, TypeKind ToKind>
-VectorPtr CastExprV2::applyDecimalToFloatCast(
+VectorPtr CastExprV2::castDecimalToFloat(
     const SelectivityVector& rows,
     const BaseVector& input,
     exec::EvalCtx& context,
@@ -395,7 +395,7 @@ VectorPtr CastExprV2::applyDecimalToFloatCast(
 }
 
 template <typename FromNativeType, TypeKind ToKind>
-VectorPtr CastExprV2::applyDecimalToIntegralCast(
+VectorPtr CastExprV2::castDecimalToIntegral(
     const SelectivityVector& rows,
     const BaseVector& input,
     exec::EvalCtx& context,
@@ -447,7 +447,7 @@ VectorPtr CastExprV2::applyDecimalToIntegralCast(
 }
 
 template <typename FromNativeType>
-VectorPtr CastExprV2::applyDecimalToBooleanCast(
+VectorPtr CastExprV2::castDecimalToBoolean(
     const SelectivityVector& rows,
     const BaseVector& input,
     exec::EvalCtx& context) {
@@ -465,7 +465,7 @@ VectorPtr CastExprV2::applyDecimalToBooleanCast(
 }
 
 template <typename FromNativeType>
-VectorPtr CastExprV2::applyDecimalToVarcharCast(
+VectorPtr CastExprV2::castDecimalToVarchar(
     const SelectivityVector& rows,
     const BaseVector& input,
     exec::EvalCtx& context,
@@ -516,7 +516,7 @@ VectorPtr CastExprV2::applyDecimalToVarcharCast(
 }
 
 template <typename FromNativeType>
-VectorPtr CastExprV2::applyDecimalToPrimitiveCast(
+VectorPtr CastExprV2::castDecimalToPrimitive(
     const SelectivityVector& rows,
     const BaseVector& input,
     exec::EvalCtx& context,
@@ -524,24 +524,24 @@ VectorPtr CastExprV2::applyDecimalToPrimitiveCast(
     const TypePtr& toType) {
   switch (toType->kind()) {
     case TypeKind::BOOLEAN:
-      return applyDecimalToBooleanCast<FromNativeType>(rows, input, context);
+      return castDecimalToBoolean<FromNativeType>(rows, input, context);
     case TypeKind::TINYINT:
-      return applyDecimalToIntegralCast<FromNativeType, TypeKind::TINYINT>(
+      return castDecimalToIntegral<FromNativeType, TypeKind::TINYINT>(
           rows, input, context, fromType, toType);
     case TypeKind::SMALLINT:
-      return applyDecimalToIntegralCast<FromNativeType, TypeKind::SMALLINT>(
+      return castDecimalToIntegral<FromNativeType, TypeKind::SMALLINT>(
           rows, input, context, fromType, toType);
     case TypeKind::INTEGER:
-      return applyDecimalToIntegralCast<FromNativeType, TypeKind::INTEGER>(
+      return castDecimalToIntegral<FromNativeType, TypeKind::INTEGER>(
           rows, input, context, fromType, toType);
     case TypeKind::BIGINT:
-      return applyDecimalToIntegralCast<FromNativeType, TypeKind::BIGINT>(
+      return castDecimalToIntegral<FromNativeType, TypeKind::BIGINT>(
           rows, input, context, fromType, toType);
     case TypeKind::REAL:
-      return applyDecimalToFloatCast<FromNativeType, TypeKind::REAL>(
+      return castDecimalToFloat<FromNativeType, TypeKind::REAL>(
           rows, input, context, fromType, toType);
     case TypeKind::DOUBLE:
-      return applyDecimalToFloatCast<FromNativeType, TypeKind::DOUBLE>(
+      return castDecimalToFloat<FromNativeType, TypeKind::DOUBLE>(
           rows, input, context, fromType, toType);
     default:
       VELOX_UNSUPPORTED(
@@ -552,7 +552,7 @@ VectorPtr CastExprV2::applyDecimalToPrimitiveCast(
 }
 
 template <TypeKind ToKind, TypeKind FromKind>
-void CastExprV2::applyCastPrimitives(
+void CastExprV2::castPrimitives(
     const SelectivityVector& rows,
     exec::EvalCtx& context,
     const BaseVector& input,
@@ -565,25 +565,25 @@ void CastExprV2::applyCastPrimitives(
   switch (hooks_->getPolicy()) {
     case LegacyCastPolicy:
       applyToSelectedNoThrowLocal(context, rows, result, [&](int row) {
-        applyCastKernel<ToKind, FromKind, util::LegacyCastPolicy>(
+        castKernel<ToKind, FromKind, util::LegacyCastPolicy>(
             row, context, inputSimpleVector, resultFlatVector);
       });
       break;
     case PrestoCastPolicy:
       applyToSelectedNoThrowLocal(context, rows, result, [&](int row) {
-        applyCastKernel<ToKind, FromKind, util::PrestoCastPolicy>(
+        castKernel<ToKind, FromKind, util::PrestoCastPolicy>(
             row, context, inputSimpleVector, resultFlatVector);
       });
       break;
     case SparkCastPolicy:
       applyToSelectedNoThrowLocal(context, rows, result, [&](int row) {
-        applyCastKernel<ToKind, FromKind, util::SparkCastPolicy>(
+        castKernel<ToKind, FromKind, util::SparkCastPolicy>(
             row, context, inputSimpleVector, resultFlatVector);
       });
       break;
     case SparkTryCastPolicy:
       applyToSelectedNoThrowLocal(context, rows, result, [&](int row) {
-        applyCastKernel<ToKind, FromKind, util::SparkTryCastPolicy>(
+        castKernel<ToKind, FromKind, util::SparkTryCastPolicy>(
             row, context, inputSimpleVector, resultFlatVector);
       });
       break;
@@ -594,7 +594,7 @@ void CastExprV2::applyCastPrimitives(
 }
 
 template <TypeKind ToKind, TypeKind FromKind>
-void CastExprV2::applyNumericUpcast(
+void CastExprV2::castNumericUpcast(
     const SelectivityVector& rows,
     const TypePtr& toType,
     exec::EvalCtx& context,
@@ -649,7 +649,7 @@ void CastExprV2::applyNumericUpcast(
 }
 
 template <TypeKind ToKind>
-void CastExprV2::applyCastPrimitivesDispatch(
+void CastExprV2::castPrimitivesDispatch(
     const TypePtr& fromType,
     const TypePtr& toType,
     const SelectivityVector& rows,
@@ -668,7 +668,7 @@ void CastExprV2::applyCastPrimitivesDispatch(
 
   if (isSupportedFastUpcast(fromType, toType)) {
     VELOX_DYNAMIC_SCALAR_TEMPLATE_TYPE_DISPATCH(
-        applyNumericUpcast,
+        castNumericUpcast,
         ToKind,
         fromType->kind(),
         rows,
@@ -681,7 +681,7 @@ void CastExprV2::applyCastPrimitivesDispatch(
 
   // This already excludes complex types, hugeint and unknown from type kinds.
   VELOX_DYNAMIC_SCALAR_TEMPLATE_TYPE_DISPATCH(
-      applyCastPrimitives,
+      castPrimitives,
       ToKind,
       fromType->kind() /*dispatched*/,
       rows,

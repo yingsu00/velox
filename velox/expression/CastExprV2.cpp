@@ -432,7 +432,7 @@ void propagateErrorsOrSetNulls(
     }                                              \
   }()
 
-VectorPtr CastExprV2::applyMap(
+VectorPtr CastExprV2::castMap(
     const SelectivityVector& rows,
     const MapVector* input,
     exec::EvalCtx& context,
@@ -534,7 +534,7 @@ VectorPtr CastExprV2::applyMap(
   return result;
 }
 
-VectorPtr CastExprV2::applyArray(
+VectorPtr CastExprV2::castArray(
     const SelectivityVector& rows,
     const ArrayVector* input,
     exec::EvalCtx& context,
@@ -600,7 +600,7 @@ VectorPtr CastExprV2::applyArray(
   return result;
 }
 
-VectorPtr CastExprV2::applyRow(
+VectorPtr CastExprV2::castRow(
     const SelectivityVector& rows,
     const RowVector* input,
     exec::EvalCtx& context,
@@ -703,7 +703,7 @@ VectorPtr CastExprV2::applyRow(
 }
 
 template <typename toDecimalType>
-VectorPtr CastExprV2::applyDecimal(
+VectorPtr CastExprV2::castDecimal(
     const SelectivityVector& rows,
     const BaseVector& input,
     exec::EvalCtx& context,
@@ -716,49 +716,49 @@ VectorPtr CastExprV2::applyDecimal(
   // toType is a decimal
   switch (fromType->kind()) {
     case TypeKind::BOOLEAN:
-      applyIntToDecimalCastKernel<bool, toDecimalType>(
+      castIntToDecimalKernel<bool, toDecimalType>(
           rows, input, context, toType, castResult);
       break;
     case TypeKind::TINYINT:
-      applyIntToDecimalCastKernel<int8_t, toDecimalType>(
+      castIntToDecimalKernel<int8_t, toDecimalType>(
           rows, input, context, toType, castResult);
       break;
     case TypeKind::SMALLINT:
-      applyIntToDecimalCastKernel<int16_t, toDecimalType>(
+      castIntToDecimalKernel<int16_t, toDecimalType>(
           rows, input, context, toType, castResult);
       break;
     case TypeKind::INTEGER:
-      applyIntToDecimalCastKernel<int32_t, toDecimalType>(
+      castIntToDecimalKernel<int32_t, toDecimalType>(
           rows, input, context, toType, castResult);
       break;
     case TypeKind::REAL:
-      applyFloatingPointToDecimalCastKernel<float, toDecimalType>(
+      castFloatToDecimalKernel<float, toDecimalType>(
           rows, input, context, toType, castResult);
       break;
     case TypeKind::DOUBLE:
-      applyFloatingPointToDecimalCastKernel<double, toDecimalType>(
+      castFloatToDecimalKernel<double, toDecimalType>(
           rows, input, context, toType, castResult);
       break;
     case TypeKind::BIGINT: {
       if (fromType->isShortDecimal()) {
-        applyDecimalCastKernel<int64_t, toDecimalType>(
+        castDecimalToDecimalKernel<int64_t, toDecimalType>(
             rows, input, context, fromType, toType, castResult);
         break;
       }
-      applyIntToDecimalCastKernel<int64_t, toDecimalType>(
+      castIntToDecimalKernel<int64_t, toDecimalType>(
           rows, input, context, toType, castResult);
       break;
     }
     case TypeKind::HUGEINT: {
       if (fromType->isLongDecimal()) {
-        applyDecimalCastKernel<int128_t, toDecimalType>(
+        castDecimalToDecimalKernel<int128_t, toDecimalType>(
             rows, input, context, fromType, toType, castResult);
         break;
       }
       [[fallthrough]];
     }
     case TypeKind::VARCHAR:
-      applyVarcharToDecimalCastKernel<toDecimalType>(
+      castVarcharToDecimalKernel<toDecimalType>(
           rows, input, context, toType, castResult);
       break;
     default:
@@ -770,7 +770,7 @@ VectorPtr CastExprV2::applyDecimal(
   return castResult;
 }
 
-void CastExprV2::applyPeeled(
+void CastExprV2::castPeeled(
     const SelectivityVector& rows,
     const BaseVector& input,
     exec::EvalCtx& context,
@@ -845,14 +845,14 @@ void CastExprV2::applyPeeled(
     VELOX_DCHECK(toType->equivalent(*TIME()));
     result = castToTime(rows, input, context, fromType);
   } else if (toType->isShortDecimal()) {
-    result = applyDecimal<int64_t>(rows, input, context, fromType, toType);
+    result = castDecimal<int64_t>(rows, input, context, fromType, toType);
   } else if (toType->isLongDecimal()) {
-    result = applyDecimal<int128_t>(rows, input, context, fromType, toType);
+    result = castDecimal<int128_t>(rows, input, context, fromType, toType);
   } else if (fromType->isDecimal()) {
     switch (toType->kind()) {
       case TypeKind::VARCHAR:
         result = VELOX_DYNAMIC_DECIMAL_TYPE_DISPATCH(
-            applyDecimalToVarcharCast,
+            castDecimalToVarchar,
             fromType,
             rows,
             input,
@@ -861,7 +861,7 @@ void CastExprV2::applyPeeled(
         break;
       default:
         result = VELOX_DYNAMIC_DECIMAL_TYPE_DISPATCH(
-            applyDecimalToPrimitiveCast,
+            castDecimalToPrimitive,
             fromType,
             rows,
             input,
@@ -874,31 +874,31 @@ void CastExprV2::applyPeeled(
       (toType->kind() == TypeKind::VARCHAR ||
        toType->kind() == TypeKind::VARBINARY)) {
     VELOX_DCHECK(fromType->equivalent(*TIMESTAMP()));
-    result = applyTimestampToVarcharCast(toType, rows, context, input);
+    result = castTimestampToVarchar(toType, rows, context, input);
   } else if (toType->kind() == TypeKind::VARBINARY) {
     switch (fromType->kind()) {
       case TypeKind::TINYINT:
-        result = applyIntToBinaryCast<int8_t>(rows, context, input);
+        result = castIntToBinary<int8_t>(rows, context, input);
         break;
       case TypeKind::SMALLINT:
-        result = applyIntToBinaryCast<int16_t>(rows, context, input);
+        result = castIntToBinary<int16_t>(rows, context, input);
         break;
       case TypeKind::INTEGER:
-        result = applyIntToBinaryCast<int32_t>(rows, context, input);
+        result = castIntToBinary<int32_t>(rows, context, input);
         break;
       case TypeKind::BIGINT:
-        result = applyIntToBinaryCast<int64_t>(rows, context, input);
+        result = castIntToBinary<int64_t>(rows, context, input);
         break;
       default:
         // Handle primitive type conversions.
-        applyCastPrimitivesDispatch<TypeKind::VARBINARY>(
+        castPrimitivesDispatch<TypeKind::VARBINARY>(
             fromType, toType, rows, context, input, result);
         break;
     }
   } else {
     switch (toType->kind()) {
       case TypeKind::MAP:
-        result = applyMap(
+        result = castMap(
             rows,
             input.asUnchecked<MapVector>(),
             context,
@@ -906,7 +906,7 @@ void CastExprV2::applyPeeled(
             toType->asMap());
         break;
       case TypeKind::ARRAY:
-        result = applyArray(
+        result = castArray(
             rows,
             input.asUnchecked<ArrayVector>(),
             context,
@@ -914,7 +914,7 @@ void CastExprV2::applyPeeled(
             toType->asArray());
         break;
       case TypeKind::ROW:
-        result = applyRow(
+        result = castRow(
             rows,
             input.asUnchecked<RowVector>(),
             context,
@@ -924,7 +924,7 @@ void CastExprV2::applyPeeled(
       default: {
         // Handle primitive type conversions.
         VELOX_DYNAMIC_SCALAR_TYPE_DISPATCH(
-            applyCastPrimitivesDispatch,
+            castPrimitivesDispatch,
             toType->kind(),
             fromType,
             toType,
@@ -937,7 +937,7 @@ void CastExprV2::applyPeeled(
   }
 }
 
-VectorPtr CastExprV2::applyTimestampToVarcharCast(
+VectorPtr CastExprV2::castTimestampToVarchar(
     const TypePtr& toType,
     const SelectivityVector& rows,
     exec::EvalCtx& context,
@@ -976,7 +976,7 @@ VectorPtr CastExprV2::applyTimestampToVarcharCast(
 }
 
 template <typename TInput>
-VectorPtr CastExprV2::applyIntToBinaryCast(
+VectorPtr CastExprV2::castIntToBinary(
     const SelectivityVector& rows,
     exec::EvalCtx& context,
     const BaseVector& input) {
@@ -1027,7 +1027,7 @@ void CastExprV2::apply(
     localResult =
         BaseVector::createNullConstant(toType, rows.end(), context.pool());
   } else if (decoded->isIdentityMapping()) {
-    applyPeeled(
+    castPeeled(
         *remainingRows,
         *decoded->base(),
         context,
@@ -1052,7 +1052,7 @@ void CastExprV2::apply(
       // Save context and set the peel.
       context.saveAndReset(saver, *remainingRows);
       context.setPeeledEncoding(peeledEncoding);
-      applyPeeled(
+      castPeeled(
           *newRows, *peeledVectors[0], context, fromType, toType, localResult);
 
       localResult = context.getPeeledEncoding()->wrap(

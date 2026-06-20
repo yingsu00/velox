@@ -69,21 +69,21 @@ class CastExprV2 : public SpecialForm {
       VectorPtr& result);
 
  private:
-  VectorPtr applyMap(
+  VectorPtr castMap(
       const SelectivityVector& rows,
       const MapVector* input,
       exec::EvalCtx& context,
       const MapType& fromType,
       const MapType& toType);
 
-  VectorPtr applyArray(
+  VectorPtr castArray(
       const SelectivityVector& rows,
       const ArrayVector* input,
       exec::EvalCtx& context,
       const ArrayType& fromType,
       const ArrayType& toType);
 
-  VectorPtr applyRow(
+  VectorPtr castRow(
       const SelectivityVector& rows,
       const RowVector* input,
       exec::EvalCtx& context,
@@ -95,7 +95,7 @@ class CastExprV2 : public SpecialForm {
   /// @param input The input decimal vector. It is guaranteed to be flat or
   /// constant.
   template <typename ToDecimalType>
-  VectorPtr applyDecimal(
+  VectorPtr castDecimal(
       const SelectivityVector& rows,
       const BaseVector& input,
       exec::EvalCtx& context,
@@ -104,7 +104,7 @@ class CastExprV2 : public SpecialForm {
 
   // Apply the cast to a vector after vector encodings being peeled off. The
   // input vector is guaranteed to be flat or constant.
-  void applyPeeled(
+  void castPeeled(
       const SelectivityVector& rows,
       const BaseVector& input,
       exec::EvalCtx& context,
@@ -127,7 +127,7 @@ class CastExprV2 : public SpecialForm {
   /// @param input The input vector (of type FromKind)
   /// @param result The output vector (of type ToKind)
   template <TypeKind ToKind, TypeKind FromKind, typename TPolicy>
-  void applyCastKernel(
+  void castKernel(
       vector_size_t row,
       EvalCtx& context,
       const SimpleVector<typename TypeTraits<FromKind>::NativeType>* input,
@@ -164,7 +164,7 @@ class CastExprV2 : public SpecialForm {
       const TypePtr& fromType);
 
   template <typename TInput, typename TOutput>
-  void applyDecimalCastKernel(
+  void castDecimalToDecimalKernel(
       const SelectivityVector& rows,
       const BaseVector& input,
       exec::EvalCtx& context,
@@ -173,7 +173,7 @@ class CastExprV2 : public SpecialForm {
       VectorPtr& castResult);
 
   template <typename TInput, typename TOutput>
-  void applyIntToDecimalCastKernel(
+  void castIntToDecimalKernel(
       const SelectivityVector& rows,
       const BaseVector& input,
       exec::EvalCtx& context,
@@ -181,13 +181,13 @@ class CastExprV2 : public SpecialForm {
       VectorPtr& castResult);
 
   template <typename TInput>
-  VectorPtr applyIntToBinaryCast(
+  VectorPtr castIntToBinary(
       const SelectivityVector& rows,
       exec::EvalCtx& context,
       const BaseVector& input);
 
   template <typename TInput, typename TOutput>
-  void applyFloatingPointToDecimalCastKernel(
+  void castFloatToDecimalKernel(
       const SelectivityVector& rows,
       const BaseVector& input,
       exec::EvalCtx& context,
@@ -195,7 +195,7 @@ class CastExprV2 : public SpecialForm {
       VectorPtr& castResult);
 
   template <typename T>
-  void applyVarcharToDecimalCastKernel(
+  void castVarcharToDecimalKernel(
       const SelectivityVector& rows,
       const BaseVector& input,
       exec::EvalCtx& context,
@@ -203,7 +203,7 @@ class CastExprV2 : public SpecialForm {
       VectorPtr& castResult);
 
   template <typename FromNativeType, TypeKind ToKind>
-  VectorPtr applyDecimalToFloatCast(
+  VectorPtr castDecimalToFloat(
       const SelectivityVector& rows,
       const BaseVector& input,
       exec::EvalCtx& context,
@@ -211,7 +211,7 @@ class CastExprV2 : public SpecialForm {
       const TypePtr& toType);
 
   template <typename FromNativeType, TypeKind ToKind>
-  VectorPtr applyDecimalToIntegralCast(
+  VectorPtr castDecimalToIntegral(
       const SelectivityVector& rows,
       const BaseVector& input,
       exec::EvalCtx& context,
@@ -219,13 +219,13 @@ class CastExprV2 : public SpecialForm {
       const TypePtr& toType);
 
   template <typename FromNativeType>
-  VectorPtr applyDecimalToBooleanCast(
+  VectorPtr castDecimalToBoolean(
       const SelectivityVector& rows,
       const BaseVector& input,
       exec::EvalCtx& context);
 
   template <typename FromNativeType>
-  VectorPtr applyDecimalToPrimitiveCast(
+  VectorPtr castDecimalToPrimitive(
       const SelectivityVector& rows,
       const BaseVector& input,
       exec::EvalCtx& context,
@@ -233,21 +233,21 @@ class CastExprV2 : public SpecialForm {
       const TypePtr& toType);
 
   template <TypeKind ToKind, TypeKind FromKind>
-  void applyCastPrimitives(
+  void castPrimitives(
       const SelectivityVector& rows,
       exec::EvalCtx& context,
       const BaseVector& input,
       VectorPtr& result);
 
   template <typename FromNativeType>
-  VectorPtr applyDecimalToVarcharCast(
+  VectorPtr castDecimalToVarchar(
       const SelectivityVector& rows,
       const BaseVector& input,
       exec::EvalCtx& context,
       const TypePtr& fromType);
 
   template <TypeKind ToKind>
-  void applyCastPrimitivesDispatch(
+  void castPrimitivesDispatch(
       const TypePtr& fromType,
       const TypePtr& toType,
       const SelectivityVector& rows,
@@ -255,7 +255,7 @@ class CastExprV2 : public SpecialForm {
       const BaseVector& input,
       VectorPtr& result);
 
-  VectorPtr applyTimestampToVarcharCast(
+  VectorPtr castTimestampToVarchar(
       const TypePtr& toType,
       const SelectivityVector& rows,
       exec::EvalCtx& context,
@@ -263,7 +263,7 @@ class CastExprV2 : public SpecialForm {
 
   // Casts basic numeric types to wider types.
   template <TypeKind ToKind, TypeKind FromKind>
-  void applyNumericUpcast(
+  void castNumericUpcast(
       const SelectivityVector& rows,
       const TypePtr& toType,
       exec::EvalCtx& context,
