@@ -132,11 +132,15 @@ void checkTypeCompatibility(
     const std::function<std::string()>& exceptionMessageCreator) {
   // Special case: DATE (stored as int32 days-since-epoch) may be widened to
   // TIMESTAMP (seconds-since-epoch).  The semantic conversion (days × 86400)
-  // is performed at read time by convertDateToTimestampValues().
-  const bool isDateToTimestamp =
-      from.isDate() && kind(to) == TypeKind::TIMESTAMP;
+  // is performed at read time by convertDateToTimestampValues().  DWRF erases
+  // DATE to plain INT in the proto schema during write, so on the read side
+  // the file-side kind() is INTEGER in both the genuine-DATE case (DateType
+  // inherits from IntegerType, kind() == INTEGER) and the post-roundtrip
+  // case.  Match on kind() == INTEGER so both shapes resolve.
+  const bool isIntToTimestamp = from.kind() == TypeKind::INTEGER &&
+      kind(to) == TypeKind::TIMESTAMP;
 
-  if (shouldRead(to) && !isDateToTimestamp &&
+  if (shouldRead(to) && !isIntToTimestamp &&
       !isCompatible(from.kind(), kind(to))) {
     VELOX_SCHEMA_MISMATCH_ERROR(
         fmt::format(
