@@ -3848,7 +3848,11 @@ TEST_F(TestReader, readDateColumnAsTimestamp) {
   auto fileSchema = ROW({"dt"}, {DATE()});
   dwrf::WriterOptions writerOptions;
   writerOptions.schema = fileSchema;
-  dwrf::Writer writer{writerOptions, std::move(sink), *pool()};
+  // The Writer(options, sink, parentPool&) constructor calls
+  // addAggregateChild on the parent pool, which is only valid on an
+  // aggregate pool. VectorTestBase::pool() is a leaf, so pass the
+  // aggregate root pool here.
+  dwrf::Writer writer{writerOptions, std::move(sink), *rootPool_};
 
   // Days 1–20 since the Unix epoch.
   auto dateData = makeFlatVector<int32_t>(
@@ -3895,7 +3899,11 @@ TEST_F(TestReader, readDateColumnAsTimestampWithNulls) {
   auto fileSchema = ROW({"dt"}, {DATE()});
   dwrf::WriterOptions writerOptions;
   writerOptions.schema = fileSchema;
-  dwrf::Writer writer{writerOptions, std::move(sink), *pool()};
+  // The Writer(options, sink, parentPool&) constructor calls
+  // addAggregateChild on the parent pool, which is only valid on an
+  // aggregate pool. VectorTestBase::pool() is a leaf, so pass the
+  // aggregate root pool here.
+  dwrf::Writer writer{writerOptions, std::move(sink), *rootPool_};
 
   // Every 3rd row is null.
   auto dateData = makeFlatVector<int32_t>(
