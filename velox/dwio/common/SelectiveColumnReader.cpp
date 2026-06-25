@@ -304,9 +304,14 @@ void SelectiveColumnReader::getIntValues(
       }
       break;
     case TypeKind::TIMESTAMP:
-      VELOX_CHECK(
-          fileType_->type()->isDate(),
-          "TIMESTAMP output is only supported when the file type is DATE, got: {}",
+      // DateType inherits from IntegerType (kind() == INTEGER), and DWRF
+      // erases DATE to plain INT during write -- so the genuine-DATE case
+      // and the post-DWRF-roundtrip case both present as kind() == INTEGER
+      // here.  Conversion (days * 86400) is the same in both.
+      VELOX_CHECK_EQ(
+          fileType_->type()->kind(),
+          TypeKind::INTEGER,
+          "TIMESTAMP output requires an INTEGER-kind file type (DATE or INTEGER), got: {}",
           fileType_->type()->toString());
       if (valueSize_ == sizeof(Timestamp)) {
         // A prior convertDateToTimestampValues call already bulk-transmuted
