@@ -356,15 +356,33 @@ const folly::F14FastSet<std::string_view>& cheapFunctionNames() {
 
 } // namespace
 
+bool Expr::isCheapFunctionName(std::string_view name) {
+  const auto& set = cheapFunctionNames();
+  if (set.count(name) > 0) {
+    return true;
+  }
+  // Presto's coordinator sends function names as
+  // "catalog.schema.name" (e.g. "presto.default.date_format").
+  // cheapFunctionNames stores the short function name, so fall back
+  // to the suffix after the last '.'. Without this, all callers on
+  // the Presto side would fail the check and fall through to the
+  // non-cheap incremental memoization path.
+  const auto dot = name.find_last_of('.');
+  if (dot != std::string_view::npos) {
+    return set.count(name.substr(dot + 1)) > 0;
+  }
+  return false;
+}
+
 bool Expr::isCheapToReevaluate() const {
   // For non-special-form expressions (function calls), classify by
   // the registered function name. Special forms inherit this default
   // and stay false; CastExpr overrides to return true for known-safe
   // cast variants.
-  if (vectorFunction_ != nullptr) {
-    return cheapFunctionNames().count(name_) > 0;
+  if (vectorFunction_ == nullptr) {
+    return false;
   }
-  return false;
+  return isCheapFunctionName(name_);
 }
 
 void Expr::computeMetadata() {

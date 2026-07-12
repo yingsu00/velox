@@ -438,6 +438,32 @@ TEST_F(ExprStatsTest, complexConstants) {
 
   ASSERT_TRUE(exec::unregisterExprSetListener(listener));
 }
+TEST_F(ExprStatsTest, isCheapFunctionNameMatchesFullyQualified) {
+  // Short-name entries in the curated set match directly.
+  EXPECT_TRUE(exec::Expr::isCheapFunctionName("date_format"));
+  EXPECT_TRUE(exec::Expr::isCheapFunctionName("year"));
+  EXPECT_TRUE(exec::Expr::isCheapFunctionName("length"));
+
+  // Fully-qualified names (as Presto's coordinator sends them) also
+  // match via the last-dot suffix fallback. Without the fallback,
+  // isCheapToReevaluate returns false for every Expr on the Presto
+  // side and the evalWithMemo eager-fill branch never fires.
+  EXPECT_TRUE(
+      exec::Expr::isCheapFunctionName("presto.default.date_format"));
+  EXPECT_TRUE(exec::Expr::isCheapFunctionName("presto.default.year"));
+  EXPECT_TRUE(
+      exec::Expr::isCheapFunctionName("catalog.schema.date_format"));
+
+  // Names not in the set stay false, with or without a namespace.
+  EXPECT_FALSE(exec::Expr::isCheapFunctionName("date_format_new"));
+  EXPECT_FALSE(
+      exec::Expr::isCheapFunctionName("presto.default.regexp_extract"));
+  EXPECT_FALSE(exec::Expr::isCheapFunctionName("json_extract"));
+  EXPECT_FALSE(exec::Expr::isCheapFunctionName(""));
+  EXPECT_FALSE(exec::Expr::isCheapFunctionName("."));
+  EXPECT_FALSE(exec::Expr::isCheapFunctionName(".date_format_new"));
+}
+
 TEST_F(ExprStatsTest, selectiveCpuTrackingForUdfs) {
   // Test selective CPU tracking for specific UDFs using
   // kExprTrackCpuUsageUdfs config.

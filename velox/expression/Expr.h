@@ -357,6 +357,14 @@ class Expr {
   /// date conversions.
   virtual bool isCheapToReevaluate() const;
 
+  /// Returns true if 'name' is in the curated cheap-and-non-throwing
+  /// function-name set. Matches the full name; falls back to the
+  /// suffix after the last '.' so a fully-qualified name like
+  /// "presto.default.date_format" matches the "date_format" entry.
+  /// Exposed for testing; production callers should use
+  /// isCheapToReevaluate() instead.
+  static bool isCheapFunctionName(std::string_view name);
+
   bool hasConditionals() const {
     return hasConditionals_;
   }
