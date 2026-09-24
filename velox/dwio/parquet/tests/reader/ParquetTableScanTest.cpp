@@ -935,6 +935,121 @@ TEST_F(ParquetTableScanTest, filterOnNestedArray) {
       "SELECT ROW(NULL, NULL)");
 }
 
+// Verifies that filters derived from string function predicates, e.g.
+// lower(c0) = 'aws rds' or c0 LIKE 'a_c', return the same rows as evaluating
+// the predicates after the scan.
+TEST_F(ParquetTableScanTest, stringFunctionFilters) {
+  // Include mixed case, multi-byte characters whose byte length changes under
+  // case mapping and invalid UTF-8.
+  const std::vector<std::optional<std::string>> values = {
+      "AWS RDS",
+      "aws rds",
+      "Aws Rds ",
+      "AWS S3",
+      "(not set)",
+      "(NOT SET)",
+      "",
+      std::nullopt,
+      "\xC3\x9C"
+      "ber",
+      "\xC3\xBC"
+      "BER",
+      "abc",
+      "ABC",
+      "a\xC3\xBC"
+      "c",
+      "\xC3\x41"
+      "bc",
+      // Invalid UTF-8 on which LIKE implementations disagree about how many
+      // bytes one '_' matches.
+      "a\x80\x80\x80\x80",
+      "\xC3\xA9"
+      "a",
+      "\xE2\x84\xAA"
+      "ab",
+      "\xC8\xBA"
+      "bc",
+  };
+  constexpr int32_t kNumRows = 10'000;
+  auto data = makeRowVector(
+      {"c0", "c1"},
+      {
+          makeNullableFlatVector<std::string>([&]() {
+            std::vector<std::optional<std::string>> column;
+            for (auto i = 0; i < kNumRows; ++i) {
+              column.push_back(values[i % values.size()]);
+            }
+            return column;
+          }()),
+          makeFlatVector<std::string>(
+              kNumRows,
+              [&](auto row) {
+                return row % 7 == 0 ? std::string("(Not Set)")
+                                    : fmt::format("id-{}", row);
+              }),
+      });
+  const auto rowType = asRowType(data->type());
+
+  const std::vector<std::string> filters = {
+      "lower(c0) = lower('AWS RDS')",
+      "lower(c0) <> '(not set)'",
+      "lower(c0) = 'aws rds' and lower(c1) <> '(not set)' and c1 is not null",
+      "upper(c0) in ('ABC', '\xC3\x9C"
+      "BER', '\xC8\xBA"
+      "BC')",
+      "lower(c0) in ('abc', 'kab')",
+      "c0 like '_'",
+      "c0 like '\xC3\xA9_' and c0 like '__'",
+      "c0 like 'a_c'",
+      "c0 like 'AWS%'",
+      "c0 like '%s%'",
+      "length(c0) = 3",
+      "length(c0) between 2 and 7 and lower(c0) = 'abc'",
+      "length(c1) > 5",
+  };
+
+  const auto parquetFile = TempFilePath::create();
+  ParquetWriterOptions parquetOptions;
+  parquetOptions.enableDictionary = true;
+  writeToParquetFile(parquetFile->getPath(), {data}, parquetOptions);
+
+  const auto plainParquetFile = TempFilePath::create();
+  ParquetWriterOptions plainOptions;
+  plainOptions.enableDictionary = false;
+  writeToParquetFile(plainParquetFile->getPath(), {data}, plainOptions);
+
+  const auto dwrfFile = TempFilePath::create();
+  writeToFile(dwrfFile->getPath(), {data});
+
+  for (const auto& filter : filters) {
+    SCOPED_TRACE(filter);
+
+    // Evaluates the filter after the scan to get the expected rows.
+    const auto expected =
+        AssertQueryBuilder(
+            PlanBuilder(pool()).values({data}).filter(filter).planNode())
+            .copyResults(pool());
+    ASSERT_GT(expected->size(), 0);
+
+    // A split keeps the data source that reads it, so each scan needs new
+    // ones.
+    const std::vector<std::shared_ptr<connector::ConnectorSplit>> splits = {
+        makeSplit(parquetFile->getPath()),
+        makeSplit(plainParquetFile->getPath()),
+        makeHiveConnectorSplit(dwrfFile->getPath()),
+    };
+    for (const auto& split : splits) {
+      SCOPED_TRACE(split->toString());
+      // The scan pushes down the filters derived from 'filter' and must
+      // return the same rows.
+      AssertQueryBuilder(
+          PlanBuilder(pool()).tableScan(rowType, {}, filter).planNode())
+          .split(split)
+          .assertResults(expected);
+    }
+  }
+}
+
 TEST_F(ParquetTableScanTest, readAsLowerCase) {
   auto vectors = {makeRowVector(
       {"A", "b"},

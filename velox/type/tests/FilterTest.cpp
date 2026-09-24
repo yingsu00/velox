@@ -19,11 +19,15 @@
 #include <memory>
 #include <numeric>
 #include <optional>
+#include <random>
 
+#include <folly/String.h>
 #include <velox/type/DecimalUtil.h>
 #include "velox/common/base/tests/GTestUtils.h"
 #include "velox/expression/ExprToSubfieldFilter.h"
+#include "velox/functions/lib/string/StringImpl.h"
 #include "velox/type/Filter.h"
+#include "velox/type/StringFunctionFilter.h"
 
 #include <gtest/gtest.h>
 
@@ -1082,6 +1086,20 @@ bool testBytes(const Filter& filter, std::string_view value) {
   return result;
 }
 
+// Returns lower('value') as the Presto function computes it.
+std::string lowerCase(std::string_view value) {
+  std::string result;
+  functions::stringImpl::lower</*ascii=*/false>(result, value);
+  return result;
+}
+
+// Returns upper('value') as the Presto function computes it.
+std::string upperCase(std::string_view value) {
+  std::string result;
+  functions::stringImpl::upper</*ascii=*/false>(result, value);
+  return result;
+}
+
 TEST(FilterTest, bytesRange) {
   {
     auto filter = equal("abc");
@@ -1387,6 +1405,253 @@ TEST(FilterTest, negatedBytesValues) {
 
   auto filter_no_nulls = filter_nulls_copy->clone(false);
   EXPECT_FALSE(filter_no_nulls->testNull());
+}
+
+TEST(FilterTest, stringLengthCodePoints) {
+  using Unit = StringLength::Unit;
+  StringLength filter(Unit::kCodePoints, in({3, 4, 5, 7}));
+  EXPECT_FALSE(filter.testNull());
+  EXPECT_TRUE(filter.testNonNull());
+  EXPECT_TRUE(filter.hasTestLength());
+
+  EXPECT_TRUE(testBytes(filter, "AWS RDS"));
+  EXPECT_TRUE(testBytes(filter, "abc"));
+  EXPECT_TRUE(testBytes(filter, "abcde"));
+  EXPECT_FALSE(testBytes(filter, ""));
+  EXPECT_FALSE(testBytes(filter, "ab"));
+  EXPECT_FALSE(testBytes(filter, "abcdef"));
+  EXPECT_FALSE(testBytes(filter, "AWS RDS "));
+  // U+00FC has 2 bytes and 1 code point.
+  EXPECT_TRUE(testBytes(
+      filter,
+      "\xC3\xBC"
+      "bc"));
+  EXPECT_FALSE(testBytes(
+      filter,
+      "\xC3\xBC"
+      "b"));
+
+  // Strings with fewer bytes than the smallest length fail on length alone.
+  EXPECT_FALSE(filter.testLength(0));
+  EXPECT_FALSE(filter.testLength(2));
+  EXPECT_TRUE(filter.testLength(3));
+  EXPECT_TRUE(filter.testLength(6));
+  EXPECT_TRUE(filter.testLength(100));
+
+  EXPECT_TRUE(filter.testBytesRange("a", "z", false));
+  EXPECT_TRUE(filter.testBytesRange(std::nullopt, std::nullopt, false));
+  EXPECT_TRUE(filter.testBytesRange("ABC", "ABC", false));
+  EXPECT_FALSE(filter.testBytesRange("ABCDEF", "ABCDEF", false));
+
+  auto withNulls = filter.clone(true);
+  EXPECT_TRUE(withNulls->testNull());
+  EXPECT_TRUE(withNulls->testBytesRange("ABCDEF", "ABCDEF", true));
+  EXPECT_FALSE(testBytes(*withNulls, "ABCDEF"));
+  EXPECT_TRUE(withNulls->clone(false)->testingEquals(filter));
+}
+
+TEST(FilterTest, stringLengthBytes) {
+  // kBytes decides on the length alone.
+  StringLength filter(StringLength::Unit::kBytes, between(2, 3));
+  EXPECT_FALSE(filter.testLength(1));
+  EXPECT_TRUE(filter.testLength(2));
+  EXPECT_TRUE(filter.testLength(3));
+  EXPECT_FALSE(filter.testLength(4));
+  EXPECT_TRUE(testBytes(filter, "\xC3\xBC"));
+  EXPECT_FALSE(testBytes(
+      filter,
+      "\xC3\xBC"
+      "bc"));
+}
+
+TEST(FilterTest, stringLengthAsciiBytes) {
+  using Unit = StringLength::Unit;
+  // kAsciiBytes is exact for ASCII. Other strings pass if any length up to
+  // their number of bytes passes.
+  StringLength filter(Unit::kAsciiBytes, between(3, 3));
+  EXPECT_FALSE(filter.testLength(2));
+  EXPECT_TRUE(filter.testLength(5));
+  EXPECT_TRUE(testBytes(filter, "abc"));
+  EXPECT_FALSE(testBytes(filter, "ab"));
+  EXPECT_FALSE(testBytes(filter, "abcd"));
+  EXPECT_TRUE(testBytes(filter, "a\x80\x80\x80\x80"));
+  EXPECT_TRUE(testBytes(
+      filter,
+      "\xC3\xBC"
+      "bcd"));
+  EXPECT_FALSE(testBytes(filter, "\xC3\xBC"));
+
+  // Only non-ASCII strings may have length 0. Covers every length up to beyond
+  // a SIMD batch and every position of the non-ASCII byte.
+  StringLength zeroLength(Unit::kAsciiBytes, between(0, 0));
+  for (int length = 1; length <= 70; ++length) {
+    std::string value(length, 'a');
+    EXPECT_FALSE(testBytes(zeroLength, value)) << length;
+    for (int position = 0; position < length; ++position) {
+      value[position] = '\x80';
+      EXPECT_TRUE(testBytes(zeroLength, value)) << length << " " << position;
+      value[position] = 'a';
+    }
+  }
+}
+
+TEST(FilterTest, stringLengthCaseMappedCodePoints) {
+  using Unit = StringLength::Unit;
+  // Case mapping changes the number of bytes but not the number of code
+  // points: U+023A (2 bytes) lowercases to U+2C65 (3 bytes) and the Kelvin
+  // sign U+212A (3 bytes) lowercases to 'k'.
+  StringLength filter(Unit::kCaseMappedCodePoints, equal(3));
+  EXPECT_TRUE(testBytes(filter, "ABC"));
+  EXPECT_TRUE(testBytes(filter, "\xC8\xBA\xC8\xBA\xC8\xBA"));
+  EXPECT_TRUE(testBytes(
+      filter,
+      "\xE2\x84\xAA"
+      "ab"));
+  EXPECT_FALSE(testBytes(
+      filter,
+      "\xE2\x84\xAA"
+      "a"));
+  // lower() and upper() decode 0xC3 0x41 as one code point while length()
+  // counts 2.
+  EXPECT_TRUE(testBytes(
+      filter,
+      "\xC3\x41"
+      "bc"));
+  EXPECT_FALSE(testBytes(
+      filter,
+      "\xC3\x41"
+      "b"));
+  EXPECT_FALSE(testBytes(
+      StringLength(Unit::kCodePoints, equal(3)),
+      "\xC3\x41"
+      "bc"));
+}
+
+TEST(FilterTest, stringLengthWrap) {
+  using Unit = StringLength::Unit;
+  // A length is null only for a null string.
+  EXPECT_TRUE(
+      StringLength::wrap(Unit::kBytes, isNotNull())
+          ->testingEquals(*isNotNull()));
+  EXPECT_TRUE(
+      StringLength::wrap(Unit::kBytes, equal(3))
+          ->testingEquals(StringLength(Unit::kBytes, equal(3))));
+}
+
+TEST(FilterTest, stringLengthMatchesFunctions) {
+  // Compare with the length of lower() and upper() output and with length()
+  // on random byte strings, most of which are not valid UTF-8.
+  std::mt19937 rng(42);
+  const std::vector<char> alphabet = {
+      'a',
+      'Z',
+      '\x41',
+      '\x80',
+      '\xBF',
+      '\xC3',
+      '\xC8',
+      '\xCE',
+      '\xE2',
+      '\xED',
+      '\xF0',
+      '\xF4',
+      '\xF8',
+      '\xFF',
+      '\xA3',
+      '\xBA'};
+  std::uniform_int_distribution<int32_t> lengthDistribution(0, 12);
+  std::uniform_int_distribution<size_t> charDistribution(
+      0, alphabet.size() - 1);
+  // True if the length of 'value' in 'unit' is exactly 'length'.
+  const auto hasLength =
+      [](StringLength::Unit unit, const std::string& value, int64_t length) {
+        return testBytes(StringLength(unit, equal(length)), value) &&
+            !testBytes(StringLength(unit, equal(length + 1)), value);
+      };
+  for (auto i = 0; i < 10'000; ++i) {
+    std::string value(lengthDistribution(rng), ' ');
+    for (auto& c : value) {
+      c = alphabet[charDistribution(rng)];
+    }
+    SCOPED_TRACE(folly::hexlify(value));
+    const auto lower = lowerCase(value);
+    const auto upper = upperCase(value);
+    const auto lowerLength =
+        functions::stringCore::lengthUnicode(lower.data(), lower.size());
+    ASSERT_EQ(
+        lowerLength,
+        functions::stringCore::lengthUnicode(upper.data(), upper.size()));
+    ASSERT_TRUE(hasLength(
+        StringLength::Unit::kCaseMappedCodePoints, value, lowerLength));
+    ASSERT_TRUE(hasLength(
+        StringLength::Unit::kCodePoints,
+        value,
+        functions::stringImpl::length</*isAscii=*/false>(value)));
+  }
+}
+
+TEST(FilterTest, mergeWithStringLength) {
+  using Unit = StringLength::Unit;
+  const StringLength filter(Unit::kCodePoints, between(2, 10));
+
+  const StringLength other(Unit::kCodePoints, between(3, 6, true));
+  EXPECT_TRUE(filter.mergeWith(&other)->testingEquals(
+      StringLength(Unit::kCodePoints, between(3, 6))));
+
+  const StringLength disjoint(Unit::kCodePoints, between(20, 30, true));
+  EXPECT_TRUE(StringLength(Unit::kCodePoints, between(2, 3, true))
+                  .mergeWith(&disjoint)
+                  ->testingEquals(IsNull()));
+  EXPECT_TRUE(filter.mergeWith(&disjoint)->testingEquals(AlwaysFalse()));
+
+  const StringLength values(Unit::kCodePoints, in({2, 5}));
+  EXPECT_TRUE(values.mergeWith(in({"AB", "abcd", "xyzzy"}).get())
+                  ->testingEquals(BytesValues({"AB", "xyzzy"}, false)));
+  EXPECT_TRUE(in({"AB", "abcd", "xyzzy"})
+                  ->mergeWith(&values)
+                  ->testingEquals(BytesValues({"AB", "xyzzy"}, false)));
+  EXPECT_TRUE(
+      values.mergeWith(in({"abcd"}).get())->testingEquals(AlwaysFalse()));
+
+  EXPECT_TRUE(filter.mergeWith(isNotNull().get())->testingEquals(filter));
+  EXPECT_TRUE(isNotNull()->mergeWith(&filter)->testingEquals(filter));
+  EXPECT_TRUE(filter.mergeWith(alwaysTrue().get())->testingEquals(filter));
+  EXPECT_TRUE(filter.mergeWith(isNull().get())->testingEquals(AlwaysFalse()));
+
+  EXPECT_TRUE(filter.canMergeWith(disjoint));
+  EXPECT_TRUE(filter.canMergeWith(*isNotNull()));
+  EXPECT_TRUE(filter.canMergeWith(*in({"AB"})));
+  EXPECT_FALSE(filter.canMergeWith(*lessThan("abc")));
+  VELOX_ASSERT_THROW(
+      filter.mergeWith(lessThan("abc").get()), "mergeWith() is not supported");
+  const StringLength bytes(Unit::kBytes, between(2, 3));
+  EXPECT_FALSE(filter.canMergeWith(bytes));
+  VELOX_ASSERT_THROW(filter.mergeWith(&bytes), "mergeWith() is not supported");
+
+  // LIKE 'é_' gives kAsciiBytes [3, 3] and LIKE '__' gives [2, 2]. Both pass
+  // the non-ASCII 3-byte 'éa', but the ranges do not intersect, so a merged
+  // filter would reject it.
+  const std::string eAcuteA =
+      "\xC3\xA9"
+      "a";
+  const StringLength threeAsciiBytes(Unit::kAsciiBytes, between(3, 3));
+  const StringLength twoAsciiBytes(Unit::kAsciiBytes, between(2, 2));
+  EXPECT_TRUE(testBytes(threeAsciiBytes, eAcuteA));
+  EXPECT_TRUE(testBytes(twoAsciiBytes, eAcuteA));
+  EXPECT_FALSE(threeAsciiBytes.canMergeWith(twoAsciiBytes));
+  VELOX_ASSERT_THROW(
+      threeAsciiBytes.mergeWith(&twoAsciiBytes),
+      "mergeWith() is not supported");
+  // Overlapping ranges merge exactly: a non-ASCII string passes both if it is
+  // at least as long as both lower bounds.
+  const StringLength atLeastTwo(Unit::kAsciiBytes, between(2, 5));
+  const StringLength atLeastThree(Unit::kAsciiBytes, between(3, 6));
+  EXPECT_TRUE(atLeastTwo.canMergeWith(atLeastThree));
+  EXPECT_TRUE(
+      atLeastTwo.mergeWith(&atLeastThree)
+          ->testingEquals(StringLength(Unit::kAsciiBytes, between(3, 5))));
+  const StringLength asciiValues(Unit::kAsciiBytes, in({2, 5}));
+  EXPECT_FALSE(asciiValues.canMergeWith(atLeastThree));
 }
 
 TEST(FilterTest, multiRange) {

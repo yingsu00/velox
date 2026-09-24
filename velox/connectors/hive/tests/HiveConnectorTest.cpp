@@ -28,6 +28,7 @@
 #include "velox/exec/tests/utils/PlanBuilder.h"
 #include "velox/expression/ExprConstants.h"
 #include "velox/expression/ExprToSubfieldFilter.h"
+#include "velox/type/StringFunctionFilter.h"
 
 namespace facebook::velox::connector::hive {
 namespace {
@@ -712,6 +713,149 @@ TEST_F(HiveConnectorTest, extractFiltersFromRemainingFilter) {
     ASSERT_TRUE(bytesValues->values().count("FRANCE"));
     ASSERT_TRUE(bytesValues->values().count("GERMANY"));
   }
+}
+
+TEST_F(HiveConnectorTest, extractImpliedFiltersFromRemainingFilter) {
+  auto queryCtx = core::QueryCtx::create();
+  exec::SimpleExpressionEvaluator evaluator(queryCtx.get(), pool_.get());
+  auto rowType = ROW({"c0", "c1"}, {VARCHAR(), VARCHAR()});
+  using Unit = common::StringLength::Unit;
+  const auto lowerCaseLength = [](int64_t length) {
+    return std::make_unique<common::StringLength>(
+        Unit::kCaseMappedCodePoints, exec::equal(length));
+  };
+
+  // The implied filter is added and the predicate stays in the remaining
+  // filter.
+  auto expr = parseExpr(
+      "lower(c0) = 'aws rds' and lower(c1) <> '(not set)' and c1 is not null",
+      rowType);
+  SubfieldFilters filters;
+  double sampleRate = 1;
+  auto remaining =
+      extractFiltersFromRemainingFilter(expr, &evaluator, filters, sampleRate);
+  ASSERT_EQ(
+      *remaining,
+      *parseExpr(
+          "lower(c0) = 'aws rds' and lower(c1) <> '(not set)'", rowType));
+  ASSERT_EQ(filters.size(), 2);
+  ASSERT_TRUE(filters.at(Subfield("c0"))->testingEquals(*lowerCaseLength(7)));
+  ASSERT_TRUE(filters.at(Subfield("c1"))->testingEquals(*exec::isNotNull()));
+
+  // Implied filters are merged with each other and with existing filters.
+  expr = parseExpr(
+      "lower(c0) in ('a', 'bb') and lower(c0) in ('bb', 'ccc') and "
+      "lower(c1) = 'x'",
+      rowType);
+  filters.clear();
+  filters.emplace(Subfield("c1"), exec::isNotNull());
+  remaining =
+      extractFiltersFromRemainingFilter(expr, &evaluator, filters, sampleRate);
+  ASSERT_TRUE(remaining);
+  ASSERT_EQ(filters.size(), 2);
+  ASSERT_TRUE(filters.at(Subfield("c0"))->testingEquals(*lowerCaseLength(2)));
+  ASSERT_TRUE(filters.at(Subfield("c1"))->testingEquals(*lowerCaseLength(1)));
+
+  // An implied filter that cannot be merged with an existing filter is
+  // dropped.
+  expr = parseExpr("lower(c0) = 'abc'", rowType);
+  filters.clear();
+  filters.emplace(Subfield("c0"), exec::lessThan("m"));
+  remaining =
+      extractFiltersFromRemainingFilter(expr, &evaluator, filters, sampleRate);
+  ASSERT_EQ(*remaining, *expr);
+  ASSERT_EQ(filters.size(), 1);
+  ASSERT_TRUE(filters.at(Subfield("c0"))->testingEquals(*exec::lessThan("m")));
+
+  // LIKE 'é_' gives kAsciiBytes [3, 3] and LIKE '__' gives [2, 2]. Both match
+  // the non-ASCII 3-byte 'éa', so the filters do not merge and the second one
+  // is dropped.
+  expr = parseExpr("c0 like '\xC3\xA9_' and c0 like '__'", rowType);
+  filters.clear();
+  remaining =
+      extractFiltersFromRemainingFilter(expr, &evaluator, filters, sampleRate);
+  ASSERT_EQ(*remaining, *expr);
+  ASSERT_EQ(filters.size(), 1);
+  ASSERT_TRUE(
+      filters.at(Subfield("c0"))
+          ->testingEquals(
+              common::StringLength(Unit::kAsciiBytes, exec::between(3, 3))));
+
+  // Filters implied by a disjunct do not hold for the disjunction.
+  expr = parseExpr("lower(c0) = 'abc' or lower(c0) = 'de'", rowType);
+  filters.clear();
+  remaining =
+      extractFiltersFromRemainingFilter(expr, &evaluator, filters, sampleRate);
+  ASSERT_EQ(*remaining, *expr);
+  ASSERT_TRUE(filters.empty());
+
+  expr = parseExpr("not (lower(c0) <> 'abc')", rowType);
+  filters.clear();
+  remaining =
+      extractFiltersFromRemainingFilter(expr, &evaluator, filters, sampleRate);
+  ASSERT_EQ(*remaining, *expr);
+  ASSERT_EQ(filters.size(), 1);
+  ASSERT_TRUE(filters.at(Subfield("c0"))->testingEquals(*lowerCaseLength(3)));
+
+  // Implied filters in different units are not merged.
+  expr = parseExpr("c0 like 'a_c%' and lower(c0) = 'abc'", rowType);
+  filters.clear();
+  remaining =
+      extractFiltersFromRemainingFilter(expr, &evaluator, filters, sampleRate);
+  ASSERT_EQ(*remaining, *expr);
+  ASSERT_EQ(filters.size(), 1);
+  ASSERT_TRUE(
+      filters.at(Subfield("c0"))
+          ->testingEquals(
+              common::StringLength(
+                  Unit::kBytes,
+                  exec::between(
+                      int64_t{3}, std::numeric_limits<int64_t>::max()))));
+
+  // length() is converted to a filter and replaces the predicate. The implied
+  // filter is in a different unit and is dropped.
+  expr = parseExpr("length(c1) < 10 and lower(c1) = 'abc'", rowType);
+  filters.clear();
+  remaining =
+      extractFiltersFromRemainingFilter(expr, &evaluator, filters, sampleRate);
+  ASSERT_EQ(*remaining, *parseExpr("lower(c1) = 'abc'", rowType));
+  ASSERT_EQ(filters.size(), 1);
+  ASSERT_TRUE(filters.at(Subfield("c1"))
+                  ->testingEquals(
+                      common::StringLength(
+                          Unit::kCodePoints, exec::lessThan(int64_t{10}))));
+  ASSERT_EQ(sampleRate, 1);
+}
+
+TEST_F(HiveConnectorTest, extractSupportedFiltersFromRemainingFilter) {
+  auto queryCtx = core::QueryCtx::create();
+  exec::SimpleExpressionEvaluator evaluator(queryCtx.get(), pool_.get());
+  auto rowType = ROW({"c0", "c1"}, {VARCHAR(), VARCHAR()});
+  const auto canPushDown = [](const common::Filter& filter) {
+    return !filter.is(common::FilterKind::kStringLength);
+  };
+
+  auto expr = parseExpr(
+      "lower(c0) = 'abc' and length(c1) = 3 and c0 like 'a_c' and c1 = 'x'",
+      rowType);
+  SubfieldFilters filters;
+  double sampleRate = 1;
+  auto remaining = extractFiltersFromRemainingFilter(
+      expr, &evaluator, filters, sampleRate, canPushDown);
+  ASSERT_EQ(
+      *remaining,
+      *parseExpr(
+          "lower(c0) = 'abc' and length(c1) = 3 and c0 like 'a_c'", rowType));
+  ASSERT_EQ(filters.size(), 1);
+  ASSERT_TRUE(filters.at(Subfield("c1"))->testingEquals(*exec::equal("x")));
+
+  // Disjuncts with rejected filters stay in the remaining filter.
+  expr = parseExpr("length(c1) = 3 or length(c1) = 5", rowType);
+  filters.clear();
+  remaining = extractFiltersFromRemainingFilter(
+      expr, &evaluator, filters, sampleRate, canPushDown);
+  ASSERT_EQ(*remaining, *expr);
+  ASSERT_TRUE(filters.empty());
 }
 
 TEST_F(HiveConnectorTest, prestoTableSampling) {
