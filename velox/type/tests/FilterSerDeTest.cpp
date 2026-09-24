@@ -19,6 +19,7 @@
 
 #include <velox/type/Filter.h>
 #include "velox/expression/ExprToSubfieldFilter.h"
+#include "velox/type/StringFunctionFilter.h"
 
 #include <gtest/gtest.h>
 
@@ -106,6 +107,19 @@ TEST_F(FilterSerDeTest, valuesFilters) {
 
       testSerde(HugeintValuesUsingHashTable(
           lowerHugeint, upperHugeint, valuesHugeint, nullAllowed));
+    }
+  }
+}
+
+TEST_F(FilterSerDeTest, stringFunctionFilters) {
+  for (auto nullAllowed : {true, false}) {
+    for (auto unit :
+         {StringLength::Unit::kBytes,
+          StringLength::Unit::kCodePoints,
+          StringLength::Unit::kCaseMappedCodePoints,
+          StringLength::Unit::kAsciiBytes}) {
+      testSerde(StringLength(unit, in({1, 3, 5, 9}, nullAllowed)));
+      testSerde(StringLength(unit, between(3, 9, nullAllowed)));
     }
   }
 }

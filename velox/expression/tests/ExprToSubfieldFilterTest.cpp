@@ -20,6 +20,7 @@
 #include "velox/functions/prestosql/registration/RegistrationFunctions.h"
 #include "velox/parse/ExpressionsParser.h"
 #include "velox/parse/TypeResolver.h"
+#include "velox/type/StringFunctionFilter.h"
 
 using facebook::velox::common::Subfield;
 
@@ -81,6 +82,19 @@ class ExprToSubfieldFilterTest : public testing::Test {
     if (auto result =
             ExprToSubfieldFilterParser::getInstance()->leafCallToSubfieldFilter(
                 *call, evaluator(), negated)) {
+      return std::move(result.value());
+    }
+
+    return std::make_pair(common::Subfield(), nullptr);
+  }
+
+  std::pair<common::Subfield, std::unique_ptr<common::Filter>>
+  leafCallToImpliedSubfieldFilter(
+      const core::CallTypedExprPtr& call,
+      bool negated = false) {
+    if (auto result = ExprToSubfieldFilterParser::getInstance()
+                          ->leafCallToImpliedSubfieldFilter(
+                              *call, evaluator(), negated)) {
       return std::move(result.value());
     }
 
@@ -399,6 +413,156 @@ TEST_F(ExprToSubfieldFilterTest, like) {
   auto [subfield, filter] = leafCallToSubfieldFilter(call);
 
   ASSERT_FALSE(filter);
+}
+
+TEST_F(ExprToSubfieldFilterTest, length) {
+  using Unit = common::StringLength::Unit;
+  const auto rowType = ROW({"a", "b"}, {VARCHAR(), VARBINARY()});
+
+  // A predicate on length(a) gives the filter that the same predicate gives on
+  // a BIGINT column, applied to the length of a.
+  for (const std::string predicate :
+       {"= 3",
+        "<> 3",
+        "< 3",
+        "<= 3",
+        "> 3",
+        ">= 3",
+        "between 2 and 5",
+        "in (1, 3, 4)",
+        "in (1, null)",
+        "= -1",
+        "= cast(null as bigint)",
+        "is null"}) {
+    for (const bool negated : {false, true}) {
+      SCOPED_TRACE(fmt::format("{} {}", predicate, negated));
+      auto [subfield, filter] = leafCallToSubfieldFilter(
+          parseCallExpr("length(a) " + predicate, rowType), negated);
+      auto [lengthSubfield, lengthFilter] = leafCallToSubfieldFilter(
+          parseCallExpr("n " + predicate, ROW("n", BIGINT())), negated);
+      ASSERT_TRUE(lengthFilter);
+      validateSubfield(subfield, {"a"});
+      VELOX_ASSERT_FILTER(
+          common::StringLength::wrap(
+              Unit::kCodePoints, std::move(lengthFilter)),
+          filter);
+    }
+  }
+
+  {
+    auto [subfield, filter] =
+        leafCallToSubfieldFilter(parseCallExpr("length(a) = 3", rowType));
+    VELOX_ASSERT_FILTER(
+        std::make_unique<common::StringLength>(Unit::kCodePoints, equal(3)),
+        filter);
+  }
+  {
+    // length() counts bytes of VARBINARY.
+    auto [subfield, filter] =
+        leafCallToSubfieldFilter(parseCallExpr("length(b) = 3", rowType));
+    validateSubfield(subfield, {"b"});
+    VELOX_ASSERT_FILTER(
+        std::make_unique<common::StringLength>(Unit::kBytes, equal(3)), filter);
+  }
+
+  for (const auto& expr :
+       {"length(a) = length(a)", "length(lower(a)) = 3", "length(a) + 1 = 3"}) {
+    SCOPED_TRACE(expr);
+    auto [subfield, filter] =
+        leafCallToSubfieldFilter(parseCallExpr(expr, rowType));
+    ASSERT_FALSE(filter);
+  }
+}
+
+TEST_F(ExprToSubfieldFilterTest, impliedStringLength) {
+  using Unit = common::StringLength::Unit;
+  const auto rowType = ROW({"a", "b"}, {VARCHAR(), VARCHAR()});
+  const auto caseMapped = [](std::unique_ptr<common::Filter> lengths) {
+    return std::make_unique<common::StringLength>(
+        Unit::kCaseMappedCodePoints, std::move(lengths));
+  };
+  const auto bytes = [](int64_t min, int64_t max) {
+    return std::make_unique<common::StringLength>(
+        Unit::kBytes, between(min, max));
+  };
+  const auto asciiBytes = [](int64_t min, int64_t max) {
+    return std::make_unique<common::StringLength>(
+        Unit::kAsciiBytes, between(min, max));
+  };
+  constexpr auto kMax = std::numeric_limits<int64_t>::max();
+
+  struct TestCase {
+    std::string expr;
+    bool negated;
+    std::unique_ptr<common::Filter> expected;
+  };
+  std::vector<TestCase> testCases;
+  testCases.push_back(
+      {"lower(a) = lower('AWS RDS')", false, caseMapped(equal(7))});
+  testCases.push_back({"upper(a) = 'ABC'", false, caseMapped(equal(3))});
+  // U+00FC has 2 bytes and 1 code point.
+  testCases.push_back(
+      {"lower(a) = '\xC3\xBC"
+       "ber'",
+       false,
+       caseMapped(equal(4))});
+  testCases.push_back(
+      {"lower(a) in ('x', 'yyy', 'zzz')", false, caseMapped(in({1, 3}))});
+  testCases.push_back({"lower(a) <> 'abc'", true, caseMapped(equal(3))});
+  testCases.push_back({"a like 'abc'", false, bytes(3, 3)});
+  // '_' matches one byte of ASCII and at least one byte of other strings.
+  testCases.push_back({"a like 'a_c'", false, asciiBytes(3, 3)});
+  testCases.push_back({"a like 'a%c'", false, bytes(2, kMax)});
+  testCases.push_back({"a like 'a_%'", false, bytes(2, kMax)});
+  testCases.push_back({"a like '__'", false, asciiBytes(2, 2)});
+  testCases.push_back(
+      {"a like '\xC3\xBC"
+       "_'",
+       false,
+       asciiBytes(3, 3)});
+  testCases.push_back({"a like 'a#%#_##' escape '#'", false, bytes(4, 4)});
+
+  for (const auto& testCase : testCases) {
+    SCOPED_TRACE(fmt::format("{} {}", testCase.expr, testCase.negated));
+    auto call = parseCallExpr(testCase.expr, rowType);
+    auto [subfield, filter] =
+        leafCallToImpliedSubfieldFilter(call, testCase.negated);
+    validateSubfield(subfield, {"a"});
+    ASSERT_TRUE(filter);
+    VELOX_ASSERT_FILTER(testCase.expected, filter);
+
+    // The predicate itself is not converted to a filter.
+    auto [exactSubfield, exactFilter] =
+        leafCallToSubfieldFilter(call, testCase.negated);
+    ASSERT_FALSE(exactFilter);
+  }
+
+  // Predicates that do not restrict the length.
+  for (const auto& expr :
+       {"lower(a) <> 'abc'",
+        "lower(a) < 'abc'",
+        "lower(a) between 'a' and 'b'",
+        "lower(a) = b",
+        "lower(a) is null",
+        "a = 'abc'",
+        "trim(a) = 'abc'",
+        "lower(lower(a)) = 'abc'",
+        "a like '%'",
+        "a like b",
+        // LIKE rejects these escapes.
+        "a like 'a#' escape '#'",
+        "a like 'a#b' escape '#'"}) {
+    SCOPED_TRACE(expr);
+    auto [subfield, filter] =
+        leafCallToImpliedSubfieldFilter(parseCallExpr(expr, rowType));
+    ASSERT_FALSE(filter);
+  }
+  for (const auto& expr : {"lower(a) = 'abc'", "a like 'abc'"}) {
+    SCOPED_TRACE(expr);
+    auto [subfield, filter] = leafCallToImpliedSubfieldFilter(
+        parseCallExpr(expr, rowType), /*negated=*/true);
+    ASSERT_FALSE(filter);
+  }
 }
 
 TEST_F(ExprToSubfieldFilterTest, nonConstant) {
