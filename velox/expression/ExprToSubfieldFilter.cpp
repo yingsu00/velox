@@ -19,6 +19,8 @@
 #include <span>
 
 #include "velox/expression/Expr.h"
+#include "velox/functions/lib/string/StringCore.h"
+#include "velox/type/StringFunctionFilter.h"
 
 using namespace facebook::velox;
 
@@ -1275,6 +1277,222 @@ combine(common::Subfield& subfield, std::unique_ptr<common::Filter>& filter) {
 
   return std::nullopt;
 }
+
+// Returns the argument of 'expr' if 'expr' is a call to 'functionName' with a
+// single argument of 'argumentKind', nullptr otherwise.
+const core::TypedExprPtr* unaryCallArgument(
+    const core::TypedExprPtr& expr,
+    std::string_view functionName,
+    TypeKind argumentKind) {
+  if (!expr->isCallKind()) {
+    return nullptr;
+  }
+  const auto* call = expr->asUnchecked<core::CallTypedExpr>();
+  if (call->name() != functionName || call->inputs().size() != 1 ||
+      call->inputs()[0]->type()->kind() != argumentKind) {
+    return nullptr;
+  }
+  return &call->inputs()[0];
+}
+
+// Returns 'call' with its first argument replaced by 'argument'.
+core::CallTypedExprPtr replaceFirstArgument(
+    const core::CallTypedExpr& call,
+    core::TypedExprPtr argument) {
+  auto inputs = call.inputs();
+  inputs[0] = std::move(argument);
+  return std::make_shared<core::CallTypedExpr>(
+      call.type(), std::move(inputs), call.name());
+}
+
+// Returns 'call' with its first argument, lower(x) or upper(x), replaced by
+// x. Returns nullptr if the first argument of 'call' is not such a call.
+// Presto's lower() and upper() use simple Unicode case mapping, which keeps
+// the number of code points that StringLength::Unit::kCaseMappedCodePoints
+// counts.
+core::CallTypedExprPtr unwrapCaseMapping(const core::CallTypedExpr& call) {
+  for (const auto* name : {"lower", "upper"}) {
+    if (const auto* argument =
+            unaryCallArgument(call.inputs()[0], name, TypeKind::VARCHAR)) {
+      return replaceFirstArgument(call, *argument);
+    }
+  }
+  return nullptr;
+}
+
+// Returns 'field' with type 'type', or nullptr if 'field' is not a field
+// reference.
+core::TypedExprPtr retypeField(
+    const core::TypedExprPtr& field,
+    const TypePtr& type) {
+  if (const auto* access =
+          dynamic_cast<const core::FieldAccessTypedExpr*>(field.get())) {
+    return access->inputs().empty()
+        ? std::make_shared<core::FieldAccessTypedExpr>(type, access->name())
+        : std::make_shared<core::FieldAccessTypedExpr>(
+              type, access->inputs()[0], access->name());
+  }
+  if (const auto* dereference =
+          dynamic_cast<const core::DereferenceTypedExpr*>(field.get())) {
+    return std::make_shared<core::DereferenceTypedExpr>(
+        type, dereference->inputs()[0], dereference->index());
+  }
+  return nullptr;
+}
+
+// Leaf call with its first argument, length(x), replaced by x retyped as
+// BIGINT, so that the call parses into a filter on lengths.
+struct UnwrappedLength {
+  core::CallTypedExprPtr call;
+  // Unit that length() counts.
+  common::StringLength::Unit unit;
+};
+
+// Returns 'call' with its first argument unwrapped if that argument is
+// length(x), or std::nullopt otherwise.
+std::optional<UnwrappedLength> unwrapLength(const core::CallTypedExpr& call) {
+  using Unit = common::StringLength::Unit;
+  // length() counts code points of VARCHAR and bytes of VARBINARY.
+  for (const auto& [kind, unit] :
+       {std::pair{TypeKind::VARCHAR, Unit::kCodePoints},
+        std::pair{TypeKind::VARBINARY, Unit::kBytes}}) {
+    if (const auto* argument =
+            unaryCallArgument(call.inputs()[0], "length", kind)) {
+      if (auto field = retypeField(*argument, BIGINT())) {
+        return UnwrappedLength{
+            replaceFirstArgument(call, std::move(field)), unit};
+      }
+      return std::nullopt;
+    }
+  }
+  return std::nullopt;
+}
+
+// Returns the value of 'expr' if it is a non-null VARCHAR constant, or
+// std::nullopt.
+std::optional<std::string> varcharConstant(
+    const core::TypedExprPtr& expr,
+    core::ExpressionEvaluator* evaluator) {
+  if (expr->type()->kind() != TypeKind::VARCHAR) {
+    return std::nullopt;
+  }
+  auto value = toConstant(expr, evaluator);
+  if (value == nullptr || value->isNullAt(0)) {
+    return std::nullopt;
+  }
+  return std::string(singleValue<StringView>(value));
+}
+
+// One element of a LIKE pattern.
+struct LikeToken {
+  enum class Kind {
+    // A byte that matches itself.
+    kLiteral,
+    // '_', which matches one character.
+    kSingleChar,
+    // '%', which matches any number of characters.
+    kAnyChars,
+  };
+
+  Kind kind;
+  // Byte to match if 'kind' is kLiteral.
+  char literal{0};
+};
+
+// Splits LIKE 'pattern' into tokens the way LIKE reads it: an escape makes the
+// next character a literal. Returns std::nullopt for escapes that LIKE rejects,
+// i.e. one at the end of 'pattern' or one before a character other than '%',
+// '_' and the escape.
+std::optional<std::vector<LikeToken>> likeTokens(
+    std::string_view pattern,
+    std::optional<char> escape) {
+  std::vector<LikeToken> tokens;
+  for (size_t i = 0; i < pattern.size(); ++i) {
+    const char c = pattern[i];
+    if (c == escape) {
+      if (i + 1 == pattern.size()) {
+        return std::nullopt;
+      }
+      const char escaped = pattern[++i];
+      if (escaped != '%' && escaped != '_' && escaped != c) {
+        return std::nullopt;
+      }
+      tokens.push_back({LikeToken::Kind::kLiteral, escaped});
+    } else if (c == '%') {
+      tokens.push_back({LikeToken::Kind::kAnyChars});
+    } else if (c == '_') {
+      tokens.push_back({LikeToken::Kind::kSingleChar});
+    } else {
+      tokens.push_back({LikeToken::Kind::kLiteral, c});
+    }
+  }
+  return tokens;
+}
+
+// Returns the tokens of the pattern of 'call' if it is x LIKE pattern
+// [ESCAPE escape] on a VARCHAR with a constant pattern and escape, or
+// std::nullopt.
+std::optional<std::vector<LikeToken>> likeCallTokens(
+    const core::CallTypedExpr& call,
+    core::ExpressionEvaluator* evaluator) {
+  const auto& inputs = call.inputs();
+  if (call.name() != "like" || inputs.size() < 2 ||
+      inputs[0]->type()->kind() != TypeKind::VARCHAR) {
+    return std::nullopt;
+  }
+  const auto pattern = varcharConstant(inputs[1], evaluator);
+  if (!pattern.has_value()) {
+    return std::nullopt;
+  }
+  std::optional<char> escape;
+  if (inputs.size() > 2) {
+    const auto escapeString = varcharConstant(inputs[2], evaluator);
+    if (!escapeString.has_value() || escapeString->size() != 1) {
+      return std::nullopt;
+    }
+    escape = escapeString->front();
+  }
+  return likeTokens(pattern.value(), escape);
+}
+
+// Returns a filter on the lengths of strings that match a LIKE pattern of
+// 'tokens', or nullptr if the pattern does not restrict the length. Literal
+// bytes match themselves in all LIKE implementations. Each '_' matches one byte
+// of an ASCII string and at least one byte of other strings: on invalid UTF-8,
+// some implementations match a lead byte with any number of continuation
+// bytes. So a pattern with '_' bounds only ASCII strings from above.
+std::unique_ptr<common::Filter> likeLengthFilter(
+    const std::vector<LikeToken>& tokens) {
+  using Unit = common::StringLength::Unit;
+  int64_t minLength{0};
+  bool hasSingleChar{false};
+  bool hasAnyChars{false};
+  for (const auto& token : tokens) {
+    switch (token.kind) {
+      case LikeToken::Kind::kLiteral:
+        ++minLength;
+        break;
+      case LikeToken::Kind::kSingleChar:
+        ++minLength;
+        hasSingleChar = true;
+        break;
+      case LikeToken::Kind::kAnyChars:
+        hasAnyChars = true;
+        break;
+    }
+  }
+  if (hasAnyChars) {
+    if (minLength == 0) {
+      return nullptr;
+    }
+    // Without an upper bound, both units pass the same strings. kBytes lets
+    // the filter merge with other implied filters.
+    return std::make_unique<common::StringLength>(
+        Unit::kBytes, greaterThanOrEqual(minLength));
+  }
+  return std::make_unique<common::StringLength>(
+      hasSingleChar ? Unit::kAsciiBytes : Unit::kBytes, equal(minLength));
+}
 } // namespace
 
 std::optional<std::pair<common::Subfield, std::unique_ptr<common::Filter>>>
@@ -1284,6 +1502,18 @@ PrestoExprToSubfieldFilterParser::leafCallToSubfieldFilter(
     bool negated) {
   if (call.inputs().empty()) {
     return std::nullopt;
+  }
+
+  // Translates a leaf call on length(x), e.g. length(x) between 1 and 3, into
+  // a StringLength filter on x around the filter for the call on x.
+  if (auto unwrapped = unwrapLength(call)) {
+    auto result =
+        leafCallToSubfieldFilter(*unwrapped->call, evaluator, negated);
+    if (result.has_value()) {
+      result->second = common::StringLength::wrap(
+          unwrapped->unit, std::move(result->second));
+    }
+    return result;
   }
 
   const auto* leftSide = call.inputs()[0].get();
@@ -1398,6 +1628,66 @@ PrestoExprToSubfieldFilterParser::leafCallToSubfieldFilter(
     }
   }
   return std::nullopt;
+}
+
+std::optional<std::pair<common::Subfield, std::unique_ptr<common::Filter>>>
+PrestoExprToSubfieldFilterParser::leafCallToImpliedSubfieldFilter(
+    const core::CallTypedExpr& call,
+    core::ExpressionEvaluator* evaluator,
+    bool negated) {
+  if (call.name() != "like") {
+    return caseMappingToImpliedSubfieldFilter(call, evaluator, negated);
+  }
+  common::Subfield subfield;
+  if (negated || call.inputs().empty() ||
+      !toSubfield(call.inputs()[0].get(), subfield)) {
+    return std::nullopt;
+  }
+  const auto tokens = likeCallTokens(call, evaluator);
+  if (!tokens.has_value()) {
+    return std::nullopt;
+  }
+  auto lengthFilter = likeLengthFilter(tokens.value());
+  if (lengthFilter == nullptr) {
+    return std::nullopt;
+  }
+  return std::make_pair(std::move(subfield), std::move(lengthFilter));
+}
+
+std::optional<std::pair<common::Subfield, std::unique_ptr<common::Filter>>>
+PrestoExprToSubfieldFilterParser::caseMappingToImpliedSubfieldFilter(
+    const core::CallTypedExpr& call,
+    core::ExpressionEvaluator* evaluator,
+    bool negated) {
+  if (call.inputs().empty()) {
+    return std::nullopt;
+  }
+  const auto unwrapped = unwrapCaseMapping(call);
+  if (unwrapped == nullptr) {
+    return std::nullopt;
+  }
+  // lower(x) is in a set of values only if x is in the set after case
+  // mapping, which maps each code point to one code point. So lower(x) has as
+  // many code points as one of the values.
+  auto subfieldAndFilter =
+      leafCallToSubfieldFilter(*unwrapped, evaluator, negated);
+  if (!subfieldAndFilter.has_value() ||
+      !subfieldAndFilter->second->is(common::FilterKind::kBytesValues)) {
+    return std::nullopt;
+  }
+  const auto* values = subfieldAndFilter->second->as<common::BytesValues>();
+  std::vector<int64_t> lengths;
+  for (const auto& value : values->values()) {
+    lengths.push_back(
+        functions::stringCore::lengthUnicode(value.data(), value.size()));
+  }
+  std::sort(lengths.begin(), lengths.end());
+  lengths.erase(std::unique(lengths.begin(), lengths.end()), lengths.end());
+  return std::make_pair(
+      std::move(subfieldAndFilter->first),
+      std::make_unique<common::StringLength>(
+          common::StringLength::Unit::kCaseMappedCodePoints,
+          common::createBigintValues(lengths, values->testNull())));
 }
 
 } // namespace facebook::velox::exec
