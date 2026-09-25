@@ -24,9 +24,10 @@ namespace facebook::velox::common {
 /// measured in one of several units, so the filter can be derived from
 /// different string predicates:
 ///   length(x) = 3 -> {kCodePoints, BigintRange(3, 3)}
-///   lower(x) IN ('a', 'bcd') -> {kCaseMappedCodePoints, BigintValues(1, 3)}
 ///   x LIKE 'a_%' -> {kBytes, BigintRange(2, max)}
 ///   x LIKE 'a_c' -> {kAsciiBytes, BigintRange(3, 3)}
+/// CaseMapped uses kCaseMappedCodePoints to check lower(x) IN ('a', 'bcd')
+/// without mapping values whose length differs.
 class StringLength final : public Filter {
  public:
   enum class Unit {
@@ -121,6 +122,93 @@ class StringLength final : public Filter {
   // Filter on the length in 'unit_', e.g. BigintRange(3, 3) for
   // length(x) = 3.
   const std::unique_ptr<Filter> inner_;
+};
+
+/// Passes strings for which 'inner' passes after simple Unicode case mapping:
+/// each code point is lowercased or uppercased on its own, with no locale or
+/// context rules. Engines whose lower() or upper() apply such rules, e.g.
+/// Turkish dotted I or Greek final sigma, must not translate them to this
+/// filter. Used to push down predicates like lower(x) = 'abc' or
+/// upper(x) NOT IN ('A', 'B'). Readers evaluate filters once per distinct value
+/// of a dictionary-encoded column, so the mapping runs on the dictionary
+/// instead of on every row.
+class CaseMapped final : public Filter {
+ public:
+  enum class Mapping {
+    kLower,
+    kUpper,
+  };
+
+  VELOX_DECLARE_EMBEDDED_ENUM_NAME(Mapping);
+
+  /// Returns a filter on strings that pass 'inner' after 'mapping'. Mapping
+  /// keeps nulls and non-nulls, so a filter that only tests for null, e.g.
+  /// AlwaysFalse or IsNotNull, is returned as is.
+  static std::unique_ptr<Filter> wrap(
+      Mapping mapping,
+      std::unique_ptr<Filter> inner);
+
+  /// @param mapping Function to apply to values before testing them with
+  /// 'inner'.
+  /// @param inner Filter on mapped values. Nulls pass if 'inner' allows nulls.
+  CaseMapped(Mapping mapping, std::unique_ptr<Filter> inner);
+
+  /// Copies 'other' with 'nullAllowed'. Used by clone().
+  CaseMapped(const CaseMapped& other, bool nullAllowed);
+
+  folly::dynamic serialize() const override;
+
+  static std::unique_ptr<Filter> create(const folly::dynamic& obj);
+
+  std::unique_ptr<Filter> clone(
+      std::optional<bool> nullAllowed = std::nullopt) const final {
+    return std::make_unique<CaseMapped>(
+        *this, nullAllowed.value_or(nullAllowed_));
+  }
+
+  bool testNonNull() const final {
+    return true;
+  }
+
+  bool hasTestLength() const final {
+    return lengthFilter_ != nullptr;
+  }
+
+  bool testLength(int32_t length) const final {
+    return lengthFilter_ == nullptr || lengthFilter_->testLength(length);
+  }
+
+  bool testBytes(const char* value, int32_t length) const final;
+
+  bool testBytesRange(
+      std::optional<std::string_view> min,
+      std::optional<std::string_view> max,
+      bool hasNull) const final;
+
+  std::unique_ptr<Filter> mergeWith(const Filter* other) const final;
+
+  Mapping mapping() const {
+    return mapping_;
+  }
+
+  const Filter& inner() const {
+    return *inner_;
+  }
+
+  std::string toString() const final;
+
+  bool testingEquals(const Filter& other) const final;
+
+ private:
+  const Mapping mapping_;
+  // Filter on the case-mapped value, e.g. BytesValues {'aws rds'} for
+  // lower(x) = 'aws rds'.
+  const std::unique_ptr<Filter> inner_;
+  // Lengths of the values accepted by an IN-list 'inner', in case-mapped code
+  // points. Mapping keeps the number of code points, so checking the length
+  // first rejects most values without mapping them. Null for other 'inner'
+  // filters. Shared by copies.
+  const std::shared_ptr<const StringLength> lengthFilter_;
 };
 
 } // namespace facebook::velox::common

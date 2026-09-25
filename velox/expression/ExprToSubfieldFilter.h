@@ -517,6 +517,8 @@ class ExprToSubfieldFilterParser {
   /// Detects overlapping ranges of bigint and floating point values.
   /// Detects a list of single-value bigint filters and combines them into a
   /// single IN list.
+  /// Merges CaseMapped disjuncts with the same mapping by merging their inner
+  /// filters.
   /// Returns nullptr if no combination has been made.
   static std::unique_ptr<common::Filter> makeOrFilter(
       std::vector<std::unique_ptr<common::Filter>> disjuncts);
@@ -606,23 +608,14 @@ class PrestoExprToSubfieldFilterParser : public ExprToSubfieldFilterParser {
       core::ExpressionEvaluator* evaluator,
       bool negated = false) override;
 
-  /// Derives StringLength filters on 'x' from 'lower(x) = c',
-  /// 'upper(x) = c', their IN forms and 'x LIKE pattern'. Returns std::nullopt
-  /// for NOT LIKE and for patterns that do not restrict the length, e.g. '%'.
+  /// Derives a StringLength filter on 'x' from 'x LIKE pattern'. Returns
+  /// std::nullopt for NOT LIKE and for patterns that do not restrict the
+  /// length, e.g. '%'.
   std::optional<std::pair<common::Subfield, std::unique_ptr<common::Filter>>>
   leafCallToImpliedSubfieldFilter(
       const core::CallTypedExpr& call,
       core::ExpressionEvaluator* evaluator,
       bool negated) override;
-
- private:
-  // Derives a StringLength filter on 'x' from 'lower(x) = c', 'upper(x) = c'
-  // and their IN forms.
-  std::optional<std::pair<common::Subfield, std::unique_ptr<common::Filter>>>
-  caseMappingToImpliedSubfieldFilter(
-      const core::CallTypedExpr& call,
-      core::ExpressionEvaluator* evaluator,
-      bool negated);
 };
 
 } // namespace facebook::velox::exec

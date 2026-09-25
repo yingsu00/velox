@@ -128,6 +128,8 @@ class StringFunctionFilterBenchmark
         {"lower_eq_and_neq",
          "lower(service) = 'aws rds' and lower(resource) <> '(not set)'"},
         {"lower_in", "lower(service) in ('aws lambda', 'aws glue')"},
+        {"lower_or",
+         "lower(service) = 'aws lambda' or lower(service) = 'aws glue'"},
         {"like", "resource like '(not _et)'"},
         {"length", "length(resource) < 50"},
     };

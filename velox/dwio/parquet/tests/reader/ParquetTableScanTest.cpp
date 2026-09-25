@@ -998,6 +998,11 @@ TEST_F(ParquetTableScanTest, stringFunctionFilters) {
       "BER', '\xC8\xBA"
       "BC')",
       "lower(c0) in ('abc', 'kab')",
+      "lower(c0) = 'abc' or lower(c0) = 'aws rds' or lower(c0) = 'kab'",
+      "lower(c0) not in ('abc', 'aws rds')",
+      "upper(c0) between 'A' and 'B'",
+      "lower(c0) is null",
+      "lower(upper(c0)) = 'abc'",
       "c0 like '_'",
       "c0 like '\xC3\xA9_' and c0 like '__'",
       "c0 like 'a_c'",

@@ -19,7 +19,6 @@
 #include <span>
 
 #include "velox/expression/Expr.h"
-#include "velox/functions/lib/string/StringCore.h"
 #include "velox/type/StringFunctionFilter.h"
 
 using namespace facebook::velox;
@@ -1189,6 +1188,34 @@ std::unique_ptr<common::Filter> tryMergeBytesValues(
   return std::make_unique<common::BytesValues>(values, nullAllowed);
 }
 
+// Merges disjuncts that are CaseMapped filters with the same mapping into one
+// whose inner filter merges theirs, e.g. lower(a) = 'x' or lower(a) = 'y' into
+// lower(a) in ('x', 'y'). Returns nullptr if the disjuncts are not such filters
+// or their inner filters do not merge.
+std::unique_ptr<common::Filter> tryMergeCaseMapped(
+    const std::vector<std::unique_ptr<common::Filter>>& disjuncts) {
+  const auto* first =
+      dynamic_cast<const common::CaseMapped*>(disjuncts[0].get());
+  if (first == nullptr) {
+    return nullptr;
+  }
+  std::vector<std::unique_ptr<common::Filter>> innerFilters;
+  for (const auto& disjunct : disjuncts) {
+    const auto* caseMapped =
+        dynamic_cast<const common::CaseMapped*>(disjunct.get());
+    if (caseMapped == nullptr || caseMapped->mapping() != first->mapping()) {
+      return nullptr;
+    }
+    innerFilters.push_back(caseMapped->inner().clone());
+  }
+  auto inner =
+      ExprToSubfieldFilterParser::makeOrFilter(std::move(innerFilters));
+  if (inner == nullptr) {
+    return nullptr;
+  }
+  return common::CaseMapped::wrap(first->mapping(), std::move(inner));
+}
+
 } // namespace
 
 // static
@@ -1265,6 +1292,10 @@ std::unique_ptr<common::Filter> ExprToSubfieldFilterParser::makeOrFilter(
     return merged;
   }
 
+  if (auto merged = tryMergeCaseMapped(disjuncts)) {
+    return merged;
+  }
+
   return nullptr;
 }
 
@@ -1305,19 +1336,29 @@ core::CallTypedExprPtr replaceFirstArgument(
       call.type(), std::move(inputs), call.name());
 }
 
-// Returns 'call' with its first argument, lower(x) or upper(x), replaced by
-// x. Returns nullptr if the first argument of 'call' is not such a call.
-// Presto's lower() and upper() use simple Unicode case mapping, which keeps
-// the number of code points that StringLength::Unit::kCaseMappedCodePoints
-// counts.
-core::CallTypedExprPtr unwrapCaseMapping(const core::CallTypedExpr& call) {
-  for (const auto* name : {"lower", "upper"}) {
+// Leaf call with its first argument, lower(x) or upper(x), replaced by x.
+struct UnwrappedCaseMapping {
+  core::CallTypedExprPtr call;
+  // Mapping of lower() or upper(). Presto's lower() and upper() use simple
+  // Unicode case mapping, which CaseMapped applies.
+  common::CaseMapped::Mapping mapping;
+};
+
+// Returns 'call' with its first argument unwrapped if that argument is
+// lower(x) or upper(x), or std::nullopt otherwise.
+std::optional<UnwrappedCaseMapping> unwrapCaseMapping(
+    const core::CallTypedExpr& call) {
+  using Mapping = common::CaseMapped::Mapping;
+  for (const auto& [name, mapping] :
+       {std::pair{"lower", Mapping::kLower},
+        std::pair{"upper", Mapping::kUpper}}) {
     if (const auto* argument =
             unaryCallArgument(call.inputs()[0], name, TypeKind::VARCHAR)) {
-      return replaceFirstArgument(call, *argument);
+      return UnwrappedCaseMapping{
+          replaceFirstArgument(call, *argument), mapping};
     }
   }
-  return nullptr;
+  return std::nullopt;
 }
 
 // Returns 'field' with type 'type', or nullptr if 'field' is not a field
@@ -1504,14 +1545,31 @@ PrestoExprToSubfieldFilterParser::leafCallToSubfieldFilter(
     return std::nullopt;
   }
 
-  // Translates a leaf call on length(x), e.g. length(x) between 1 and 3, into
-  // a StringLength filter on x around the filter for the call on x.
+  // Translates a leaf call on length(x), lower(x) or upper(x), e.g.
+  // length(x) between 1 and 3 or lower(x) in ('a', 'b'), into a StringLength
+  // or CaseMapped filter on x around the filter for the call on x.
   if (auto unwrapped = unwrapLength(call)) {
     auto result =
         leafCallToSubfieldFilter(*unwrapped->call, evaluator, negated);
     if (result.has_value()) {
       result->second = common::StringLength::wrap(
           unwrapped->unit, std::move(result->second));
+    }
+    return result;
+  }
+  if (auto unwrapped = unwrapCaseMapping(call)) {
+    // Recursing on lower(upper(x)) would give CaseMapped(kLower,
+    // CaseMapped(kUpper, ...)), which applies lower() before upper(), the
+    // reverse of the expression. Nested mappings stay in the remaining filter
+    // instead.
+    if (unwrapCaseMapping(*unwrapped->call).has_value()) {
+      return std::nullopt;
+    }
+    auto result =
+        leafCallToSubfieldFilter(*unwrapped->call, evaluator, negated);
+    if (result.has_value()) {
+      result->second = common::CaseMapped::wrap(
+          unwrapped->mapping, std::move(result->second));
     }
     return result;
   }
@@ -1635,16 +1693,15 @@ PrestoExprToSubfieldFilterParser::leafCallToImpliedSubfieldFilter(
     const core::CallTypedExpr& call,
     core::ExpressionEvaluator* evaluator,
     bool negated) {
-  if (call.name() != "like") {
-    return caseMappingToImpliedSubfieldFilter(call, evaluator, negated);
-  }
-  common::Subfield subfield;
-  if (negated || call.inputs().empty() ||
-      !toSubfield(call.inputs()[0].get(), subfield)) {
+  if (negated) {
     return std::nullopt;
   }
   const auto tokens = likeCallTokens(call, evaluator);
   if (!tokens.has_value()) {
+    return std::nullopt;
+  }
+  common::Subfield subfield;
+  if (!toSubfield(call.inputs()[0].get(), subfield)) {
     return std::nullopt;
   }
   auto lengthFilter = likeLengthFilter(tokens.value());
@@ -1652,42 +1709,6 @@ PrestoExprToSubfieldFilterParser::leafCallToImpliedSubfieldFilter(
     return std::nullopt;
   }
   return std::make_pair(std::move(subfield), std::move(lengthFilter));
-}
-
-std::optional<std::pair<common::Subfield, std::unique_ptr<common::Filter>>>
-PrestoExprToSubfieldFilterParser::caseMappingToImpliedSubfieldFilter(
-    const core::CallTypedExpr& call,
-    core::ExpressionEvaluator* evaluator,
-    bool negated) {
-  if (call.inputs().empty()) {
-    return std::nullopt;
-  }
-  const auto unwrapped = unwrapCaseMapping(call);
-  if (unwrapped == nullptr) {
-    return std::nullopt;
-  }
-  // lower(x) is in a set of values only if x is in the set after case
-  // mapping, which maps each code point to one code point. So lower(x) has as
-  // many code points as one of the values.
-  auto subfieldAndFilter =
-      leafCallToSubfieldFilter(*unwrapped, evaluator, negated);
-  if (!subfieldAndFilter.has_value() ||
-      !subfieldAndFilter->second->is(common::FilterKind::kBytesValues)) {
-    return std::nullopt;
-  }
-  const auto* values = subfieldAndFilter->second->as<common::BytesValues>();
-  std::vector<int64_t> lengths;
-  for (const auto& value : values->values()) {
-    lengths.push_back(
-        functions::stringCore::lengthUnicode(value.data(), value.size()));
-  }
-  std::sort(lengths.begin(), lengths.end());
-  lengths.erase(std::unique(lengths.begin(), lengths.end()), lengths.end());
-  return std::make_pair(
-      std::move(subfieldAndFilter->first),
-      std::make_unique<common::StringLength>(
-          common::StringLength::Unit::kCaseMappedCodePoints,
-          common::createBigintValues(lengths, values->testNull())));
 }
 
 } // namespace facebook::velox::exec

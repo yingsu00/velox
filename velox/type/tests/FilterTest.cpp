@@ -1654,6 +1654,171 @@ TEST(FilterTest, mergeWithStringLength) {
   EXPECT_FALSE(asciiValues.canMergeWith(atLeastThree));
 }
 
+TEST(FilterTest, caseMapped) {
+  using Mapping = CaseMapped::Mapping;
+  CaseMapped lower(Mapping::kLower, in({"aws rds", "abc"}));
+  EXPECT_FALSE(lower.testNull());
+  EXPECT_TRUE(lower.testNonNull());
+  EXPECT_TRUE(testBytes(lower, "AWS RDS"));
+  EXPECT_TRUE(testBytes(lower, "aws rds"));
+  EXPECT_TRUE(testBytes(lower, "Aws Rds"));
+  EXPECT_TRUE(testBytes(lower, "ABC"));
+  EXPECT_FALSE(testBytes(lower, "AWS RDS "));
+  EXPECT_FALSE(testBytes(lower, "AWS S3"));
+  EXPECT_FALSE(testBytes(lower, ""));
+  // The Kelvin sign U+212A lowercases to 'k'.
+  EXPECT_TRUE(testBytes(
+      CaseMapped(Mapping::kLower, equal("kab")),
+      "\xE2\x84\xAA"
+      "Ab"));
+  // U+023A lowercases to U+2C65, which has more bytes.
+  EXPECT_TRUE(testBytes(
+      CaseMapped(
+          Mapping::kLower,
+          equal(
+              "\xE2\xB1\xA5"
+              "bc")),
+      "\xC8\xBA"
+      "BC"));
+  // Invalid UTF-8 is mapped the same way as lower() does.
+  const std::string invalid =
+      "\xC3\x41"
+      "B";
+  EXPECT_TRUE(
+      testBytes(CaseMapped(Mapping::kLower, equal(lowerCase(invalid))), invalid));
+
+  // lower() decodes the overlong 0xC0 0xB0 as '0', so a value without letters
+  // also matches a string that is not the value itself.
+  const std::string overlongZero =
+      "\xC0\xB0"
+      "49419614328";
+  EXPECT_TRUE(testBytes(
+      CaseMapped(Mapping::kLower, equal("049419614328")), overlongZero));
+  EXPECT_FALSE(testBytes(*equal("049419614328"), overlongZero));
+
+  // A string has at least as many bytes as code points, so strings with fewer
+  // bytes than the fewest code points of a value fail on length alone.
+  EXPECT_TRUE(lower.hasTestLength());
+  EXPECT_FALSE(lower.testLength(2));
+  EXPECT_TRUE(lower.testLength(3));
+  EXPECT_TRUE(lower.testLength(30));
+
+  CaseMapped upper(Mapping::kUpper, notIn({"(NOT SET)"}));
+  EXPECT_FALSE(upper.hasTestLength());
+  EXPECT_TRUE(upper.testLength(0));
+  EXPECT_FALSE(testBytes(upper, "(not set)"));
+  EXPECT_FALSE(testBytes(upper, "(Not Set)"));
+  EXPECT_TRUE(testBytes(upper, "(not set) "));
+  EXPECT_TRUE(testBytes(upper, ""));
+
+  EXPECT_TRUE(lower.testBytesRange("A", "Z", false));
+  EXPECT_TRUE(lower.testBytesRange("ABC", "ABC", false));
+  EXPECT_FALSE(lower.testBytesRange("ABD", "ABD", false));
+
+  auto withNulls = lower.clone(true);
+  EXPECT_TRUE(withNulls->testNull());
+  EXPECT_TRUE(withNulls->testBytesRange("ABD", "ABD", true));
+  EXPECT_FALSE(testBytes(*withNulls, "ABD"));
+  EXPECT_TRUE(withNulls->clone(false)->testingEquals(lower));
+  EXPECT_TRUE(CaseMapped(Mapping::kLower, in({"a"}, true)).testNull());
+}
+
+TEST(FilterTest, caseMappedLongValues) {
+  using Mapping = CaseMapped::Mapping;
+  // Values longer than the stack buffer.
+  const std::string longValue(1'000, 'A');
+  const std::string longLower(1'000, 'a');
+  CaseMapped filter(Mapping::kLower, equal(longLower));
+  EXPECT_TRUE(testBytes(filter, longValue));
+  EXPECT_TRUE(testBytes(filter, longLower));
+  EXPECT_TRUE(testBytes(
+      CaseMapped(Mapping::kLower, equal(longLower + "\xC3\xBC")),
+      longValue + "\xC3\x9C"));
+}
+
+TEST(FilterTest, caseMappedMatchesFunctions) {
+  using Mapping = CaseMapped::Mapping;
+  // Matches lower() and upper() on every ASCII byte, on ASCII values of every
+  // length up to beyond a SIMD batch, on non-ASCII values after an ASCII
+  // prefix longer than a SIMD batch, and on values that fit the stack buffer
+  // while their mapping does not.
+  std::string allAscii;
+  for (int byte = 1; byte < 0x80; ++byte) {
+    allAscii.push_back(static_cast<char>(byte));
+  }
+  std::string umlauts;
+  for (int i = 0; i < 60; ++i) {
+    umlauts += "\xC3\x9C\xC3\xBC";
+  }
+  std::vector<std::string> values = {
+      allAscii,
+      allAscii + "\xC3\x9C" + allAscii,
+      std::string(100, 'A') + umlauts.substr(0, 120),
+      umlauts,
+  };
+  const std::string mixedCase = "@AZ[`az{Hello World, AWS RDS (Not Set) xyz!";
+  for (int length = 1; length <= 70; ++length) {
+    values.push_back((mixedCase + mixedCase).substr(0, length));
+  }
+  for (const auto& value : values) {
+    SCOPED_TRACE(value);
+    const auto expectedLower = lowerCase(value);
+    EXPECT_TRUE(
+        testBytes(CaseMapped(Mapping::kLower, equal(expectedLower)), value));
+    EXPECT_TRUE(testBytes(
+        CaseMapped(Mapping::kUpper, equal(upperCase(value))), value));
+    EXPECT_TRUE(testBytes(
+        CaseMapped(Mapping::kLower, in({expectedLower, "other"})), value));
+    EXPECT_FALSE(testBytes(
+        CaseMapped(Mapping::kLower, in({expectedLower + "x", "other"})),
+        value));
+  }
+}
+
+TEST(FilterTest, caseMappedNested) {
+  using Mapping = CaseMapped::Mapping;
+  // Nested filters do not share the buffer of the mapped value. U+2C65
+  // uppercases to U+023A, which has fewer bytes, and lowercases back, so
+  // mapping in place would overwrite bytes not yet read.
+  std::string value(300, 'a');
+  for (int i = 0; i < 50; ++i) {
+    value += "\xE2\xB1\xA5";
+  }
+  EXPECT_TRUE(testBytes(
+      CaseMapped(
+          Mapping::kUpper,
+          std::make_unique<CaseMapped>(
+              Mapping::kLower, equal(lowerCase(upperCase(value))))),
+      value));
+}
+
+TEST(FilterTest, mergeWithCaseMapped) {
+  using Mapping = CaseMapped::Mapping;
+  CaseMapped filter(Mapping::kLower, in({"a", "bb"}));
+
+  const CaseMapped other(Mapping::kLower, in({"bb", "ccc"}));
+  EXPECT_TRUE(filter.mergeWith(&other)->testingEquals(
+      CaseMapped(Mapping::kLower, equal("bb"))));
+  const CaseMapped disjoint(Mapping::kLower, in({"ccc"}));
+  EXPECT_TRUE(filter.mergeWith(&disjoint)->testingEquals(AlwaysFalse()));
+
+  EXPECT_TRUE(filter.mergeWith(in({"A", "b", "Bb"}).get())
+                  ->testingEquals(BytesValues({"A", "Bb"}, false)));
+  EXPECT_TRUE(in({"A", "b", "Bb"})
+                  ->mergeWith(&filter)
+                  ->testingEquals(BytesValues({"A", "Bb"}, false)));
+
+  EXPECT_TRUE(filter.mergeWith(isNotNull().get())->testingEquals(filter));
+  EXPECT_TRUE(isNotNull()->mergeWith(&filter)->testingEquals(filter));
+  EXPECT_TRUE(filter.mergeWith(alwaysTrue().get())->testingEquals(filter));
+  EXPECT_TRUE(filter.mergeWith(isNull().get())->testingEquals(AlwaysFalse()));
+
+  const CaseMapped upper(Mapping::kUpper, in({"A"}));
+  VELOX_ASSERT_THROW(filter.mergeWith(&upper), "mergeWith() is not supported");
+  VELOX_ASSERT_THROW(
+      filter.mergeWith(lessThan("abc").get()), "mergeWith() is not supported");
+}
+
 TEST(FilterTest, multiRange) {
   auto filter = orFilter(between("abc", "abc"), greaterThanOrEqual("dragon"));
 
