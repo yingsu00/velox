@@ -31,6 +31,12 @@ using facebook::velox::common::Subfield;
 namespace facebook::velox::exec {
 namespace {
 
+std::unique_ptr<common::Filter> caseMapped(
+    common::CaseMapped::Mapping mapping,
+    std::unique_ptr<common::Filter> inner) {
+  return std::make_unique<common::CaseMapped>(mapping, std::move(inner));
+}
+
 void validateSubfield(
     const Subfield& subfield,
     const std::vector<std::string>& expectedPath) {
@@ -474,13 +480,79 @@ TEST_F(ExprToSubfieldFilterTest, length) {
   }
 }
 
+TEST_F(ExprToSubfieldFilterTest, caseMapping) {
+  using Mapping = common::CaseMapped::Mapping;
+  const auto rowType = ROW({"a", "b"}, {VARCHAR(), VARCHAR()});
+  struct TestCase {
+    std::string expr;
+    bool negated;
+    std::unique_ptr<common::Filter> expected;
+  };
+  std::vector<TestCase> testCases;
+  testCases.push_back(
+      {"lower(a) = lower('AWS RDS')",
+       false,
+       caseMapped(Mapping::kLower, equal("aws rds"))});
+  testCases.push_back(
+      {"lower(a) <> '(not set)'",
+       false,
+       caseMapped(
+           Mapping::kLower,
+           orFilter(lessThan("(not set)"), greaterThan("(not set)")))});
+  testCases.push_back(
+      {"lower(a) <> '(not set)'",
+       true,
+       caseMapped(Mapping::kLower, equal("(not set)"))});
+  testCases.push_back(
+      {"upper(a) in ('A', 'BC')",
+       false,
+       caseMapped(Mapping::kUpper, in({"A", "BC"}))});
+  testCases.push_back(
+      {"upper(a) in ('A', 'BC')",
+       true,
+       caseMapped(Mapping::kUpper, notIn({"A", "BC"}))});
+  testCases.push_back(
+      {"lower(a) >= 'm'",
+       false,
+       caseMapped(Mapping::kLower, greaterThanOrEqual("m"))});
+  testCases.push_back(
+      {"lower(a) between 'a' and 'b'",
+       false,
+       caseMapped(Mapping::kLower, between("a", "b"))});
+  // Mapping keeps nulls and non-nulls.
+  testCases.push_back({"lower(a) is null", false, isNull()});
+  testCases.push_back({"lower(a) is null", true, isNotNull()});
+  testCases.push_back(
+      {"lower(a) = cast(null as varchar)",
+       false,
+       std::make_unique<common::AlwaysFalse>()});
+
+  for (const auto& testCase : testCases) {
+    SCOPED_TRACE(fmt::format("{} {}", testCase.expr, testCase.negated));
+    auto [subfield, filter] = leafCallToSubfieldFilter(
+        parseCallExpr(testCase.expr, rowType), testCase.negated);
+    validateSubfield(subfield, {"a"});
+    ASSERT_TRUE(filter);
+    VELOX_ASSERT_FILTER(testCase.expected, filter);
+  }
+
+  for (const auto& expr :
+       {"lower(a) = b",
+        "lower(a) like 'a%'",
+        "trim(a) = 'abc'",
+        "lower(concat(a, b)) = 'abc'",
+        "lower(upper(a)) = 'abc'",
+        "upper(lower(a)) in ('A', 'B')"}) {
+    SCOPED_TRACE(expr);
+    auto [subfield, filter] =
+        leafCallToSubfieldFilter(parseCallExpr(expr, rowType));
+    ASSERT_FALSE(filter);
+  }
+}
+
 TEST_F(ExprToSubfieldFilterTest, impliedStringLength) {
   using Unit = common::StringLength::Unit;
   const auto rowType = ROW({"a", "b"}, {VARCHAR(), VARCHAR()});
-  const auto caseMapped = [](std::unique_ptr<common::Filter> lengths) {
-    return std::make_unique<common::StringLength>(
-        Unit::kCaseMappedCodePoints, std::move(lengths));
-  };
   const auto bytes = [](int64_t min, int64_t max) {
     return std::make_unique<common::StringLength>(
         Unit::kBytes, between(min, max));
@@ -493,60 +565,39 @@ TEST_F(ExprToSubfieldFilterTest, impliedStringLength) {
 
   struct TestCase {
     std::string expr;
-    bool negated;
     std::unique_ptr<common::Filter> expected;
   };
   std::vector<TestCase> testCases;
-  testCases.push_back(
-      {"lower(a) = lower('AWS RDS')", false, caseMapped(equal(7))});
-  testCases.push_back({"upper(a) = 'ABC'", false, caseMapped(equal(3))});
-  // U+00FC has 2 bytes and 1 code point.
-  testCases.push_back(
-      {"lower(a) = '\xC3\xBC"
-       "ber'",
-       false,
-       caseMapped(equal(4))});
-  testCases.push_back(
-      {"lower(a) in ('x', 'yyy', 'zzz')", false, caseMapped(in({1, 3}))});
-  testCases.push_back({"lower(a) <> 'abc'", true, caseMapped(equal(3))});
-  testCases.push_back({"a like 'abc'", false, bytes(3, 3)});
+  testCases.push_back({"a like 'abc'", bytes(3, 3)});
   // '_' matches one byte of ASCII and at least one byte of other strings.
-  testCases.push_back({"a like 'a_c'", false, asciiBytes(3, 3)});
-  testCases.push_back({"a like 'a%c'", false, bytes(2, kMax)});
-  testCases.push_back({"a like 'a_%'", false, bytes(2, kMax)});
-  testCases.push_back({"a like '__'", false, asciiBytes(2, 2)});
+  testCases.push_back({"a like 'a_c'", asciiBytes(3, 3)});
+  testCases.push_back({"a like 'a%c'", bytes(2, kMax)});
+  testCases.push_back({"a like 'a_%'", bytes(2, kMax)});
+  testCases.push_back({"a like '__'", asciiBytes(2, 2)});
   testCases.push_back(
       {"a like '\xC3\xBC"
        "_'",
-       false,
        asciiBytes(3, 3)});
-  testCases.push_back({"a like 'a#%#_##' escape '#'", false, bytes(4, 4)});
+  testCases.push_back({"a like 'a#%#_##' escape '#'", bytes(4, 4)});
 
   for (const auto& testCase : testCases) {
-    SCOPED_TRACE(fmt::format("{} {}", testCase.expr, testCase.negated));
+    SCOPED_TRACE(testCase.expr);
     auto call = parseCallExpr(testCase.expr, rowType);
-    auto [subfield, filter] =
-        leafCallToImpliedSubfieldFilter(call, testCase.negated);
+    auto [subfield, filter] = leafCallToImpliedSubfieldFilter(call);
     validateSubfield(subfield, {"a"});
     ASSERT_TRUE(filter);
     VELOX_ASSERT_FILTER(testCase.expected, filter);
 
     // The predicate itself is not converted to a filter.
-    auto [exactSubfield, exactFilter] =
-        leafCallToSubfieldFilter(call, testCase.negated);
+    auto [exactSubfield, exactFilter] = leafCallToSubfieldFilter(call);
     ASSERT_FALSE(exactFilter);
   }
 
   // Predicates that do not restrict the length.
   for (const auto& expr :
-       {"lower(a) <> 'abc'",
-        "lower(a) < 'abc'",
-        "lower(a) between 'a' and 'b'",
-        "lower(a) = b",
-        "lower(a) is null",
+       {"lower(a) = 'abc'",
+        "length(a) = 3",
         "a = 'abc'",
-        "trim(a) = 'abc'",
-        "lower(lower(a)) = 'abc'",
         "a like '%'",
         "a like b",
         // LIKE rejects these escapes.
@@ -557,10 +608,9 @@ TEST_F(ExprToSubfieldFilterTest, impliedStringLength) {
         leafCallToImpliedSubfieldFilter(parseCallExpr(expr, rowType));
     ASSERT_FALSE(filter);
   }
-  for (const auto& expr : {"lower(a) = 'abc'", "a like 'abc'"}) {
-    SCOPED_TRACE(expr);
+  {
     auto [subfield, filter] = leafCallToImpliedSubfieldFilter(
-        parseCallExpr(expr, rowType), /*negated=*/true);
+        parseCallExpr("a like 'abc'", rowType), /*negated=*/true);
     ASSERT_FALSE(filter);
   }
 }
@@ -851,6 +901,26 @@ TEST_F(ExprToSubfieldFilterTest, makeOrFilterBytesValues) {
             std::make_unique<common::BytesValues>(
                 std::vector<std::string>{"JAPAN"}, /*nullAllowed=*/true)));
   }
+}
+
+TEST_F(ExprToSubfieldFilterTest, makeOrFilterCaseMapped) {
+  using Mapping = common::CaseMapped::Mapping;
+
+  // lower(a) = 'x' or lower(a) in ('y', 'z') ==> lower(a) in ('x', 'y', 'z')
+  VELOX_ASSERT_FILTER(
+      caseMapped(Mapping::kLower, in({"x", "y", "z"})),
+      makeOr(
+          caseMapped(Mapping::kLower, equal("x")),
+          caseMapped(Mapping::kLower, in({"y", "z"}))));
+
+  // Different mappings, or inner filters that do not merge, are not merged.
+  ASSERT_FALSE(makeOr(
+      caseMapped(Mapping::kLower, equal("x")),
+      caseMapped(Mapping::kUpper, equal("Y"))));
+  ASSERT_FALSE(makeOr(
+      caseMapped(Mapping::kLower, equal("x")),
+      caseMapped(Mapping::kLower, lessThan("m"))));
+  ASSERT_FALSE(makeOr(caseMapped(Mapping::kLower, equal("x")), equal("y")));
 }
 
 TEST_F(ExprToSubfieldFilterTest, makeOrFilterBytesRange) {

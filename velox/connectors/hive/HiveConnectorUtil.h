@@ -171,9 +171,8 @@ using CanPushDownFilter = std::function<bool(const common::Filter&)>;
 /// NOT(x OR y) is converted to (NOT x) AND (NOT y).
 ///
 /// Conjuncts that cannot be converted may still imply a filter, e.g.
-/// lower(a) = 'abc' implies that lower(a) has 3 code points and a LIKE 'ab%'
-/// implies that a has at least 2 bytes. Such implied filters are added to
-/// 'filters' while the conjunct stays in the returned expression.
+/// a LIKE 'ab%' implies that a has at least 2 bytes. Such implied filters are
+/// added to 'filters' while the conjunct stays in the returned expression.
 ///
 /// @param expr Boolean expression to break up.
 /// @param evaluator Expression evaluator to use.
@@ -201,10 +200,10 @@ using CanPushDownFilter = std::function<bool(const common::Filter&)>;
 ///   sampleRate := 0.1
 ///   return value is a < b
 ///
-///   expr := lower(a) = 'abc'
-///   filters := {a: StringLength(kCaseMappedCodePoints, [3, 3])}
+///   expr := a LIKE 'ab%'
+///   filters := {a: StringLength(kBytes, [2, max])}
 ///   sampleRate left unmodified
-///   return value is lower(a) = 'abc'
+///   return value is a LIKE 'ab%'
 ///
 /// A null 'expr', a scan with no remaining filter, returns nullptr.
 core::TypedExprPtr extractFiltersFromRemainingFilter(

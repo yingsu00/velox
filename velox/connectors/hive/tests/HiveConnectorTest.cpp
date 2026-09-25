@@ -720,45 +720,40 @@ TEST_F(HiveConnectorTest, extractImpliedFiltersFromRemainingFilter) {
   exec::SimpleExpressionEvaluator evaluator(queryCtx.get(), pool_.get());
   auto rowType = ROW({"c0", "c1"}, {VARCHAR(), VARCHAR()});
   using Unit = common::StringLength::Unit;
-  const auto lowerCaseLength = [](int64_t length) {
+  const auto bytes = [](int64_t min, int64_t max) {
     return std::make_unique<common::StringLength>(
-        Unit::kCaseMappedCodePoints, exec::equal(length));
+        Unit::kBytes, exec::between(min, max));
   };
+  constexpr int64_t kMax = std::numeric_limits<int64_t>::max();
 
   // The implied filter is added and the predicate stays in the remaining
   // filter.
-  auto expr = parseExpr(
-      "lower(c0) = 'aws rds' and lower(c1) <> '(not set)' and c1 is not null",
-      rowType);
+  auto expr =
+      parseExpr("c0 like 'a_c' and c1 like '%x%' and c1 is not null", rowType);
   SubfieldFilters filters;
   double sampleRate = 1;
   auto remaining =
       extractFiltersFromRemainingFilter(expr, &evaluator, filters, sampleRate);
-  ASSERT_EQ(
-      *remaining,
-      *parseExpr(
-          "lower(c0) = 'aws rds' and lower(c1) <> '(not set)'", rowType));
+  ASSERT_EQ(*remaining, *parseExpr("c0 like 'a_c' and c1 like '%x%'", rowType));
   ASSERT_EQ(filters.size(), 2);
-  ASSERT_TRUE(filters.at(Subfield("c0"))->testingEquals(*lowerCaseLength(7)));
-  ASSERT_TRUE(filters.at(Subfield("c1"))->testingEquals(*exec::isNotNull()));
+  ASSERT_TRUE(
+      filters.at(Subfield("c0"))
+          ->testingEquals(
+              common::StringLength(Unit::kAsciiBytes, exec::between(3, 3))));
+  ASSERT_TRUE(filters.at(Subfield("c1"))->testingEquals(*bytes(1, kMax)));
 
-  // Implied filters are merged with each other and with existing filters.
-  expr = parseExpr(
-      "lower(c0) in ('a', 'bb') and lower(c0) in ('bb', 'ccc') and "
-      "lower(c1) = 'x'",
-      rowType);
+  // Implied filters are merged with each other.
+  expr = parseExpr("c0 like 'a%' and c0 like '___%'", rowType);
   filters.clear();
-  filters.emplace(Subfield("c1"), exec::isNotNull());
   remaining =
       extractFiltersFromRemainingFilter(expr, &evaluator, filters, sampleRate);
-  ASSERT_TRUE(remaining);
-  ASSERT_EQ(filters.size(), 2);
-  ASSERT_TRUE(filters.at(Subfield("c0"))->testingEquals(*lowerCaseLength(2)));
-  ASSERT_TRUE(filters.at(Subfield("c1"))->testingEquals(*lowerCaseLength(1)));
+  ASSERT_EQ(*remaining, *expr);
+  ASSERT_EQ(filters.size(), 1);
+  ASSERT_TRUE(filters.at(Subfield("c0"))->testingEquals(*bytes(3, kMax)));
 
   // An implied filter that cannot be merged with an existing filter is
   // dropped.
-  expr = parseExpr("lower(c0) = 'abc'", rowType);
+  expr = parseExpr("c0 like 'abc'", rowType);
   filters.clear();
   filters.emplace(Subfield("c0"), exec::lessThan("m"));
   remaining =
@@ -782,43 +777,20 @@ TEST_F(HiveConnectorTest, extractImpliedFiltersFromRemainingFilter) {
               common::StringLength(Unit::kAsciiBytes, exec::between(3, 3))));
 
   // Filters implied by a disjunct do not hold for the disjunction.
-  expr = parseExpr("lower(c0) = 'abc' or lower(c0) = 'de'", rowType);
+  expr = parseExpr("c0 like 'abc' or c0 like 'de'", rowType);
   filters.clear();
   remaining =
       extractFiltersFromRemainingFilter(expr, &evaluator, filters, sampleRate);
   ASSERT_EQ(*remaining, *expr);
   ASSERT_TRUE(filters.empty());
 
-  expr = parseExpr("not (lower(c0) <> 'abc')", rowType);
-  filters.clear();
-  remaining =
-      extractFiltersFromRemainingFilter(expr, &evaluator, filters, sampleRate);
-  ASSERT_EQ(*remaining, *expr);
-  ASSERT_EQ(filters.size(), 1);
-  ASSERT_TRUE(filters.at(Subfield("c0"))->testingEquals(*lowerCaseLength(3)));
-
-  // Implied filters in different units are not merged.
-  expr = parseExpr("c0 like 'a_c%' and lower(c0) = 'abc'", rowType);
-  filters.clear();
-  remaining =
-      extractFiltersFromRemainingFilter(expr, &evaluator, filters, sampleRate);
-  ASSERT_EQ(*remaining, *expr);
-  ASSERT_EQ(filters.size(), 1);
-  ASSERT_TRUE(
-      filters.at(Subfield("c0"))
-          ->testingEquals(
-              common::StringLength(
-                  Unit::kBytes,
-                  exec::between(
-                      int64_t{3}, std::numeric_limits<int64_t>::max()))));
-
   // length() is converted to a filter and replaces the predicate. The implied
   // filter is in a different unit and is dropped.
-  expr = parseExpr("length(c1) < 10 and lower(c1) = 'abc'", rowType);
+  expr = parseExpr("length(c1) < 10 and c1 like 'abc'", rowType);
   filters.clear();
   remaining =
       extractFiltersFromRemainingFilter(expr, &evaluator, filters, sampleRate);
-  ASSERT_EQ(*remaining, *parseExpr("lower(c1) = 'abc'", rowType));
+  ASSERT_EQ(*remaining, *parseExpr("c1 like 'abc'", rowType));
   ASSERT_EQ(filters.size(), 1);
   ASSERT_TRUE(filters.at(Subfield("c1"))
                   ->testingEquals(
@@ -832,7 +804,8 @@ TEST_F(HiveConnectorTest, extractSupportedFiltersFromRemainingFilter) {
   exec::SimpleExpressionEvaluator evaluator(queryCtx.get(), pool_.get());
   auto rowType = ROW({"c0", "c1"}, {VARCHAR(), VARCHAR()});
   const auto canPushDown = [](const common::Filter& filter) {
-    return !filter.is(common::FilterKind::kStringLength);
+    return !filter.is(common::FilterKind::kStringLength) &&
+        !filter.is(common::FilterKind::kCaseMapped);
   };
 
   auto expr = parseExpr(
@@ -858,6 +831,92 @@ TEST_F(HiveConnectorTest, extractSupportedFiltersFromRemainingFilter) {
   ASSERT_TRUE(filters.empty());
 }
 
+TEST_F(HiveConnectorTest, extractCaseMappedFiltersFromRemainingFilter) {
+  auto queryCtx = core::QueryCtx::create();
+  exec::SimpleExpressionEvaluator evaluator(queryCtx.get(), pool_.get());
+  auto rowType = ROW({"c0", "c1"}, {VARCHAR(), VARCHAR()});
+  using Mapping = common::CaseMapped::Mapping;
+  const auto lower = [](std::unique_ptr<common::Filter> inner) {
+    return std::make_unique<common::CaseMapped>(
+        Mapping::kLower, std::move(inner));
+  };
+
+  auto expr = parseExpr(
+      "lower(c0) = 'aws rds' and lower(c1) <> '(not set)' and c1 is not null",
+      rowType);
+  SubfieldFilters filters;
+  double sampleRate = 1;
+  auto remaining =
+      extractFiltersFromRemainingFilter(expr, &evaluator, filters, sampleRate);
+  ASSERT_FALSE(remaining);
+  ASSERT_EQ(filters.size(), 2);
+  ASSERT_TRUE(filters.at(Subfield("c0"))
+                  ->testingEquals(*lower(exec::equal("aws rds"))));
+  ASSERT_TRUE(filters.at(Subfield("c1"))
+                  ->testingEquals(*lower(
+                      exec::orFilter(
+                          exec::lessThan("(not set)"),
+                          exec::greaterThan("(not set)")))));
+
+  // Filters with the same mapping are merged.
+  expr = parseExpr(
+      "lower(c0) in ('a', 'bb') and lower(c0) in ('bb', 'ccc')", rowType);
+  filters.clear();
+  remaining =
+      extractFiltersFromRemainingFilter(expr, &evaluator, filters, sampleRate);
+  ASSERT_FALSE(remaining);
+  ASSERT_TRUE(
+      filters.at(Subfield("c0"))->testingEquals(*lower(exec::equal("bb"))));
+
+  // Filters with different mappings are not merged.
+  expr = parseExpr("lower(c0) = 'abc' and upper(c0) = 'ABC'", rowType);
+  filters.clear();
+  remaining =
+      extractFiltersFromRemainingFilter(expr, &evaluator, filters, sampleRate);
+  ASSERT_EQ(*remaining, *parseExpr("upper(c0) = 'ABC'", rowType));
+  ASSERT_TRUE(
+      filters.at(Subfield("c0"))->testingEquals(*lower(exec::equal("abc"))));
+
+  // A disjunction of comparisons with the same mapping becomes an IN-list.
+  expr = parseExpr(
+      "lower(c0) = 'a' or lower(c0) = 'bb' or lower(c0) in ('c', 'dd')",
+      rowType);
+  filters.clear();
+  remaining =
+      extractFiltersFromRemainingFilter(expr, &evaluator, filters, sampleRate);
+  ASSERT_FALSE(remaining);
+  ASSERT_TRUE(filters.at(Subfield("c0"))
+                  ->testingEquals(*lower(exec::in({"a", "bb", "c", "dd"}))));
+
+  // A disjunction of different mappings is not merged.
+  expr = parseExpr("lower(c0) = 'a' or upper(c0) = 'B'", rowType);
+  filters.clear();
+  remaining =
+      extractFiltersFromRemainingFilter(expr, &evaluator, filters, sampleRate);
+  ASSERT_EQ(*remaining, *expr);
+  ASSERT_TRUE(filters.empty());
+
+  // Merging with an IN-list keeps the values that pass.
+  expr = parseExpr("lower(c0) = 'abc'", rowType);
+  filters.clear();
+  filters.emplace(Subfield("c0"), exec::in({"ABC", "abd", "aBc"}));
+  remaining =
+      extractFiltersFromRemainingFilter(expr, &evaluator, filters, sampleRate);
+  ASSERT_FALSE(remaining);
+  ASSERT_TRUE(
+      filters.at(Subfield("c0"))->testingEquals(*exec::in({"ABC", "aBc"})));
+
+  // A filter that cannot be merged with an existing filter stays in the
+  // remaining filter.
+  filters.clear();
+  filters.emplace(Subfield("c0"), exec::lessThan("m"));
+  remaining =
+      extractFiltersFromRemainingFilter(expr, &evaluator, filters, sampleRate);
+  ASSERT_EQ(*remaining, *expr);
+  ASSERT_TRUE(filters.at(Subfield("c0"))->testingEquals(*exec::lessThan("m")));
+  ASSERT_EQ(sampleRate, 1);
+}
+
 // Verifies that a predicate whose filter does not merge with the filter of
 // another conjunct on the same column stays in the remaining filter.
 TEST_F(HiveConnectorTest, extractFiltersKeepsPredicatesThatDoNotMerge) {
@@ -877,6 +936,13 @@ TEST_F(HiveConnectorTest, extractFiltersKeepsPredicatesThatDoNotMerge) {
       {"(c0 < 'b' or c0 > 'y') and length(c0) = 3",
        "length(c0) = 3",
        common::FilterKind::kMultiRange},
+      // The disjunction becomes one CaseMapped filter.
+      {"c0 > 'm' and (lower(c0) = 'a' or lower(c0) = 'b')",
+       "lower(c0) = 'a' or lower(c0) = 'b'",
+       common::FilterKind::kBytesRange},
+      {"upper(c0) = 'A' and (lower(c0) = 'a' or lower(c0) = 'b')",
+       "lower(c0) = 'a' or lower(c0) = 'b'",
+       common::FilterKind::kCaseMapped},
   };
   for (const auto& testCase : testCases) {
     SCOPED_TRACE(testCase.expr);
@@ -1123,8 +1189,9 @@ TEST_F(HiveConnectorTest, fileReadOpsTableIdentityPropagation) {
   ASSERT_EQ(captured.at(std::string(kTableNameKey)), "test_table");
 }
 
-/// Verifies that getRuntimeStats() merge logic allows IoStats (ReadFile-layer)
-/// to override the storageReadBytes value from IoStatistics (DWIO-level).
+/// Verifies that getRuntimeStats() merge logic allows IoStats
+/// (ReadFile-layer) to override the storageReadBytes value from IoStatistics
+/// (DWIO-level).
 TEST_F(HiveConnectorTest, ioStatsOverridesStorageReadBytes) {
   // Step 1: Simulate DWIO-level IoStatistics with an inaccurate estimate.
   auto ioStatistics = std::make_shared<io::IoStatistics>();

@@ -57,6 +57,7 @@ const auto& filterKindNames() {
       {FilterKind::kBigintValuesUsingBloomFilter,
        "BigintValuesUsingBloomFilter"},
       {FilterKind::kStringLength, "StringLength"},
+      {FilterKind::kCaseMapped, "CaseMapped"},
   };
   return kNames;
 }
@@ -137,6 +138,7 @@ void Filter::registerSerDe() {
   registry.Register("MultiRange", MultiRange::create);
   registry.Register("TimestampRange", TimestampRange::create);
   registry.Register("StringLength", StringLength::create);
+  registry.Register("CaseMapped", CaseMapped::create);
 }
 
 folly::dynamic Filter::serializeBase() const {
@@ -1516,6 +1518,7 @@ std::unique_ptr<Filter> MultiRange::mergeWith(const Filter* other) const {
     case FilterKind::kIsNull:
     case FilterKind::kNegatedBytesRange:
     case FilterKind::kStringLength:
+    case FilterKind::kCaseMapped:
       return other->mergeWith(this);
     case FilterKind::kIsNotNull:
       return this->clone(/*nullAllowed=*/false);
@@ -2508,6 +2511,7 @@ std::unique_ptr<Filter> BytesRange::mergeWith(const Filter* other) const {
     case FilterKind::kNegatedBytesRange:
     case FilterKind::kMultiRange:
     case FilterKind::kStringLength:
+    case FilterKind::kCaseMapped:
       return other->mergeWith(this);
     case FilterKind::kBytesRange: {
       bool bothNullAllowed = nullAllowed_ && other->testNull();
@@ -2585,6 +2589,7 @@ std::unique_ptr<Filter> NegatedBytesRange::mergeWith(
       return this->clone(false);
     case FilterKind::kBytesValues:
     case FilterKind::kStringLength:
+    case FilterKind::kCaseMapped:
       return other->mergeWith(this);
     case FilterKind::kNegatedBytesValues:
     case FilterKind::kBytesRange:
@@ -2605,6 +2610,7 @@ std::unique_ptr<Filter> BytesValues::mergeWith(const Filter* other) const {
     case FilterKind::kIsNull:
     case FilterKind::kMultiRange:
     case FilterKind::kStringLength:
+    case FilterKind::kCaseMapped:
       return other->mergeWith(this);
     case FilterKind::kIsNotNull:
       return this->clone(false);
@@ -2720,6 +2726,7 @@ std::unique_ptr<Filter> NegatedBytesValues::mergeWith(
     case FilterKind::kNegatedBytesRange:
     case FilterKind::kMultiRange:
     case FilterKind::kStringLength:
+    case FilterKind::kCaseMapped:
       return other->mergeWith(this);
     case FilterKind::kIsNotNull:
       return this->clone(false);

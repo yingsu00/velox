@@ -121,6 +121,13 @@ TEST_F(FilterSerDeTest, stringFunctionFilters) {
       testSerde(StringLength(unit, in({1, 3, 5, 9}, nullAllowed)));
       testSerde(StringLength(unit, between(3, 9, nullAllowed)));
     }
+    const std::vector<std::string> values = {"a", "bc"};
+    testSerde(CaseMapped(
+        CaseMapped::Mapping::kLower,
+        std::make_unique<BytesValues>(values, nullAllowed)));
+    testSerde(CaseMapped(
+        CaseMapped::Mapping::kUpper,
+        std::make_unique<NegatedBytesValues>(values, nullAllowed)));
   }
 }
 
