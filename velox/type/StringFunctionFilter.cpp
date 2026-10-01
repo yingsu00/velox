@@ -337,6 +337,121 @@ std::shared_ptr<const StringLength> makeCaseMappedLengthFilter(
       StringLength::Unit::kCaseMappedCodePoints,
       createBigintValues(lengths, false));
 }
+
+utf8proc_int32_t mapCodePoint(
+    CaseMapped::Mapping mapping,
+    utf8proc_int32_t codePoint) {
+  return mapping == CaseMapped::Mapping::kLower ? utf8proc_tolower(codePoint)
+                                                : utf8proc_toupper(codePoint);
+}
+
+std::string encodeCodePoint(utf8proc_int32_t codePoint) {
+  char buffer[4];
+  const auto size = utf8proc_encode_char(
+      codePoint, reinterpret_cast<utf8proc_uint8_t*>(buffer));
+  return std::string(buffer, size);
+}
+
+// Maps each code point whose preimage under 'mapping' is not just the code
+// point itself to the UTF-8 encodings of its preimage, e.g. {'k': ['K', 'k',
+// U+212A]} for lower(). Encodings are in byte order, which is code point
+// order.
+folly::F14FastMap<utf8proc_int32_t, std::vector<std::string>>
+buildCodePointPreimages(CaseMapped::Mapping mapping) {
+  folly::F14FastMap<utf8proc_int32_t, std::vector<utf8proc_int32_t>> sources;
+  for (utf8proc_int32_t codePoint = 0; codePoint < kNumCodePoints;
+       ++codePoint) {
+    if (!utf8proc_codepoint_valid(codePoint)) {
+      continue;
+    }
+    const auto mapped = mapCodePoint(mapping, codePoint);
+    if (mapped != codePoint) {
+      sources[mapped].push_back(codePoint);
+    }
+  }
+  folly::F14FastMap<utf8proc_int32_t, std::vector<std::string>> preimages;
+  for (auto& [mapped, mappedFrom] : sources) {
+    if (mapCodePoint(mapping, mapped) == mapped) {
+      mappedFrom.push_back(mapped);
+    }
+    std::sort(mappedFrom.begin(), mappedFrom.end());
+    auto& encoded = preimages[mapped];
+    for (auto source : mappedFrom) {
+      encoded.push_back(encodeCodePoint(source));
+    }
+  }
+  return preimages;
+}
+
+// Returns the UTF-8 encodings of the code points that 'mapping' maps to
+// 'codePoint', in byte order. Empty if there are none, e.g. for 'A' under
+// lower().
+std::vector<std::string> codePointPreimage(
+    CaseMapped::Mapping mapping,
+    utf8proc_int32_t codePoint) {
+  const auto& preimages = [&]() -> const auto& {
+    if (mapping == CaseMapped::Mapping::kLower) {
+      static const auto kLowerPreimages =
+          buildCodePointPreimages(CaseMapped::Mapping::kLower);
+      return kLowerPreimages;
+    }
+    static const auto kUpperPreimages =
+        buildCodePointPreimages(CaseMapped::Mapping::kUpper);
+    return kUpperPreimages;
+  }();
+  if (auto it = preimages.find(codePoint); it != preimages.end()) {
+    return it->second;
+  }
+  if (mapCodePoint(mapping, codePoint) == codePoint) {
+    return {encodeCodePoint(codePoint)};
+  }
+  return {};
+}
+
+// Returns the code points that 'mapping' maps to each code point of 'value'.
+// Returns std::nullopt if 'value' is not valid UTF-8.
+std::optional<CaseMapped::Preimages> valuePreimages(
+    CaseMapped::Mapping mapping,
+    std::string_view value) {
+  CaseMapped::Preimages preimages;
+  const auto* bytes = reinterpret_cast<const utf8proc_uint8_t*>(value.data());
+  for (size_t index = 0; index < value.size();) {
+    utf8proc_int32_t codePoint;
+    const auto size =
+        utf8proc_iterate(bytes + index, value.size() - index, &codePoint);
+    if (size <= 0) {
+      return std::nullopt;
+    }
+    index += size;
+    preimages.push_back(codePointPreimage(mapping, codePoint));
+  }
+  return preimages;
+}
+
+// Returns, for each value of an IN-list 'filter' that some string maps to,
+// the strings that map to the value. Returns nullptr if 'filter' is not an
+// IN-list or a value is not valid UTF-8.
+std::shared_ptr<const std::vector<CaseMapped::Preimages>> makeValuePreimages(
+    CaseMapped::Mapping mapping,
+    const Filter& filter) {
+  if (!filter.is(FilterKind::kBytesValues)) {
+    return nullptr;
+  }
+  auto result = std::make_shared<std::vector<CaseMapped::Preimages>>();
+  for (const auto& value : filter.as<BytesValues>()->values()) {
+    auto preimages = valuePreimages(mapping, value);
+    if (!preimages.has_value()) {
+      return nullptr;
+    }
+    // Skips values that no string maps to, e.g. 'A' under lower().
+    if (std::ranges::none_of(preimages.value(), [](const auto& candidates) {
+          return candidates.empty();
+        })) {
+      result->push_back(std::move(preimages.value()));
+    }
+  }
+  return result;
+}
 } // namespace
 
 VELOX_DEFINE_EMBEDDED_ENUM_NAME(CaseMapped, Mapping, caseMappedMappingNames)
@@ -355,13 +470,15 @@ CaseMapped::CaseMapped(Mapping mapping, std::unique_ptr<Filter> inner)
     : Filter(true, inner->testNull(), FilterKind::kCaseMapped),
       mapping_(mapping),
       inner_(std::move(inner)),
-      lengthFilter_(makeCaseMappedLengthFilter(*inner_)) {}
+      lengthFilter_(makeCaseMappedLengthFilter(*inner_)),
+      valuePreimages_(makeValuePreimages(mapping_, *inner_)) {}
 
 CaseMapped::CaseMapped(const CaseMapped& other, bool nullAllowed)
     : Filter(true, nullAllowed, FilterKind::kCaseMapped),
       mapping_(other.mapping_),
       inner_(other.inner_->clone(nullAllowed)),
-      lengthFilter_(other.lengthFilter_) {}
+      lengthFilter_(other.lengthFilter_),
+      valuePreimages_(other.valuePreimages_) {}
 
 folly::dynamic CaseMapped::serialize() const {
   auto obj = Filter::serializeBase();
@@ -546,13 +663,91 @@ bool CaseMapped::testBytes(const char* value, int32_t length) const {
       value, length, *inner_, lengthFilter_.get());
 }
 
+namespace {
+// Returns true if a string made of one entry of each element of 'preimages',
+// starting at 'position', is in ['min', 'max']. 'min' and 'max' are the parts
+// of the bounds after the prefix chosen so far, unset once the prefix is
+// already above 'min' or below 'max'. Only choices equal to a prefix of a bound
+// keep that bound, so this follows at most two choices per position, although
+// n letters make 2^n strings. E.g. for 'ab-1' under lower(), with preimages
+// {{"A", "a"}, {"B", "b"}, {"-"}, {"1"}}:
+//   ['AB-0', 'AB-9']: "A", "B" and "-" equal the prefixes of both bounds, and
+//     "1" is between "0" and "9", so 'AB-1' is in the range.
+//   ['ac', 'az']: "A" is below "a", and "a" equals it, which leaves
+//     ['c', 'z']. "B" and "b" are both below "c", so no string is in the
+//     range.
+bool containsPreimage(
+    const CaseMapped::Preimages& preimages,
+    size_t position,
+    std::optional<std::string_view> min,
+    std::optional<std::string_view> max) {
+  // lower() and upper() decode malformed UTF-8 without validating it, e.g.
+  // 0xC3 0x01 as 'A', into any code point or into a value that encodes to
+  // nothing. A malformed sequence starts with a byte >= 0x80, so any string
+  // that continues the prefix with such a byte may map to the rest of the
+  // value. Only a 'max' whose next byte is ASCII keeps such strings out of the
+  // range.
+  if (!max.has_value() ||
+      (!max->empty() && static_cast<uint8_t>(max->front()) >= 0x80)) {
+    return true;
+  }
+  if (position == preimages.size()) {
+    // The string so far is a prefix of 'max', so it is at most 'max'.
+    return !min.has_value() || min->empty();
+  }
+  if (max->empty()) {
+    // Any longer string with prefix 'max' is above 'max'.
+    return false;
+  }
+  // 'max' continues with an ASCII byte, so only ASCII candidates can be in the
+  // range.
+  for (const auto& candidate : preimages[position]) {
+    std::optional<std::string_view> nextMin;
+    if (min.has_value() && !min->empty()) {
+      const auto minComparison =
+          std::string_view(candidate).compare(min->substr(0, candidate.size()));
+      if (minComparison < 0) {
+        continue;
+      }
+      if (minComparison == 0) {
+        nextMin = min->substr(candidate.size());
+      }
+    }
+    const auto maxComparison =
+        std::string_view(candidate).compare(max->substr(0, candidate.size()));
+    if (maxComparison > 0) {
+      continue;
+    }
+    std::optional<std::string_view> nextMax;
+    if (maxComparison == 0) {
+      nextMax = max->substr(candidate.size());
+    }
+    if (containsPreimage(preimages, position + 1, nextMin, nextMax)) {
+      return true;
+    }
+  }
+  return false;
+}
+} // namespace
+
 bool CaseMapped::testBytesRange(
     std::optional<std::string_view> min,
     std::optional<std::string_view> max,
     bool hasNull) const {
-  // 'inner' tests mapped values, which the range of unmapped values does not
-  // bound.
-  return testTrivialBytesRange(*this, min, max, hasNull).value_or(true);
+  if (auto result = testTrivialBytesRange(*this, min, max, hasNull)) {
+    return result.value();
+  }
+  if (valuePreimages_ == nullptr) {
+    // 'inner' tests mapped values, which the range of unmapped values does not
+    // bound.
+    return true;
+  }
+  for (const auto& preimages : *valuePreimages_) {
+    if (containsPreimage(preimages, 0, min, max)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 std::unique_ptr<Filter> CaseMapped::mergeWith(const Filter* other) const {
