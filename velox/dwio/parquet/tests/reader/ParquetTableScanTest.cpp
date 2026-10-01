@@ -1289,6 +1289,177 @@ TEST_F(ParquetTableScanTest, dictionaryFilterKeepsChunksWithPlainPages) {
   }
 }
 
+// Verifies that rows in pages that the page index excludes are skipped and
+// that the remaining rows of all columns are read correctly.
+TEST_F(ParquetTableScanTest, pageIndexFilterSkipsRows) {
+  constexpr int32_t kNumRows = 10'000;
+  auto data = makeRowVector(
+      {"c0", "c1", "c2", "c3"},
+      {
+          makeFlatVector<std::string>(
+              kNumRows, [](auto row) { return fmt::format("AB-{:05}", row); }),
+          makeFlatVector<int64_t>(kNumRows, [](auto row) { return row; }),
+          makeFlatVector<std::string>(
+              kNumRows,
+              [](auto row) { return fmt::format("v{}", row % 3); },
+              [](auto row) { return row % 11 == 0; }),
+          // Only the first page has nulls.
+          makeFlatVector<int64_t>(
+              kNumRows,
+              [](auto row) { return row; },
+              [](auto row) { return row < 100; }),
+      });
+  const auto rowType = asRowType(data->type());
+  // One row group of 100-row pages.
+  ParquetWriterOptions options;
+  options.enableWritePageIndex = true;
+  // Each write batch ends a page, because it exceeds the 1-byte page size.
+  options.dataPageSize = 1;
+  options.batchSize = 100;
+  const auto file = TempFilePath::create();
+  writeToParquetFile(file->getPath(), {data}, options);
+  const auto noIndexFile = TempFilePath::create();
+  writeToParquetFile(noIndexFile->getPath(), {data});
+
+  struct TestCase {
+    std::string filter;
+    bool hasPageIndex;
+    bool pageIndexFilterEnabled;
+    int64_t numSkippedRows;
+  };
+  const std::vector<TestCase> testCases = {
+      {.filter = "c0 = 'AB-04321'",
+       .hasPageIndex = true,
+       .pageIndexFilterEnabled = true,
+       .numSkippedRows = 9'900},
+      {.filter = "lower(c0) = 'ab-04321'",
+       .hasPageIndex = true,
+       .pageIndexFilterEnabled = true,
+       .numSkippedRows = 9'900},
+      {.filter = "c1 between 2050 and 2149",
+       .hasPageIndex = true,
+       .pageIndexFilterEnabled = true,
+       .numSkippedRows = 9'800},
+      {.filter = "c1 >= 2050 and c0 <= 'AB-02120'",
+       .hasPageIndex = true,
+       .pageIndexFilterEnabled = true,
+       .numSkippedRows = 9'800},
+      {.filter = "c1 in (5, 7777) and c2 = 'v0'",
+       .hasPageIndex = true,
+       .pageIndexFilterEnabled = true,
+       .numSkippedRows = 9'800},
+      // The null counts of the pages exclude all but the first.
+      {.filter = "c3 is null",
+       .hasPageIndex = true,
+       .pageIndexFilterEnabled = true,
+       .numSkippedRows = 9'900},
+      // Row group statistics keep the row group but no page passes both.
+      {.filter = "c1 between 150 and 160 and c0 >= 'AB-09000'",
+       .hasPageIndex = true,
+       .pageIndexFilterEnabled = true,
+       .numSkippedRows = 10'000},
+      {.filter = "c1 between 2050 and 2149",
+       .hasPageIndex = true,
+       .pageIndexFilterEnabled = false,
+       .numSkippedRows = 0},
+      {.filter = "c1 between 2050 and 2149",
+       .hasPageIndex = false,
+       .pageIndexFilterEnabled = true,
+       .numSkippedRows = 0},
+  };
+  for (const auto& testCase : testCases) {
+    SCOPED_TRACE(
+        fmt::format(
+            "{} hasPageIndex {} pageIndexFilterEnabled {}",
+            testCase.filter,
+            testCase.hasPageIndex,
+            testCase.pageIndexFilterEnabled));
+    auto plan =
+        PlanBuilder(pool()).tableScan(rowType, {}, testCase.filter).planNode();
+    const auto scanId = plan->id();
+    const auto expected = AssertQueryBuilder(PlanBuilder(pool())
+                                                 .values({data})
+                                                 .filter(testCase.filter)
+                                                 .planNode())
+                              .copyResults(pool());
+    // Small batches end reads at range boundaries and skip between batches.
+    auto task = AssertQueryBuilder(plan)
+                    .config(core::QueryConfig::kPreferredOutputBatchRows, "37")
+                    .config(core::QueryConfig::kMaxOutputBatchRows, "37")
+                    .connectorSessionProperty(
+                        kHiveConnectorId,
+                        parquetSessionProperty("page_index_filter_enabled"),
+                        testCase.pageIndexFilterEnabled ? "true" : "false")
+                    .split(makeSplit(
+                        testCase.hasPageIndex ? file->getPath()
+                                              : noIndexFile->getPath()))
+                    .assertResults(expected);
+    ASSERT_EQ(
+        customStatSum(*task, scanId, "parquet.numRowsSkippedByPageIndex"),
+        testCase.numSkippedRows);
+  }
+}
+
+// Verifies that skipping rows by the page index keeps ARRAY, MAP and ROW
+// columns aligned with the filtered column. The first kept range starts partway
+// through the row group, and a skip falls between two kept ranges.
+TEST_F(ParquetTableScanTest, pageIndexFilterSkipsRowsOfNestedColumns) {
+  constexpr int32_t kNumRows = 10'000;
+  auto data = makeRowVector(
+      {"c0", "c1", "c2", "c3"},
+      {
+          makeFlatVector<int64_t>(kNumRows, [](auto row) { return row; }),
+          makeArrayVector<int64_t>(
+              kNumRows,
+              [](auto row) { return row % 3; },
+              [](auto row, auto index) { return row + index; }),
+          makeMapVector<int64_t, std::string>(
+              kNumRows,
+              [](auto row) { return row % 2; },
+              [](auto index) { return index; },
+              [](auto index) { return fmt::format("v{}", index); }),
+          makeRowVector(
+              {"a", "b"},
+              {
+                  makeFlatVector<int64_t>(
+                      kNumRows, [](auto row) { return row * 2; }),
+                  makeFlatVector<std::string>(
+                      kNumRows,
+                      [](auto row) { return fmt::format("s{}", row); }),
+              },
+              [](auto row) { return row % 13 == 0; }),
+      });
+  const auto rowType = asRowType(data->type());
+  // One row group of 100-row pages of c0.
+  ParquetWriterOptions options;
+  options.enableWritePageIndex = true;
+  // Each write batch ends a page, because it exceeds the 1-byte page size.
+  options.dataPageSize = 1;
+  options.batchSize = 100;
+  const auto file = TempFilePath::create();
+  writeToParquetFile(file->getPath(), {data}, options);
+
+  for (const auto& filter :
+       {"c0 between 2050 and 2149", "c0 between 150 and 160 or c0 >= 9950"}) {
+    SCOPED_TRACE(filter);
+    auto plan = PlanBuilder(pool()).tableScan(rowType, {}, filter).planNode();
+    const auto scanId = plan->id();
+    const auto expected =
+        AssertQueryBuilder(
+            PlanBuilder(pool()).values({data}).filter(filter).planNode())
+            .copyResults(pool());
+    // Small batches end reads at range boundaries and skip between batches.
+    auto task = AssertQueryBuilder(plan)
+                    .config(core::QueryConfig::kPreferredOutputBatchRows, "37")
+                    .config(core::QueryConfig::kMaxOutputBatchRows, "37")
+                    .split(makeSplit(file->getPath()))
+                    .assertResults(expected);
+    ASSERT_EQ(
+        customStatSum(*task, scanId, "parquet.numRowsSkippedByPageIndex"),
+        9'800);
+  }
+}
+
 TEST_F(ParquetTableScanTest, readAsLowerCase) {
   auto vectors = {makeRowVector(
       {"A", "b"},

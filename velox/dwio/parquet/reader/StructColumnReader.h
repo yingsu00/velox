@@ -32,6 +32,7 @@ enum class LevelMode;
 class PageReader;
 class ParquetParams;
 class ParquetStatsContext;
+struct RowRange;
 
 class StructColumnReader : public dwio::common::SelectiveStructColumnReader {
  public:
@@ -85,6 +86,15 @@ class StructColumnReader : public dwio::common::SelectiveStructColumnReader {
       uint64_t rowGroupSize,
       const dwio::common::StatsContext&,
       dwio::common::FormatData::FilterRowGroupsResult&) const override;
+
+  /// Reads from 'input' the page indexes of the filtered top-level leaf
+  /// children whose statistics are trusted, and returns the sorted row ranges
+  /// of the 'rowGroupId'th row group that may pass all their filters. Returns
+  /// std::nullopt if no such child has a usable page index.
+  std::optional<std::vector<RowRange>> pageIndexRowRanges(
+      uint32_t rowGroupId,
+      dwio::common::BufferedInput& input,
+      const ParquetStatsContext& statsContext) const;
 
  private:
   struct SyntheticRepDefSource;

@@ -446,6 +446,24 @@ ColumnChunkMetaDataPtr::getColumnStatistics(
       logicalType);
 }
 
+std::unique_ptr<dwio::common::ColumnStatistics>
+ColumnChunkMetaDataPtr::getPageStatistics(
+    const thrift::Statistics& pageStats,
+    const TypePtr& type,
+    int64_t numRows,
+    std::optional<thrift::ConvertedType> convertedType,
+    const std::optional<thrift::LogicalType>& logicalType) const {
+  const auto& metaData =
+      apache::thrift::can_throw(*thriftColumnChunkPtr(ptr_)->meta_data());
+  return buildColumnStatisticsFromThrift(
+      pageStats,
+      *type,
+      numRows,
+      apache::thrift::can_throw(*metaData.type()),
+      convertedType,
+      logicalType);
+}
+
 std::string ColumnChunkMetaDataPtr::getColumnMetadataStatsMinValue() {
   VELOX_CHECK(hasStatistics());
   return apache::thrift::can_throw(
@@ -492,6 +510,22 @@ bool ColumnChunkMetaDataPtr::hasColumnIndex() const {
 
 bool ColumnChunkMetaDataPtr::hasOffsetIndex() const {
   return thriftColumnChunkPtr(ptr_)->offset_index_offset().has_value();
+}
+
+std::pair<int64_t, int32_t> ColumnChunkMetaDataPtr::columnIndexRegion() const {
+  VELOX_CHECK(hasColumnIndex());
+  const auto* columnChunk = thriftColumnChunkPtr(ptr_);
+  return {
+      *columnChunk->column_index_offset(),
+      columnChunk->column_index_length().value_or(0)};
+}
+
+std::pair<int64_t, int32_t> ColumnChunkMetaDataPtr::offsetIndexRegion() const {
+  VELOX_CHECK(hasOffsetIndex());
+  const auto* columnChunk = thriftColumnChunkPtr(ptr_);
+  return {
+      *columnChunk->offset_index_offset(),
+      columnChunk->offset_index_length().value_or(0)};
 }
 
 common::CompressionKind ColumnChunkMetaDataPtr::compression() const {

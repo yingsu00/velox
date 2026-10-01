@@ -21,6 +21,7 @@
 #include <tuple>
 
 #include "velox/dwio/common/BufferedInput.h"
+#include "velox/dwio/common/StreamUtil.h"
 #include "velox/dwio/parquet/reader/ParquetColumnReader.h"
 #include "velox/dwio/parquet/reader/ParquetData.h"
 #include "velox/dwio/parquet/reader/ParquetStatsContext.h"
@@ -397,6 +398,40 @@ void StructColumnReader::setNullsFromRepDefs(PageReader& pageReader) {
 }
 
 namespace {
+// Returns the rows in both 'left' and 'right'. Each is sorted and disjoint.
+std::vector<RowRange> intersectRowRanges(
+    const std::vector<RowRange>& left,
+    const std::vector<RowRange>& right) {
+  std::vector<RowRange> result;
+  size_t leftIndex{0};
+  size_t rightIndex{0};
+  while (leftIndex < left.size() && rightIndex < right.size()) {
+    const auto begin = std::max(left[leftIndex].begin, right[rightIndex].begin);
+    const auto end = std::min(left[leftIndex].end, right[rightIndex].end);
+    if (begin < end) {
+      result.push_back({begin, end});
+    }
+    if (left[leftIndex].end < right[rightIndex].end) {
+      ++leftIndex;
+    } else {
+      ++rightIndex;
+    }
+  }
+  return result;
+}
+
+// Reads the next 'length' bytes of 'stream'.
+std::string readFully(
+    dwio::common::SeekableInputStream& stream,
+    size_t length) {
+  std::string bytes(length, '\0');
+  const char* bufferStart{nullptr};
+  const char* bufferEnd{nullptr};
+  dwio::common::readBytes(
+      bytes.size(), &stream, bytes.data(), bufferStart, bufferEnd);
+  return bytes;
+}
+
 // Returns true if 'child' is a top-level leaf with a filter whose statistics
 // 'statsContext' trusts.
 bool hasFilterOnTrustedStats(
@@ -444,6 +479,59 @@ void StructColumnReader::filterRowGroups(
     filterRowGroupsByDictionary(
         static_cast<const ParquetStatsContext&>(context), result);
   }
+}
+
+std::optional<std::vector<RowRange>> StructColumnReader::pageIndexRowRanges(
+    uint32_t rowGroupId,
+    dwio::common::BufferedInput& input,
+    const ParquetStatsContext& statsContext) const {
+  // Enqueues the page indexes of all filtered columns so that they are loaded
+  // together. Writers usually store the page indexes of all columns next to
+  // each other, so the input coalesces them into few reads.
+  struct PageIndexRead {
+    const dwio::common::SelectiveColumnReader* leaf;
+    velox::common::Region columnIndex;
+    velox::common::Region offsetIndex;
+    std::unique_ptr<dwio::common::SeekableInputStream> columnIndexStream;
+    std::unique_ptr<dwio::common::SeekableInputStream> offsetIndexStream;
+  };
+  auto pageIndexInput = input.clone();
+  std::vector<PageIndexRead> reads;
+  for (const auto* leaf :
+       filteredLeavesWithTrustedStats(children_, statsContext)) {
+    const auto regions =
+        leaf->formatData().as<ParquetData>().pageIndexRegions(rowGroupId);
+    if (!regions.has_value()) {
+      continue;
+    }
+    const auto& [columnIndex, offsetIndex] = regions.value();
+    reads.push_back(
+        {leaf,
+         columnIndex,
+         offsetIndex,
+         pageIndexInput->enqueue(columnIndex),
+         pageIndexInput->enqueue(offsetIndex)});
+  }
+  if (reads.empty()) {
+    return std::nullopt;
+  }
+  pageIndexInput->load(dwio::common::LogType::STREAM);
+
+  std::optional<std::vector<RowRange>> result;
+  for (const auto& read : reads) {
+    auto ranges = read.leaf->formatData().as<ParquetData>().pageIndexRowRanges(
+        rowGroupId,
+        *read.leaf->scanSpec()->filter(),
+        readFully(*read.columnIndexStream, read.columnIndex.length),
+        readFully(*read.offsetIndexStream, read.offsetIndex.length));
+    if (!ranges.has_value()) {
+      continue;
+    }
+    result = result.has_value()
+        ? intersectRowRanges(result.value(), ranges.value())
+        : std::move(ranges);
+  }
+  return result;
 }
 
 void StructColumnReader::filterRowGroupsByDictionary(

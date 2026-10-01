@@ -306,6 +306,10 @@ TEST(HiveConfigTest, registeredParquetPropertiesUseSessionPrefix) {
       parquetSessionPrefix +
           std::string(
               parquet::ParquetConfig::kDictionaryFilterEnabledSession)));
+  EXPECT_TRUE(hasProperty(
+      properties,
+      parquetSessionPrefix +
+          std::string(parquet::ParquetConfig::kPageIndexFilterEnabledSession)));
   EXPECT_FALSE(hasProperty(
       properties,
       parquetSessionPrefix + std::string(HiveConfig::kUseColumnNamesSession)));

@@ -1105,6 +1105,14 @@ Parquet Options (prefix ``hive.parquet.``)
        skip and whose data pages are all dictionary-encoded, and reads their
        dictionary pages. Not used for columns whose statistics are ignored.
        Session: ``parquet_dictionary_filter_enabled``.
+   * - ``page-index-filter-enabled``
+     - bool
+     - true
+     - Skip the rows of pages whose column index shows that no value passes
+       the filter. Applies to top-level primitive columns of files written with
+       a page index, and reads the column and offset index of each filtered
+       column of a row group. Not used for columns whose statistics are
+       ignored. Session: ``parquet_page_index_filter_enabled``.
    * - ``footer-memory-tracking-threshold``
      - integer
      - disabled (max uint64)
