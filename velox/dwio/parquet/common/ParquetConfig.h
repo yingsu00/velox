@@ -61,6 +61,20 @@ class ParquetConfig {
       false,
       "When name-based mapping is enabled and all requested struct children are missing, return NULL struct instead of a non-null struct with all-null children.")
 
+  VELOX_FORMAT_CONFIG(
+      kDictionaryFilterEnabledSession,
+      kDictionaryFilterEnabled,
+      dictionaryFilterEnabled,
+      "dictionary_filter_enabled",
+      "dictionary-filter-enabled",
+      bool,
+      true,
+      "Skip row groups whose dictionary has no value that passes the filter "
+      "on a top-level string column. Reads the dictionary page of each row "
+      "group that statistics do not skip and whose data pages are all "
+      "dictionary-encoded. Not used for columns whose statistics are "
+      "ignored.")
+
   static constexpr uint64_t kDefaultFooterMemoryTrackingThreshold =
       std::numeric_limits<uint64_t>::max();
   VELOX_FORMAT_CONFIG(
