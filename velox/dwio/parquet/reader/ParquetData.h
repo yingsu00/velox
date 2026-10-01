@@ -31,6 +31,14 @@ class BufferedInput;
 
 namespace facebook::velox::parquet {
 
+/// Range of rows [begin, end) in a row group.
+struct RowRange {
+  int64_t begin;
+  int64_t end;
+
+  bool operator==(const RowRange& other) const = default;
+};
+
 class ParquetParams : public dwio::common::FormatParams {
  public:
   ParquetParams(
@@ -248,6 +256,21 @@ class ParquetData : public dwio::common::FormatData {
       uint32_t rowGroupId,
       const common::Filter& filter,
       std::unique_ptr<dwio::common::SeekableInputStream> stream) const;
+
+  /// Returns the byte regions of the column index and the offset index of the
+  /// 'rowGroupId'th row group, or std::nullopt if there is no page index.
+  std::optional<std::pair<velox::common::Region, velox::common::Region>>
+  pageIndexRegions(uint32_t rowGroupId) const;
+
+  /// Returns the sorted row ranges of the 'rowGroupId'th row group whose pages
+  /// may have values that pass 'filter', according to the serialized column
+  /// index and offset index of its column chunk. Returns std::nullopt if the
+  /// page index is malformed.
+  std::optional<std::vector<RowRange>> pageIndexRowRanges(
+      uint32_t rowGroupId,
+      const common::Filter& filter,
+      std::string_view serializedColumnIndex,
+      std::string_view serializedOffsetIndex) const;
 
  private:
   /// True if 'filter' may have hits for the column of 'this' according to the

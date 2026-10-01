@@ -75,6 +75,19 @@ class ParquetConfig {
       "dictionary-encoded. Not used for columns whose statistics are "
       "ignored.")
 
+  VELOX_FORMAT_CONFIG(
+      kPageIndexFilterEnabledSession,
+      kPageIndexFilterEnabled,
+      pageIndexFilterEnabled,
+      "page_index_filter_enabled",
+      "page-index-filter-enabled",
+      bool,
+      true,
+      "Skip rows in pages whose column index statistics show no value passes "
+      "the filter on a top-level column. Reads the column and offset index of "
+      "each filtered column of a row group when the file has them. Not used "
+      "for columns whose statistics are ignored.")
+
   static constexpr uint64_t kDefaultFooterMemoryTrackingThreshold =
       std::numeric_limits<uint64_t>::max();
   VELOX_FORMAT_CONFIG(
