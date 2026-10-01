@@ -616,6 +616,12 @@ reported per column using ``column_<nodeId>`` and the column type. For example,
      - nanos
      - The time spent loading Parquet pages. Reported across all columns and
        by column.
+   * - | parquet.numRowGroupsSkippedByDictionary
+       | parquet.column_<nodeId>.<type>.numRowGroupsSkippedByDictionary
+     -
+     - The number of row groups skipped because no value of the dictionary of
+       a string column passes the filter. Reported across all columns and by
+       column.
    * - | <format>.decompressCPUTimeNanos
        | <format>.column_<nodeId>.<type>.decompressCPUTimeNanos
      - nanos

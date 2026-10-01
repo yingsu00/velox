@@ -224,6 +224,8 @@ ParquetReaderFactory::createFormatOptions(
       ParquetConfig::footerMemoryTrackingThreshold(connectorConfig, session));
   options->setNullStructIfAllFieldsMissing(
       ParquetConfig::nullStructIfAllFieldsMissing(connectorConfig, session));
+  options->setDictionaryFilterEnabled(
+      ParquetConfig::dictionaryFilterEnabled(connectorConfig, session));
   return options;
 }
 
@@ -270,6 +272,10 @@ class ReaderBase {
 
   bool nullStructIfAllFieldsMissing() const {
     return parquetReaderOptions_.nullStructIfAllFieldsMissing();
+  }
+
+  bool dictionaryFilterEnabled() const {
+    return parquetReaderOptions_.dictionaryFilterEnabled();
   }
 
   bool isFileColumnNamesReadAsLowerCase() const {
@@ -1618,7 +1624,9 @@ class ParquetRowReader::Impl {
         readerBase_->fileMetaData(),
         readerBase->sessionTimezone(),
         options_.timestampPrecision(),
-        readerBase_->nullStructIfAllFieldsMissing());
+        readerBase_->nullStructIfAllFieldsMissing(),
+        readerBase_->dictionaryFilterEnabled() ? &readerBase_->bufferedInput()
+                                               : nullptr);
     requestedType_ = options_.requestedType() ? options_.requestedType()
                                               : readerBase_->schema();
     columnReader_ = ParquetColumnReader::build(

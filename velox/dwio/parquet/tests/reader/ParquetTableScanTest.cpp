@@ -1123,6 +1123,172 @@ TEST_F(ParquetTableScanTest, caseMappedFilterSkipsRowGroups) {
   }
 }
 
+// Verifies that row groups whose dictionary has no passing value are skipped,
+// including when their min and max do not exclude the value.
+TEST_F(ParquetTableScanTest, dictionaryFilterSkipsRowGroups) {
+  constexpr int32_t kNumRowGroups = 10;
+  constexpr int32_t kRowsPerRowGroup = 1'000;
+  // Row group 'g' holds 'rg<g>-AAA', 'rg<g>-CCC' and nulls, so its min and
+  // max include 'rg<g>-BBB' while its dictionary does not. Likewise, every
+  // row group of c1 holds 'x0' and 'x2' but not 'x1'.
+  auto data = makeRowVector(
+      {"c0", "c1"},
+      {
+          makeFlatVector<std::string>(
+              kNumRowGroups * kRowsPerRowGroup,
+              [](auto row) {
+                return fmt::format(
+                    "rg{}-{}", row / kRowsPerRowGroup, row % 2 ? "AAA" : "CCC");
+              },
+              [](auto row) { return row % 7 == 0; }),
+          makeFlatVector<std::string>(
+              kNumRowGroups * kRowsPerRowGroup,
+              [](auto row) { return fmt::format("x{}", (row % 2) * 2); }),
+      });
+  const auto rowType = asRowType(data->type());
+  dwio::common::WriterOptions writerOptions;
+  writerOptions.flushPolicyFactory = [&]() {
+    return std::make_unique<DefaultFlushPolicy>(
+        kRowsPerRowGroup, std::numeric_limits<int64_t>::max());
+  };
+  const auto file = TempFilePath::create();
+  writeToParquetFile(file->getPath(), {data}, writerOptions, {});
+  ParquetWriterOptions plainOptions;
+  plainOptions.enableDictionary = false;
+  const auto plainFile = TempFilePath::create();
+  writeToParquetFile(plainFile->getPath(), {data}, writerOptions, plainOptions);
+
+  struct TestCase {
+    std::string filter;
+    bool plainEncoding;
+    bool dictionaryFilterEnabled;
+    int64_t numRows;
+    int64_t numSkippedRowGroups;
+  };
+  // Row group 3 has 500 'rg3-AAA' rows, 72 of which are null. The file has
+  // 8'571 non-null rows.
+  const std::vector<TestCase> testCases = {
+      {.filter = "c0 = 'rg3-BBB'",
+       .plainEncoding = false,
+       .dictionaryFilterEnabled = true,
+       .numRows = 0,
+       .numSkippedRowGroups = 10},
+      {.filter = "c0 = 'rg3-BBB'",
+       .plainEncoding = false,
+       .dictionaryFilterEnabled = false,
+       .numRows = 0,
+       .numSkippedRowGroups = 9},
+      {.filter = "c0 = 'rg3-BBB'",
+       .plainEncoding = true,
+       .dictionaryFilterEnabled = true,
+       .numRows = 0,
+       .numSkippedRowGroups = 9},
+      {.filter = "lower(c0) = 'rg3-bbb'",
+       .plainEncoding = false,
+       .dictionaryFilterEnabled = true,
+       .numRows = 0,
+       .numSkippedRowGroups = 10},
+      {.filter = "lower(c0) = 'rg3-aaa'",
+       .plainEncoding = false,
+       .dictionaryFilterEnabled = true,
+       .numRows = 428,
+       .numSkippedRowGroups = 9},
+      {.filter = "c0 <> 'rg3-AAA'",
+       .plainEncoding = false,
+       .dictionaryFilterEnabled = true,
+       .numRows = 8'143,
+       .numSkippedRowGroups = 0},
+      {.filter = "length(c0) = 3",
+       .plainEncoding = false,
+       .dictionaryFilterEnabled = true,
+       .numRows = 0,
+       .numSkippedRowGroups = 10},
+      // Nulls pass and every row group has nulls, so the dictionary does not
+      // decide.
+      {.filter = "c0 = 'rg3-BBB' or c0 is null",
+       .plainEncoding = false,
+       .dictionaryFilterEnabled = true,
+       .numRows = 1'429,
+       .numSkippedRowGroups = 0},
+      // The dictionary of c0 keeps row group 3 and the one of c1 skips it.
+      {.filter = "c0 = 'rg3-AAA' and c1 = 'x1'",
+       .plainEncoding = false,
+       .dictionaryFilterEnabled = true,
+       .numRows = 0,
+       .numSkippedRowGroups = 10},
+      {.filter = "c0 = 'rg3-AAA' and c1 = 'x2'",
+       .plainEncoding = false,
+       .dictionaryFilterEnabled = true,
+       .numRows = 428,
+       .numSkippedRowGroups = 9},
+  };
+  for (const auto& testCase : testCases) {
+    SCOPED_TRACE(
+        fmt::format(
+            "{} plainEncoding {} dictionaryFilterEnabled {}",
+            testCase.filter,
+            testCase.plainEncoding,
+            testCase.dictionaryFilterEnabled));
+    auto plan =
+        PlanBuilder(pool()).tableScan(rowType, {}, testCase.filter).planNode();
+    const auto scanId = plan->id();
+    const auto expected = AssertQueryBuilder(PlanBuilder(pool())
+                                                 .values({data})
+                                                 .filter(testCase.filter)
+                                                 .planNode())
+                              .copyResults(pool());
+    ASSERT_EQ(expected->size(), testCase.numRows);
+    auto task = AssertQueryBuilder(plan)
+                    .connectorSessionProperty(
+                        kHiveConnectorId,
+                        parquetSessionProperty("dictionary_filter_enabled"),
+                        testCase.dictionaryFilterEnabled ? "true" : "false")
+                    .split(makeSplit(
+                        testCase.plainEncoding ? plainFile->getPath()
+                                               : file->getPath()))
+                    .assertResults(expected);
+    ASSERT_EQ(
+        customStatSum(*task, scanId, "skippedStrides"),
+        testCase.numSkippedRowGroups);
+  }
+}
+
+// Verifies that a row group is not skipped by its dictionary when the writer
+// falls back to PLAIN partway through the column chunk, because the dictionary
+// does not hold the values of the PLAIN pages.
+TEST_F(ParquetTableScanTest, dictionaryFilterKeepsChunksWithPlainPages) {
+  auto data =
+      makeRowVector({"c0"}, {makeFlatVector<std::string>(10'000, [](auto row) {
+                      return fmt::format("value-{:05}", row);
+                    })});
+  const auto rowType = asRowType(data->type());
+  ParquetWriterOptions options;
+  // Falls back to PLAIN once the dictionary exceeds 1 KB, after about 100
+  // values. Each write batch ends a page, because it exceeds the 1-byte page
+  // size.
+  options.dictionaryPageSizeLimit = 1'024;
+  options.dataPageSize = 1;
+  options.batchSize = 100;
+  const auto file = TempFilePath::create();
+  writeToParquetFile(file->getPath(), {data}, options);
+
+  for (const auto& filter :
+       {"c0 = 'value-09999'", "lower(c0) = 'value-09999'"}) {
+    SCOPED_TRACE(filter);
+    auto plan = PlanBuilder(pool()).tableScan(rowType, {}, filter).planNode();
+    const auto scanId = plan->id();
+    const auto expected =
+        AssertQueryBuilder(
+            PlanBuilder(pool()).values({data}).filter(filter).planNode())
+            .copyResults(pool());
+    ASSERT_EQ(expected->size(), 1);
+    auto task = AssertQueryBuilder(plan)
+                    .split(makeSplit(file->getPath()))
+                    .assertResults(expected);
+    ASSERT_EQ(customStatSum(*task, scanId, "skippedStrides"), 0);
+  }
+}
+
 TEST_F(ParquetTableScanTest, readAsLowerCase) {
   auto vectors = {makeRowVector(
       {"A", "b"},

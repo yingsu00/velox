@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include "velox/common/file/Region.h"
 #include "velox/dwio/common/BufferUtil.h"
 #include "velox/dwio/parquet/reader/Metadata.h"
 #include "velox/dwio/parquet/reader/PageReader.h"
@@ -38,12 +39,14 @@ class ParquetParams : public dwio::common::FormatParams {
       const FileMetaDataPtr metaData,
       const tz::TimeZone* sessionTimezone,
       TimestampPrecision timestampPrecision,
-      bool nullStructIfAllFieldsMissing)
+      bool nullStructIfAllFieldsMissing,
+      dwio::common::BufferedInput* dictionaryFilterInput)
       : FormatParams(pool, stats),
         metaData_(metaData),
         sessionTimezone_(sessionTimezone),
         timestampPrecision_(timestampPrecision),
-        nullStructIfAllFieldsMissing_(nullStructIfAllFieldsMissing) {}
+        nullStructIfAllFieldsMissing_(nullStructIfAllFieldsMissing),
+        dictionaryFilterInput_(dictionaryFilterInput) {}
   std::unique_ptr<dwio::common::FormatData> toFormatData(
       const std::shared_ptr<const dwio::common::TypeWithId>& type,
       const common::ScanSpec& scanSpec) override;
@@ -60,11 +63,18 @@ class ParquetParams : public dwio::common::FormatParams {
     return nullStructIfAllFieldsMissing_;
   }
 
+  /// Source of dictionary pages for skipping row groups whose dictionary has
+  /// no value that passes the filter. Null if disabled.
+  dwio::common::BufferedInput* dictionaryFilterInput() const {
+    return dictionaryFilterInput_;
+  }
+
  private:
   const FileMetaDataPtr metaData_;
   const tz::TimeZone* sessionTimezone_;
   const TimestampPrecision timestampPrecision_;
   const bool nullStructIfAllFieldsMissing_;
+  dwio::common::BufferedInput* const dictionaryFilterInput_;
 };
 
 /// Format-specific data created for each leaf column of a Parquet rowgroup.
@@ -222,6 +232,22 @@ class ParquetData : public dwio::common::FormatData {
 
   // Returns the <offset, length> of the row group.
   std::pair<int64_t, int64_t> getRowGroupRegion(uint32_t index) const;
+
+  /// Returns the byte region of the dictionary page of the 'rowGroupId'th row
+  /// group if the dictionary decides whether any row passes 'filter', i.e. the
+  /// column is a string column, all data pages are dictionary-encoded and
+  /// nulls cannot pass. Returns std::nullopt otherwise.
+  std::optional<velox::common::Region> dictionaryRegion(
+      uint32_t rowGroupId,
+      const common::Filter& filter) const;
+
+  /// Returns false if no value of the dictionary page in 'stream' passes
+  /// 'filter', and counts the row group in numRowGroupsSkippedByDictionary.
+  /// 'stream' holds the region returned by dictionaryRegion().
+  bool dictionaryMatches(
+      uint32_t rowGroupId,
+      const common::Filter& filter,
+      std::unique_ptr<dwio::common::SeekableInputStream> stream) const;
 
  private:
   /// True if 'filter' may have hits for the column of 'this' according to the

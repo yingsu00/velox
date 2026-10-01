@@ -23,6 +23,7 @@
 #include "velox/dwio/common/BufferedInput.h"
 #include "velox/dwio/parquet/reader/ParquetColumnReader.h"
 #include "velox/dwio/parquet/reader/ParquetData.h"
+#include "velox/dwio/parquet/reader/ParquetStatsContext.h"
 #include "velox/dwio/parquet/reader/RepeatedColumnReader.h"
 
 namespace facebook::velox::common {
@@ -176,7 +177,8 @@ StructColumnReader::StructColumnReader(
           requestedType,
           fileType,
           params,
-          scanSpec) {
+          scanSpec),
+      dictionaryFilterInput_(params.dictionaryFilterInput()) {
   const auto stableChildren = scanSpec_->stableChildren();
   const auto& childSpecs = *stableChildren;
   for (auto i = 0; i < childSpecs.size(); ++i) {
@@ -394,6 +396,39 @@ void StructColumnReader::setNullsFromRepDefs(PageReader& pageReader) {
   formatData_->as<ParquetData>().setNulls(nullsInReadRange(), numStructs);
 }
 
+namespace {
+// Returns true if 'child' is a top-level leaf with a filter whose statistics
+// 'statsContext' trusts.
+bool hasFilterOnTrustedStats(
+    const dwio::common::SelectiveColumnReader& child,
+    const ParquetStatsContext& statsContext) {
+  if (child.scanSpec()->filter() == nullptr) {
+    return false;
+  }
+  const auto& fileType =
+      static_cast<const ParquetTypeWithId&>(child.fileType());
+  return fileType.isLeaf() && fileType.maxRepeat_ == 0 &&
+      !(fileType.parquetType_.has_value() &&
+        statsContext.shouldIgnoreStatistics(fileType.parquetType_.value()));
+}
+
+// Returns the children of the root struct that are top-level leaves with a
+// filter whose statistics 'statsContext' trusts. Their filters are tested
+// against dictionaries and page indexes the same way as against statistics.
+std::vector<const dwio::common::SelectiveColumnReader*>
+filteredLeavesWithTrustedStats(
+    const std::vector<dwio::common::SelectiveColumnReader*>& children,
+    const ParquetStatsContext& statsContext) {
+  std::vector<const dwio::common::SelectiveColumnReader*> leaves;
+  for (const auto* child : children) {
+    if (child != nullptr && hasFilterOnTrustedStats(*child, statsContext)) {
+      leaves.push_back(child);
+    }
+  }
+  return leaves;
+}
+} // namespace
+
 void StructColumnReader::filterRowGroups(
     uint64_t rowGroupSize,
     const dwio::common::StatsContext& context,
@@ -401,6 +436,75 @@ void StructColumnReader::filterRowGroups(
   for (const auto& child : children_) {
     child->filterRowGroups(rowGroupSize, context, result);
   }
+  // Only the root struct reads dictionaries, after its children have tested
+  // the statistics of all columns, so that no dictionary is read for a row
+  // group that statistics skip.
+  const bool isRoot = repDefSourceReader_ == nullptr;
+  if (isRoot && dictionaryFilterInput_ != nullptr) {
+    filterRowGroupsByDictionary(
+        static_cast<const ParquetStatsContext&>(context), result);
+  }
+}
+
+void StructColumnReader::filterRowGroupsByDictionary(
+    const ParquetStatsContext& statsContext,
+    dwio::common::FormatData::FilterRowGroupsResult& result) const {
+  struct Dictionary {
+    const dwio::common::SelectiveColumnReader* reader;
+    uint32_t rowGroup;
+    std::unique_ptr<dwio::common::SeekableInputStream> stream;
+  };
+  // Caps the bytes of dictionary pages held in memory at once.
+  constexpr uint64_t kMaxBytesPerLoad = 64 << 20;
+  const auto leaves = filteredLeavesWithTrustedStats(children_, statsContext);
+  std::unique_ptr<dwio::common::BufferedInput> input;
+  std::vector<Dictionary> dictionaries;
+  uint64_t numBytes{0};
+  // Loads the enqueued dictionary pages together and skips the row groups
+  // whose dictionary has no passing value.
+  const auto testDictionaries = [&]() {
+    if (dictionaries.empty()) {
+      return;
+    }
+    input->load(dwio::common::LogType::STREAM);
+    for (auto& dictionary : dictionaries) {
+      // The dictionary of another column may already have skipped the row
+      // group.
+      if (bits::isBitSet(result.filterResult.data(), dictionary.rowGroup)) {
+        continue;
+      }
+      if (!dictionary.reader->formatData().as<ParquetData>().dictionaryMatches(
+              dictionary.rowGroup,
+              *dictionary.reader->scanSpec()->filter(),
+              std::move(dictionary.stream))) {
+        bits::setBit(result.filterResult.data(), dictionary.rowGroup);
+      }
+    }
+    dictionaries.clear();
+    input.reset();
+    numBytes = 0;
+  };
+  for (uint32_t rowGroup = 0; rowGroup < result.totalCount; ++rowGroup) {
+    if (bits::isBitSet(result.filterResult.data(), rowGroup)) {
+      continue;
+    }
+    for (const auto* leaf : leaves) {
+      const auto region = leaf->formatData().as<ParquetData>().dictionaryRegion(
+          rowGroup, *leaf->scanSpec()->filter());
+      if (!region.has_value()) {
+        continue;
+      }
+      if (input == nullptr) {
+        input = dictionaryFilterInput_->clone();
+      }
+      dictionaries.push_back({leaf, rowGroup, input->enqueue(region.value())});
+      numBytes += region->length;
+      if (numBytes >= kMaxBytesPerLoad) {
+        testDictionaries();
+      }
+    }
+  }
+  testDictionaries();
 }
 
 } // namespace facebook::velox::parquet
