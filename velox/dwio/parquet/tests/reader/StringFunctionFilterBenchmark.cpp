@@ -110,6 +110,47 @@ class StringFunctionFilterBenchmark
     parquet::ParquetWriterOptions plainOptions;
     plainOptions.enableDictionary = false;
     writeToParquetFile(plainFile_->getPath(), {data}, plainOptions);
+
+    // Sorted by 'resource', in row groups of kRowsPerRowGroup rows with pages
+    // of kRowsPerPage rows and a page index. Each row group holds two
+    // services, so a service appears in a sixth of the row groups.
+    auto sortedData = makeRowVector(
+        {"service", "resource", "cost"},
+        {
+            makeFlatVector<std::string>(
+                FLAGS_num_rows,
+                [&](auto row) {
+                  const auto rowGroup = row / kRowsPerRowGroup;
+                  // Odd rows take a service from the other half of the list.
+                  const auto offset = (row % 2) * (services.size() / 2);
+                  return services[(rowGroup + offset) % services.size()];
+                }),
+            makeFlatVector<std::string>(
+                FLAGS_num_rows,
+                [](auto row) {
+                  return fmt::format(
+                      "arn:aws:rds:us-east-1:123456789012:db:Instance-{:08}",
+                      row);
+                }),
+            makeFlatVector<double>(
+                FLAGS_num_rows, [](auto row) { return row * 0.01; }),
+        });
+    sortedFile_ = common::testutil::TempFilePath::create();
+    dwio::common::WriterOptions sortedWriterOptions;
+    sortedWriterOptions.flushPolicyFactory = []() {
+      return std::make_unique<parquet::DefaultFlushPolicy>(
+          kRowsPerRowGroup, std::numeric_limits<int64_t>::max());
+    };
+    parquet::ParquetWriterOptions sortedOptions;
+    sortedOptions.enableWritePageIndex = true;
+    // Each write batch ends a page, because it exceeds the 1-byte page size.
+    sortedOptions.dataPageSize = 1;
+    sortedOptions.batchSize = kRowsPerPage;
+    writeToParquetFile(
+        sortedFile_->getPath(),
+        {sortedData},
+        std::move(sortedWriterOptions),
+        std::move(sortedOptions));
   }
 
   ~StringFunctionFilterBenchmark() override {
@@ -134,44 +175,141 @@ class StringFunctionFilterBenchmark
         {"length", "length(resource) < 50"},
     };
     for (const auto& [name, filter] : filters) {
-      for (const auto& [fileName, file] :
-           {std::make_pair("dictionary", dictionaryFile_),
-            std::make_pair("plain", plainFile_)}) {
-        const auto benchmarkName = fmt::format("{}_{}", name, fileName);
-        folly::addBenchmark(__FILE__, benchmarkName, [this, filter, file]() {
-          run<BaselineParser>(filter, file->getPath());
-          return 1;
-        });
-        folly::addBenchmark(
-            __FILE__, "%" + benchmarkName, [this, filter, file]() {
-              run<exec::PrestoExprToSubfieldFilterParser>(
-                  filter, file->getPath());
-              return 1;
-            });
-      }
+      addComparison(
+          fmt::format("{}_dictionary", name),
+          filter,
+          dictionaryFile_,
+          kReaderSkippingOnly,
+          kAll);
+      addComparison(
+          fmt::format("{}_plain", name),
+          filter,
+          plainFile_,
+          kReaderSkippingOnly,
+          kAll);
       folly::addBenchmark(__FILE__, "-", []() { return 0; });
     }
+
+    // Each skipping step compared with the same scan without it. The filter
+    // selects a row in the middle of the file, away from a page boundary.
+    const auto targetRow = FLAGS_num_rows / 2 + 123;
+    const auto resourceFilter = fmt::format(
+        "lower(resource) = 'arn:aws:rds:us-east-1:123456789012:db:instance-{:08}'",
+        targetRow);
+    // The baseline keeps lower() in the remaining filter, so this includes the
+    // gain from pushing it down.
+    addComparison(
+        "skip_row_groups_by_min_max",
+        resourceFilter,
+        sortedFile_,
+        kNone,
+        kPushdownOnly);
+    addComparison(
+        "skip_row_groups_by_dictionary",
+        "lower(service) = 'aws rds'",
+        sortedFile_,
+        kPushdownOnly,
+        kPushdownAndDictionary);
+    addComparison(
+        "skip_pages_by_page_index",
+        resourceFilter,
+        sortedFile_,
+        kPushdownOnly,
+        kPushdownAndPageIndex);
   }
 
  private:
-  template <typename TParser>
-  void run(const std::string& filter, const std::string& path) {
+  static constexpr int32_t kRowsPerRowGroup = 100'000;
+  static constexpr int32_t kRowsPerPage = 1'000;
+
+  // Optimizations to enable in a run.
+  struct Options {
+    // Pushes down filters on lower(), upper(), length() and LIKE.
+    bool pushdown;
+    // Skips row groups whose dictionary has no passing value.
+    bool dictionaryFilter;
+    // Skips pages by the page index.
+    bool pageIndexFilter;
+  };
+
+  static constexpr Options kNone{
+      .pushdown = false,
+      .dictionaryFilter = false,
+      .pageIndexFilter = false};
+  static constexpr Options kReaderSkippingOnly{
+      .pushdown = false,
+      .dictionaryFilter = true,
+      .pageIndexFilter = true};
+  static constexpr Options kPushdownOnly{
+      .pushdown = true,
+      .dictionaryFilter = false,
+      .pageIndexFilter = false};
+  static constexpr Options kPushdownAndDictionary{
+      .pushdown = true,
+      .dictionaryFilter = true,
+      .pageIndexFilter = false};
+  static constexpr Options kPushdownAndPageIndex{
+      .pushdown = true,
+      .dictionaryFilter = false,
+      .pageIndexFilter = true};
+  static constexpr Options kAll{
+      .pushdown = true,
+      .dictionaryFilter = true,
+      .pageIndexFilter = true};
+
+  // Adds a benchmark of scanning 'file' with 'filter' using 'baseline' and a
+  // relative one using 'options'.
+  void addComparison(
+      const std::string& name,
+      const std::string& filter,
+      const std::shared_ptr<common::testutil::TempFilePath>& file,
+      Options baseline,
+      Options options) {
+    folly::addBenchmark(__FILE__, name, [this, filter, file, baseline]() {
+      run(filter, file->getPath(), baseline);
+      return 1;
+    });
+    folly::addBenchmark(__FILE__, "%" + name, [this, filter, file, options]() {
+      run(filter, file->getPath(), options);
+      return 1;
+    });
+  }
+
+  void run(
+      const std::string& filter,
+      const std::string& path,
+      const Options& options) {
     folly::BenchmarkSuspender suspender;
-    exec::ExprToSubfieldFilterParser::registerParser(
-        std::make_shared<TParser>());
+    if (options.pushdown) {
+      exec::ExprToSubfieldFilterParser::registerParser(
+          std::make_shared<exec::PrestoExprToSubfieldFilterParser>());
+    } else {
+      exec::ExprToSubfieldFilterParser::registerParser(
+          std::make_shared<BaselineParser>());
+    }
     auto plan = PlanBuilder(pool())
                     .tableScan(rowType_, {}, filter)
                     .singleAggregation({}, {"count(1)", "sum(cost)"})
                     .planNode();
     suspender.dismiss();
-    auto result =
-        AssertQueryBuilder(plan).split(makeSplit(path)).copyResults(pool());
+    auto result = AssertQueryBuilder(plan)
+                      .connectorSessionProperty(
+                          exec::test::kHiveConnectorId,
+                          parquetSessionProperty("dictionary_filter_enabled"),
+                          options.dictionaryFilter ? "true" : "false")
+                      .connectorSessionProperty(
+                          exec::test::kHiveConnectorId,
+                          parquetSessionProperty("page_index_filter_enabled"),
+                          options.pageIndexFilter ? "true" : "false")
+                      .split(makeSplit(path))
+                      .copyResults(pool());
     folly::doNotOptimizeAway(result);
   }
 
   RowTypePtr rowType_;
   std::shared_ptr<common::testutil::TempFilePath> dictionaryFile_;
   std::shared_ptr<common::testutil::TempFilePath> plainFile_;
+  std::shared_ptr<common::testutil::TempFilePath> sortedFile_;
 };
 
 } // namespace

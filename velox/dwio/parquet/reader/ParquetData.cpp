@@ -226,4 +226,92 @@ bool ParquetData::dictionaryMatches(
   return false;
 }
 
+std::optional<std::pair<velox::common::Region, velox::common::Region>>
+ParquetData::pageIndexRegions(uint32_t rowGroupId) const {
+  auto columnChunk =
+      fileMetaDataPtr_.rowGroup(rowGroupId).columnChunk(type_->column());
+  if (!columnChunk.hasMetadata() || !columnChunk.hasColumnIndex() ||
+      !columnChunk.hasOffsetIndex()) {
+    return std::nullopt;
+  }
+  const auto [columnIndexOffset, columnIndexLength] =
+      columnChunk.columnIndexRegion();
+  const auto [offsetIndexOffset, offsetIndexLength] =
+      columnChunk.offsetIndexRegion();
+  if (columnIndexLength <= 0 || offsetIndexLength <= 0) {
+    return std::nullopt;
+  }
+  return std::make_pair(
+      velox::common::Region{
+          static_cast<uint64_t>(columnIndexOffset),
+          static_cast<uint64_t>(columnIndexLength)},
+      velox::common::Region{
+          static_cast<uint64_t>(offsetIndexOffset),
+          static_cast<uint64_t>(offsetIndexLength)});
+}
+
+std::optional<std::vector<RowRange>> ParquetData::pageIndexRowRanges(
+    uint32_t rowGroupId,
+    const common::Filter& filter,
+    std::string_view serializedColumnIndex,
+    std::string_view serializedOffsetIndex) const {
+  thrift::ColumnIndex columnIndex;
+  thrift::deserialize(&columnIndex, serializedColumnIndex);
+  thrift::OffsetIndex offsetIndex;
+  thrift::deserialize(&offsetIndex, serializedOffsetIndex);
+  const auto& pageLocations = *offsetIndex.page_locations();
+  const auto& nullPages = *columnIndex.null_pages();
+  auto& minValues = *columnIndex.min_values();
+  auto& maxValues = *columnIndex.max_values();
+  const auto& nullCounts = columnIndex.null_counts();
+  const auto numPages = pageLocations.size();
+  if (nullPages.size() != numPages || minValues.size() != numPages ||
+      maxValues.size() != numPages ||
+      (nullCounts.has_value() && nullCounts->size() != numPages)) {
+    return std::nullopt;
+  }
+
+  auto rowGroup = fileMetaDataPtr_.rowGroup(rowGroupId);
+  auto columnChunk = rowGroup.columnChunk(type_->column());
+  // Returns true if 'filter' may pass a value of the 'page'th page, which has
+  // 'numPageRows' rows, testing it the same way as a row group.
+  const auto pageMayMatch = [&](size_t page, int64_t numPageRows) {
+    if (nullPages[page]) {
+      return filter.testNull();
+    }
+    thrift::Statistics pageStats;
+    pageStats.min_value() = std::move(minValues[page]);
+    pageStats.max_value() = std::move(maxValues[page]);
+    if (nullCounts.has_value()) {
+      pageStats.null_count() = (*nullCounts)[page];
+    }
+    const auto stats = columnChunk.getPageStatistics(
+        pageStats,
+        type_->type(),
+        numPageRows,
+        type_->convertedType_,
+        type_->logicalType_);
+    return testFilter(&filter, stats.get(), numPageRows, type_->type());
+  };
+
+  const auto numRows = rowGroup.numRows();
+  std::vector<RowRange> ranges;
+  for (size_t page = 0; page < numPages; ++page) {
+    const int64_t begin = *pageLocations[page].first_row_index();
+    const int64_t end = page + 1 < numPages
+        ? *pageLocations[page + 1].first_row_index()
+        : numRows;
+    if (!pageMayMatch(page, end - begin)) {
+      continue;
+    }
+    // Merges the ranges of consecutive pages.
+    if (!ranges.empty() && ranges.back().end == begin) {
+      ranges.back().end = end;
+    } else {
+      ranges.push_back({begin, end});
+    }
+  }
+  return ranges;
+}
+
 } // namespace facebook::velox::parquet

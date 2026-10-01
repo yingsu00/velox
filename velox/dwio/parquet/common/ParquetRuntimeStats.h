@@ -44,6 +44,17 @@ struct ParquetRuntimeStats {
           kNumRowGroupsSkippedByDictionary,
           RuntimeCounter::Unit::kNone};
 
+  /// Number of rows skipped because the page index shows that no value in
+  /// their pages passes the filter.
+  inline static constexpr std::string_view kNumRowsSkippedByPageIndex =
+      "numRowsSkippedByPageIndex";
+
+  /// Describes the page-index-skipped-rows runtime metric.
+  inline static constexpr std::pair<std::string_view, RuntimeCounter::Unit>
+      kNumRowsSkippedByPageIndexMetric = {
+          kNumRowsSkippedByPageIndex,
+          RuntimeCounter::Unit::kNone};
+
   /// Estimated memory used by the deserialized Parquet footer in bytes.
   inline static constexpr std::string_view kFooterEstimatedBytes =
       "footerEstimatedBytes";

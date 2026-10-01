@@ -46,6 +46,14 @@ class ColumnChunkMetaDataPtr {
   /// ranges) for this column chunk.
   bool hasOffsetIndex() const;
 
+  /// Returns the byte offset and length of the column index. Must check for
+  /// its presence using hasColumnIndex().
+  std::pair<int64_t, int32_t> columnIndexRegion() const;
+
+  /// Returns the byte offset and length of the offset index. Must check for
+  /// its presence using hasOffsetIndex().
+  std::pair<int64_t, int32_t> offsetIndexRegion() const;
+
   /// Check the presence of the index page offset in ColumnChunk metadata.
   bool hasIndexPage() const;
 
@@ -56,6 +64,15 @@ class ColumnChunkMetaDataPtr {
       int64_t numRows,
       std::optional<thrift::ConvertedType> convertedType = std::nullopt,
       const std::optional<thrift::LogicalType>& logicalType = std::nullopt);
+
+  /// Converts the statistics of one page from the column index, in the same
+  /// form as getColumnStatistics().
+  std::unique_ptr<dwio::common::ColumnStatistics> getPageStatistics(
+      const thrift::Statistics& pageStats,
+      const TypePtr& type,
+      int64_t numRows,
+      std::optional<thrift::ConvertedType> convertedType,
+      const std::optional<thrift::LogicalType>& logicalType) const;
 
   /// Return the Column Metadata Statistics Min Value
   std::string getColumnMetadataStatsMinValue();

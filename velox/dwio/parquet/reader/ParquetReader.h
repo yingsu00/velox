@@ -78,6 +78,14 @@ class ParquetReaderOptions : public dwio::common::FormatSpecificOptions {
     return dictionaryFilterEnabled_;
   }
 
+  void setPageIndexFilterEnabled(bool value) {
+    pageIndexFilterEnabled_ = value;
+  }
+
+  bool pageIndexFilterEnabled() const {
+    return pageIndexFilterEnabled_;
+  }
+
  private:
   /// Allows reading INT32 physical columns as narrower integer types.
   bool allowInt32Narrowing_{
@@ -95,6 +103,10 @@ class ParquetReaderOptions : public dwio::common::FormatSpecificOptions {
   /// Skips row groups by their dictionaries.
   bool dictionaryFilterEnabled_{
       ParquetConfig::kDictionaryFilterEnabledSessionProperty::defaultValue};
+
+  /// Skips rows by the page index.
+  bool pageIndexFilterEnabled_{
+      ParquetConfig::kPageIndexFilterEnabledSessionProperty::defaultValue};
 };
 
 /// Implements the RowReader interface for Parquet.
