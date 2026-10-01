@@ -145,6 +145,14 @@ class CaseMapped final : public Filter {
 
   VELOX_DECLARE_EMBEDDED_ENUM_NAME(Mapping);
 
+  /// For each code point of a value, the UTF-8 encodings of the code points
+  /// that map to it, in byte order. A string maps to the value if and only if
+  /// it is made of one entry per position. E.g. under lower(), 'ab-1' has
+  /// {{"A", "a"}, {"B", "b"}, {"-"}, {"1"}}, so 'AB-1', 'Ab-1', 'aB-1' and
+  /// 'ab-1' map to it. The entry for 'k' also holds the Kelvin sign U+212A,
+  /// and 'A' has no entries because nothing lowercases to it.
+  using Preimages = std::vector<std::vector<std::string>>;
+
   /// Returns a filter on strings that pass 'inner' after 'mapping'. Mapping
   /// keeps nulls and non-nulls, so a filter that only tests for null, e.g.
   /// AlwaysFalse or IsNotNull, is returned as is.
@@ -184,6 +192,13 @@ class CaseMapped final : public Filter {
 
   bool testBytes(const char* value, int32_t length) const final;
 
+  /// Returns false if no string in ['min', 'max'] maps to a value of an
+  /// IN-list 'inner'. 'min' and 'max' bound the strings before mapping, which
+  /// do not bound the mapped strings: 'AB-1' and 'ab-1' both map to 'ab-1'
+  /// under lower() but sort far apart, because uppercase letters come first.
+  /// So this checks whether some preimage of a value is in the range. A string
+  /// with a non-ASCII byte after a matching prefix may be malformed UTF-8 and
+  /// is assumed to map to any value. Returns true for other 'inner' filters.
   bool testBytesRange(
       std::optional<std::string_view> min,
       std::optional<std::string_view> max,
@@ -215,6 +230,10 @@ class CaseMapped final : public Filter {
   // first rejects most values without mapping them. Null for other 'inner'
   // filters. Shared by copies.
   const std::shared_ptr<const StringLength> lengthFilter_;
+  // Valid UTF-8 strings that map to each value of an IN-list 'inner', which
+  // lets testBytesRange skip row groups by their min and max. Null if 'inner'
+  // is not an IN-list or has a value that is not valid UTF-8. Shared by copies.
+  const std::shared_ptr<const std::vector<Preimages>> valuePreimages_;
 };
 
 } // namespace facebook::velox::common

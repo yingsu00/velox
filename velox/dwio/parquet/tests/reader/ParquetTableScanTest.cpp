@@ -60,6 +60,17 @@ void assertDynamicFilterProduced(
       1);
 }
 
+// Returns the sum of the custom stat 'name' of plan node 'nodeId' in 'task',
+// or 0 if the node did not report it.
+int64_t customStatSum(
+    const exec::Task& task,
+    const core::PlanNodeId& nodeId,
+    const std::string& name) {
+  const auto planStats = toPlanStats(task.taskStats());
+  const auto& customStats = planStats.at(nodeId).customStats;
+  const auto it = customStats.find(name);
+  return it == customStats.end() ? 0 : it->second.sum;
+}
 } // namespace
 
 class ParquetTableScanTest : public ParquetTableScanTestBase {
@@ -1051,6 +1062,63 @@ TEST_F(ParquetTableScanTest, stringFunctionFilters) {
           PlanBuilder(pool()).tableScan(rowType, {}, filter).planNode())
           .split(split)
           .assertResults(expected);
+    }
+  }
+}
+
+// Verifies that filters on lower() skip row groups by their min and max.
+TEST_F(ParquetTableScanTest, caseMappedFilterSkipsRowGroups) {
+  constexpr int32_t kNumRows = 10'000;
+  constexpr int32_t kRowsPerRowGroup = 1'000;
+  constexpr int32_t kNumRowGroups = kNumRows / kRowsPerRowGroup;
+  // Sorted, so each row group covers a narrow range of values.
+  auto data = makeRowVector(
+      {"c0"}, {makeFlatVector<std::string>(kNumRows, [](auto row) {
+        return fmt::format("AB-{:05}", row);
+      })});
+  const auto rowType = asRowType(data->type());
+  const auto file = TempFilePath::create();
+  dwio::common::WriterOptions writerOptions;
+  writerOptions.flushPolicyFactory = [&]() {
+    return std::make_unique<DefaultFlushPolicy>(
+        kRowsPerRowGroup, std::numeric_limits<int64_t>::max());
+  };
+  writeToParquetFile(file->getPath(), {data}, writerOptions, {});
+
+  struct TestCase {
+    std::string filter;
+    int64_t numRows;
+    int64_t numSkippedRowGroups;
+  };
+  const std::vector<TestCase> testCases = {
+      {"lower(c0) = 'ab-04321'", 1, 9},
+      {"lower(c0) in ('ab-00001', 'ab-09999')", 2, 8},
+      {"upper(c0) = 'AB-04321'", 1, 9},
+      // No string lowercases to a value with uppercase letters.
+      {"lower(c0) = 'AB-04321'", 0, 10},
+      {"lower(c0) = 'zz'", 0, 10},
+  };
+  for (const auto& testCase : testCases) {
+    SCOPED_TRACE(testCase.filter);
+    auto plan =
+        PlanBuilder(pool()).tableScan(rowType, {}, testCase.filter).planNode();
+    const auto scanId = plan->id();
+    const auto expected = AssertQueryBuilder(PlanBuilder(pool())
+                                                 .values({data})
+                                                 .filter(testCase.filter)
+                                                 .planNode())
+                              .copyResults(pool());
+    ASSERT_EQ(expected->size(), testCase.numRows);
+    auto task = AssertQueryBuilder(plan)
+                    .split(makeSplit(file->getPath()))
+                    .assertResults(expected);
+    // The split is skipped as a whole when no row group can match.
+    if (testCase.numSkippedRowGroups == kNumRowGroups) {
+      ASSERT_EQ(customStatSum(*task, scanId, "skippedSplits"), 1);
+    } else {
+      ASSERT_EQ(
+          customStatSum(*task, scanId, "skippedStrides"),
+          testCase.numSkippedRowGroups);
     }
   }
 }

@@ -1768,8 +1768,8 @@ TEST(FilterTest, caseMapped) {
   const std::string invalid =
       "\xC3\x41"
       "B";
-  EXPECT_TRUE(
-      testBytes(CaseMapped(Mapping::kLower, equal(lowerCase(invalid))), invalid));
+  EXPECT_TRUE(testBytes(
+      CaseMapped(Mapping::kLower, equal(lowerCase(invalid))), invalid));
 
   // lower() decodes the overlong 0xC0 0xB0 as '0', so a value without letters
   // also matches a string that is not the value itself.
@@ -1794,10 +1794,6 @@ TEST(FilterTest, caseMapped) {
   EXPECT_FALSE(testBytes(upper, "(Not Set)"));
   EXPECT_TRUE(testBytes(upper, "(not set) "));
   EXPECT_TRUE(testBytes(upper, ""));
-
-  EXPECT_TRUE(lower.testBytesRange("A", "Z", false));
-  EXPECT_TRUE(lower.testBytesRange("ABC", "ABC", false));
-  EXPECT_FALSE(lower.testBytesRange("ABD", "ABD", false));
 
   auto withNulls = lower.clone(true);
   EXPECT_TRUE(withNulls->testNull());
@@ -1849,8 +1845,8 @@ TEST(FilterTest, caseMappedMatchesFunctions) {
     const auto expectedLower = lowerCase(value);
     EXPECT_TRUE(
         testBytes(CaseMapped(Mapping::kLower, equal(expectedLower)), value));
-    EXPECT_TRUE(testBytes(
-        CaseMapped(Mapping::kUpper, equal(upperCase(value))), value));
+    EXPECT_TRUE(
+        testBytes(CaseMapped(Mapping::kUpper, equal(upperCase(value))), value));
     EXPECT_TRUE(testBytes(
         CaseMapped(Mapping::kLower, in({expectedLower, "other"})), value));
     EXPECT_FALSE(testBytes(
@@ -1874,6 +1870,102 @@ TEST(FilterTest, caseMappedNested) {
           std::make_unique<CaseMapped>(
               Mapping::kLower, equal(lowerCase(upperCase(value))))),
       value));
+}
+
+TEST(FilterTest, caseMappedBytesRange) {
+  using Mapping = CaseMapped::Mapping;
+
+  // Malformed UTF-8 maps to code points that valid encodings do not reach.
+  // E.g. lower() decodes 0xC3 0x01 as 'A' and the overlong 0xC1 0xB3 as 's'.
+  for (const std::string value :
+       {"\xC3\x01",
+        "aws rd\xC1\xB3",
+        "AB\xC0\xAD"
+        "04321",
+        "\xC0\xB0"
+        "35778000361"}) {
+    SCOPED_TRACE(value);
+    CaseMapped filter(Mapping::kLower, equal(lowerCase(value)));
+    ASSERT_TRUE(testBytes(filter, value));
+    EXPECT_TRUE(filter.testBytesRange(value, value + '\0', false));
+  }
+
+  // A range with a single value tests the value.
+  CaseMapped abc(Mapping::kLower, in({"aws rds", "abc"}));
+  EXPECT_TRUE(abc.testBytesRange("ABC", "ABC", false));
+  EXPECT_FALSE(abc.testBytesRange("ABD", "ABD", false));
+
+  // Among valid UTF-8 strings, values without letters only match themselves.
+  CaseMapped digits(Mapping::kLower, in({"035778000361", "163530609390"}));
+  EXPECT_TRUE(digits.testBytesRange("1", "2", false));
+  EXPECT_TRUE(digits.testBytesRange("035778000361", "1", false));
+  EXPECT_FALSE(digits.testBytesRange("2", "9", false));
+  EXPECT_FALSE(digits.testBytesRange("0", "035778000360", false));
+  EXPECT_FALSE(digits.testBytesRange(std::nullopt, "0", false));
+  // Malformed UTF-8 sorts above ASCII and may still map to a value, e.g.
+  // '0\xC0\xB35778000361' with the overlong 0xC0 0xB3 for '3'. So ranges
+  // that admit a non-ASCII byte after a matching prefix may match.
+  EXPECT_TRUE(digits.testBytesRange("035778000362", "163530609389", false));
+  EXPECT_TRUE(digits.testBytesRange("2", std::nullopt, false));
+  EXPECT_FALSE(digits.testBytesRange("2", "9", true));
+
+  // 'AWS RDS' and 'aws rds' are the smallest and largest valid UTF-8 strings
+  // that lowercase to 'aws rds'.
+  CaseMapped lower(Mapping::kLower, equal("aws rds"));
+  EXPECT_TRUE(lower.testBytesRange("A", "Z", false));
+  EXPECT_TRUE(lower.testBytesRange("AWS RDS", "AWS RDS", false));
+  EXPECT_TRUE(lower.testBytesRange("aws rds", std::nullopt, false));
+  EXPECT_FALSE(lower.testBytesRange("b", "z", false));
+  // 'aws rd\xC1\xB3' lowercases to 'aws rds'.
+  EXPECT_TRUE(lower.testBytesRange("aws rdt", std::nullopt, false));
+  EXPECT_FALSE(lower.testBytesRange(std::nullopt, "AWS RDR", false));
+  // The case variants of 'ab-04321' all sort between 'AB-04321' and
+  // 'ab-04321' but none of them is in ['AB-05000', 'AB-05999'].
+  CaseMapped id(Mapping::kLower, equal("ab-04321"));
+  EXPECT_FALSE(id.testBytesRange("AB-05000", "AB-05999", false));
+  // 'AB\xC0\xAD04321' lowercases to 'ab-04321'.
+  EXPECT_TRUE(id.testBytesRange("AB-04322", "Ab-04320", false));
+  EXPECT_TRUE(id.testBytesRange("AB-04000", "AB-04999", false));
+  EXPECT_TRUE(id.testBytesRange("AB-05000", "Ab-04321", false));
+  EXPECT_TRUE(id.testBytesRange("aB", "ab", false));
+
+  CaseMapped upper(Mapping::kUpper, equal("ABC"));
+  EXPECT_TRUE(upper.testBytesRange("abc", "abc", false));
+  EXPECT_FALSE(upper.testBytesRange("abd", "abz", false));
+  // 'ab\xC1\x83' uppercases to 'ABC'.
+  EXPECT_TRUE(upper.testBytesRange("abd", "z", false));
+  EXPECT_FALSE(upper.testBytesRange("0", "ABB", false));
+
+  // The Kelvin sign U+212A lowercases to 'k' and sorts after 'z'.
+  CaseMapped kelvin(Mapping::kLower, equal("kab"));
+  EXPECT_TRUE(kelvin.testBytesRange(
+      "\xE2\x84\xAA"
+      "a",
+      "\xE2\x84\xAA"
+      "b",
+      false));
+  // '\xF0\x80\x81\xAB' is a malformed 'k' that sorts after the Kelvin sign.
+  EXPECT_TRUE(kelvin.testBytesRange(
+      "\xE2\x84\xAA"
+      "b",
+      std::nullopt,
+      false));
+
+  // No string lowercases to 'ABC'.
+  CaseMapped unreachable(Mapping::kLower, equal("ABC"));
+  EXPECT_FALSE(unreachable.testBytesRange("A", "z", false));
+  EXPECT_TRUE(CaseMapped(Mapping::kLower, in({"ABC"}, true))
+                  .testBytesRange("A", "z", true));
+
+  // Values that are not valid UTF-8 and non-IN-list filters do not bound the
+  // range.
+  CaseMapped invalid(Mapping::kLower, equal("\xC3\x41"));
+  EXPECT_TRUE(invalid.testBytesRange("x", "y", false));
+  CaseMapped range(Mapping::kLower, between("a", "b"));
+  EXPECT_TRUE(range.testBytesRange("x", "y", false));
+
+  // Copies keep the bounds.
+  EXPECT_FALSE(digits.clone(true)->testBytesRange("2", "9", false));
 }
 
 TEST(FilterTest, mergeWithCaseMapped) {
