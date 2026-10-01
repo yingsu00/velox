@@ -82,6 +82,15 @@ class ColumnChunkMetaDataPtr {
   /// Returns the list of encodings used for all pages in this column chunk.
   std::vector<thrift::Encoding> encodings() const;
 
+  /// True if all data pages of this column chunk are dictionary-encoded. False
+  /// if that is unknown.
+  bool hasOnlyDictionaryEncodedDataPages() const;
+
+  /// Returns the number of nulls from the statistics. Unlike
+  /// getColumnMetadataStatsNullCount(), returns std::nullopt instead of
+  /// failing when the statistics or the null count are absent.
+  std::optional<int64_t> nullCount() const;
+
   /// Returns the column's physical path in the file schema as ordered segments,
   /// e.g. {"tags", "list", "element"} or {"lookup", "key_value", "key"}. Unlike
   /// the logical row type, this includes the synthetic repeated-group levels

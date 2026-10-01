@@ -70,6 +70,14 @@ class ParquetReaderOptions : public dwio::common::FormatSpecificOptions {
     return nullStructIfAllFieldsMissing_;
   }
 
+  void setDictionaryFilterEnabled(bool value) {
+    dictionaryFilterEnabled_ = value;
+  }
+
+  bool dictionaryFilterEnabled() const {
+    return dictionaryFilterEnabled_;
+  }
+
  private:
   /// Allows reading INT32 physical columns as narrower integer types.
   bool allowInt32Narrowing_{
@@ -83,6 +91,10 @@ class ParquetReaderOptions : public dwio::common::FormatSpecificOptions {
   bool nullStructIfAllFieldsMissing_{
       ParquetConfig::kNullStructIfAllFieldsMissingSessionProperty::
           defaultValue};
+
+  /// Skips row groups by their dictionaries.
+  bool dictionaryFilterEnabled_{
+      ParquetConfig::kDictionaryFilterEnabledSessionProperty::defaultValue};
 };
 
 /// Implements the RowReader interface for Parquet.

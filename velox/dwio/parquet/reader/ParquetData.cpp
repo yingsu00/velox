@@ -17,6 +17,7 @@
 #include "velox/dwio/parquet/reader/ParquetData.h"
 
 #include "velox/dwio/common/BufferedInput.h"
+#include "velox/dwio/parquet/common/ParquetRuntimeStats.h"
 #include "velox/dwio/parquet/reader/ParquetStatsContext.h"
 
 namespace facebook::velox::parquet {
@@ -160,6 +161,69 @@ std::pair<int64_t, int64_t> ParquetData::getRowGroupRegion(
       : rowGroup.totalByteSize();
 
   return {fileOffset, length};
+}
+
+std::optional<velox::common::Region> ParquetData::dictionaryRegion(
+    uint32_t rowGroupId,
+    const common::Filter& filter) const {
+  const auto kind = type_->type()->kind();
+  if (maxRepeat_ > 0 ||
+      (kind != TypeKind::VARCHAR && kind != TypeKind::VARBINARY)) {
+    return std::nullopt;
+  }
+  auto columnChunk =
+      fileMetaDataPtr_.rowGroup(rowGroupId).columnChunk(type_->column());
+  if (!columnChunk.hasMetadata() || !columnChunk.hasDictionaryPageOffset() ||
+      !columnChunk.hasOnlyDictionaryEncodedDataPages()) {
+    return std::nullopt;
+  }
+  // The dictionary does not hold nulls, so it decides only if nulls cannot
+  // pass. An unknown null count may hide nulls that pass.
+  if (maxDefine_ > 0 && filter.testNull() &&
+      columnChunk.nullCount().value_or(1) > 0) {
+    return std::nullopt;
+  }
+  // The dictionary page directly precedes the data pages. An offset inside the
+  // 4-byte "PAR1" magic is invalid, e.g. 0 from writers that have no
+  // dictionary page.
+  const auto offset = columnChunk.dictionaryPageOffset();
+  const auto length = columnChunk.dataPageOffset() - offset;
+  if (offset < 4 || length <= 0) {
+    return std::nullopt;
+  }
+  return velox::common::Region{
+      static_cast<uint64_t>(offset), static_cast<uint64_t>(length)};
+}
+
+bool ParquetData::dictionaryMatches(
+    uint32_t rowGroupId,
+    const common::Filter& filter,
+    std::unique_ptr<dwio::common::SeekableInputStream> stream) const {
+  auto columnChunk =
+      fileMetaDataPtr_.rowGroup(rowGroupId).columnChunk(type_->column());
+  const auto length =
+      columnChunk.dataPageOffset() - columnChunk.dictionaryPageOffset();
+  PageReader reader(
+      std::move(stream),
+      pool_,
+      type_,
+      columnChunk.compression(),
+      length,
+      stats_,
+      sessionTimezone_);
+  if (!reader.readDictionaryPage()) {
+    return true;
+  }
+  const auto* values =
+      reader.dictionaryValues(type_->type())->asFlatVector<StringView>();
+  for (auto i = 0; i < values->size(); ++i) {
+    if (filter.testStringView(values->valueAt(i))) {
+      return true;
+    }
+  }
+  stats_.accumulateStat(
+      ParquetRuntimeStats::kNumRowGroupsSkippedByDictionaryMetric, 1);
+  return false;
 }
 
 } // namespace facebook::velox::parquet
