@@ -1604,6 +1604,116 @@ TEST_F(ParquetTableScanTest, timestampInt64PlainMilli) {
   testTimestampRead(options, TimestampPrecision::kMilliseconds);
 }
 
+// Verifies filters on INT64 timestamps, which are evaluated on the stored
+// integers. Bounds between two values of the file unit must round inward. Also
+// runs the filters on INT96 timestamps, which are filtered as timestamps.
+TEST_F(ParquetTableScanTest, timestampInt64Filters) {
+  constexpr int32_t kNumRows = 3'000;
+  // 2020-01-01 00:00:00 UTC. Odd rows are 100 years earlier, before 1970.
+  constexpr int64_t kBaseSeconds = 1'577'836'800;
+  const auto makeData = [&](TimestampPrecision unit) {
+    return makeRowVector(
+        {"t"},
+        {makeFlatVector<Timestamp>(
+            kNumRows,
+            [&](auto row) {
+              const int64_t seconds =
+                  row % 2 == 0 ? kBaseSeconds : -kBaseSeconds;
+              // Each row adds 370 ms and a fraction of the unit.
+              switch (unit) {
+                case TimestampPrecision::kMilliseconds:
+                  return Timestamp::fromMillis(
+                      seconds * 1'000 + row * 370 + row % 7);
+                case TimestampPrecision::kMicroseconds:
+                  return Timestamp::fromMicros(
+                      seconds * 1'000'000 + row * 370'123);
+                case TimestampPrecision::kNanoseconds:
+                  return Timestamp::fromNanos(
+                      seconds * 1'000'000'000 + row * 370'123'457);
+              }
+              VELOX_UNREACHABLE();
+            },
+            [](auto row) { return row % 13 == 0; })});
+  };
+  const std::vector<std::string> filters = {
+      // Lower bound between two milliseconds.
+      "t >= TIMESTAMP '2020-01-01 00:10:00.000123'",
+      // Upper bound between two milliseconds.
+      "t <= TIMESTAMP '2020-01-01 00:05:00.000999'",
+      "t >= TIMESTAMP '2020-01-01 00:01:00' and "
+      "t < TIMESTAMP '2020-01-01 00:02:00.5'",
+      "t between TIMESTAMP '2020-01-01 00:03:00.000001' and "
+      "TIMESTAMP '2020-01-01 00:04:00.123456'",
+      // Bounds before 1970, where the stored integers are negative.
+      "t < TIMESTAMP '1920-01-01 00:05:00.000500'",
+      "t > TIMESTAMP '1920-01-01 00:03:00.0005' and "
+      "t < TIMESTAMP '2020-01-01 00:00:00'",
+      // Row 10 in milliseconds and in microseconds.
+      "t = TIMESTAMP '2020-01-01 00:00:03.703'",
+      "t = TIMESTAMP '2020-01-01 00:00:03.70123'",
+      // A value between two milliseconds, which no millisecond file has.
+      "t = TIMESTAMP '2020-01-01 00:00:03.7031'",
+      "t is null or t = TIMESTAMP '2020-01-01 00:00:03.7031'",
+      "t is null or t < TIMESTAMP '1920-01-01 00:05:00.000500'",
+      // Two ranges, which become one BigintMultiRange.
+      "t <> TIMESTAMP '2020-01-01 00:00:03.703'",
+      "t < TIMESTAMP '1920-01-01 00:01:00' or "
+      "t > TIMESTAMP '2020-01-01 00:15:00'",
+      "t in (TIMESTAMP '2020-01-01 00:00:03.703', "
+      "TIMESTAMP '2020-01-01 00:00:03.70123')",
+      "t is null",
+      "t is not null",
+      "t < TIMESTAMP '1970-01-01 00:00:00'",
+      "t >= TIMESTAMP '0001-01-01 00:00:00'",
+      "t <= TIMESTAMP '9999-12-31 23:59:59.999'",
+  };
+  struct FileFormat {
+    TimestampPrecision unit;
+    bool int96;
+  };
+  for (const auto& format :
+       {FileFormat{TimestampPrecision::kMilliseconds, false},
+        FileFormat{TimestampPrecision::kMicroseconds, false},
+        FileFormat{TimestampPrecision::kNanoseconds, false},
+        FileFormat{TimestampPrecision::kNanoseconds, true}}) {
+    for (const bool enableDictionary : {true, false}) {
+      SCOPED_TRACE(
+          fmt::format(
+              "unit {} int96 {} dictionary {}",
+              static_cast<int>(format.unit),
+              format.int96,
+              enableDictionary));
+      const auto data = makeData(format.unit);
+      ParquetWriterOptions options;
+      options.writeInt96AsTimestamp = format.int96;
+      options.enableDictionary = enableDictionary;
+      options.parquetWriteTimestampUnit = format.unit;
+      const auto file = TempFilePath::create();
+      writeToParquetFile(file->getPath(), {data}, options);
+      for (const auto& filter : filters) {
+        SCOPED_TRACE(filter);
+        const auto expected =
+            AssertQueryBuilder(
+                PlanBuilder(pool()).values({data}).filter(filter).planNode())
+                .copyResults(pool());
+        AssertQueryBuilder(PlanBuilder(pool())
+                               .tableScan(asRowType(data->type()), {}, filter)
+                               .planNode())
+            .connectorSessionProperty(
+                kHiveConnectorId,
+                HiveConfig::kReadTimestampUnitSession,
+                std::to_string(
+                    static_cast<int>(TimestampPrecision::kNanoseconds)))
+            // Small batches cover reads that start inside a page.
+            .config(core::QueryConfig::kPreferredOutputBatchRows, "97")
+            .config(core::QueryConfig::kMaxOutputBatchRows, "97")
+            .split(makeSplit(file->getPath()))
+            .assertResults(expected);
+      }
+    }
+  }
+}
+
 TEST_F(ParquetTableScanTest, timestampInt96DictionaryMicro) {
   ParquetWriterOptions options;
   options.writeInt96AsTimestamp = true;

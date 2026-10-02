@@ -71,7 +71,15 @@ class SelectiveIntegerColumnReader : public SelectiveColumnReader {
   // instantiation of processValueHook or processFilter based on
   // possible value hook, filter and denseness.
   template <typename Reader, bool kEncodingHasNulls>
-  void readCommon(const RowSet& rows);
+  void readCommon(const RowSet& rows) {
+    readCommon<Reader, kEncodingHasNulls>(rows, scanSpec_->filter());
+  }
+
+  // Applies 'filter' instead of the filter of the scan spec. Used by readers
+  // whose stored values differ from the values the filter of the scan spec
+  // tests, e.g. timestamps stored as integers.
+  template <typename Reader, bool kEncodingHasNulls>
+  void readCommon(const RowSet& rows, const velox::common::Filter* filter);
 };
 
 template <
@@ -251,9 +259,13 @@ void SelectiveIntegerColumnReader::processValueHook(
 }
 
 template <typename Reader, bool kEncodingHasNulls>
-void SelectiveIntegerColumnReader::readCommon(const RowSet& rows) {
+void SelectiveIntegerColumnReader::readCommon(
+    const RowSet& rows,
+    const velox::common::Filter* filter) {
   const bool isDense = rows.back() == rows.size() - 1;
-  auto* filter = scanSpec_->filter() ? scanSpec_->filter() : &alwaysTrue();
+  if (filter == nullptr) {
+    filter = &alwaysTrue();
+  }
   if (scanSpec_->keepValues()) {
     if (scanSpec_->valueHook()) {
       if (isDense) {
