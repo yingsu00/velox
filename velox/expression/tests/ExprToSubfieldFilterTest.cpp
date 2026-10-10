@@ -550,6 +550,70 @@ TEST_F(ExprToSubfieldFilterTest, caseMapping) {
   }
 }
 
+TEST_F(ExprToSubfieldFilterTest, stringContains) {
+  using Mapping = common::CaseMapped::Mapping;
+  const auto rowType = ROW({"a", "b"}, {VARCHAR(), VARCHAR()});
+  const auto contains = [](std::string substring) {
+    return std::make_unique<common::StringContains>(
+        std::move(substring), /*nullAllowed=*/false);
+  };
+
+  struct TestCase {
+    std::string expr;
+    std::unique_ptr<common::Filter> expected;
+  };
+  std::vector<TestCase> testCases;
+  // strpos() is 0 if and only if the substring is not found.
+  testCases.push_back({"strpos(a, 'set') > 0", contains("set")});
+  testCases.push_back({"strpos(a, 'set') >= 1", contains("set")});
+  testCases.push_back({"strpos(a, 'set') <> 0", contains("set")});
+  testCases.push_back(
+      {"strpos(lower(a), 'capacity-reservation') > 0",
+       caseMapped(Mapping::kLower, contains("capacity-reservation"))});
+  testCases.push_back(
+      {"strpos(upper(a), 'X') > 0",
+       caseMapped(Mapping::kUpper, contains("X"))});
+  // An empty substring is found in every string.
+  testCases.push_back({"strpos(a, '') > 0", isNotNull()});
+  testCases.push_back({"a like '%set%'", contains("set")});
+  testCases.push_back({"a like '%a#%b##%' escape '#'", contains("a%b#")});
+  testCases.push_back(
+      {"lower(a) like '%set%'", caseMapped(Mapping::kLower, contains("set"))});
+
+  for (const auto& testCase : testCases) {
+    SCOPED_TRACE(testCase.expr);
+    auto [subfield, filter] =
+        leafCallToSubfieldFilter(parseCallExpr(testCase.expr, rowType));
+    validateSubfield(subfield, {"a"});
+    ASSERT_TRUE(filter);
+    VELOX_ASSERT_FILTER(testCase.expected, filter);
+  }
+
+  for (const auto& expr :
+       {"strpos(a, 'x') = 0",
+        "strpos(a, 'x') > 1",
+        "strpos(a, b) > 0",
+        "strpos(a, 'x', 2) > 0",
+        "strpos(lower(upper(a)), 'x') > 0",
+        "strpos(concat(a, b), 'x') > 0",
+        "a like '%a_b%'",
+        "a like 'a%'",
+        "a like '%a'",
+        "a like '%%'",
+        "a like '%a#' escape '#'"}) {
+    SCOPED_TRACE(expr);
+    auto [subfield, filter] =
+        leafCallToSubfieldFilter(parseCallExpr(expr, rowType));
+    ASSERT_FALSE(filter);
+  }
+  for (const auto& expr : {"strpos(a, 'x') > 0", "a like '%x%'"}) {
+    SCOPED_TRACE(expr);
+    auto [subfield, filter] = leafCallToSubfieldFilter(
+        parseCallExpr(expr, rowType), /*negated=*/true);
+    ASSERT_FALSE(filter);
+  }
+}
+
 TEST_F(ExprToSubfieldFilterTest, impliedStringLength) {
   using Unit = common::StringLength::Unit;
   const auto rowType = ROW({"a", "b"}, {VARCHAR(), VARCHAR()});

@@ -236,4 +236,63 @@ class CaseMapped final : public Filter {
   const std::shared_ptr<const std::vector<Preimages>> valuePreimages_;
 };
 
+/// Passes strings that contain 'substring' as a sequence of bytes. Used to
+/// push down strpos(x, 'abc') > 0 and x LIKE '%abc%', which search bytes the
+/// same way, also in invalid UTF-8. A CaseMapped filter around it pushes down
+/// strpos(lower(x), 'abc') > 0.
+class StringContains final : public Filter {
+ public:
+  /// @param substring Bytes to find. Must not be empty.
+  /// @param nullAllowed Whether nulls pass.
+  StringContains(std::string substring, bool nullAllowed);
+
+  folly::dynamic serialize() const override;
+
+  static std::unique_ptr<Filter> create(const folly::dynamic& obj);
+
+  std::unique_ptr<Filter> clone(
+      std::optional<bool> nullAllowed = std::nullopt) const final {
+    return std::make_unique<StringContains>(
+        substring_, nullAllowed.value_or(nullAllowed_));
+  }
+
+  bool testNonNull() const final {
+    return true;
+  }
+
+  bool hasTestLength() const final {
+    return true;
+  }
+
+  /// Strings shorter than 'substring' do not contain it.
+  bool testLength(int32_t length) const final {
+    return length >= static_cast<int64_t>(substring_.size());
+  }
+
+  bool testBytes(const char* value, int32_t length) const final;
+
+  /// The substring can be anywhere in a string, so min and max only rule out
+  /// a range that has a single value.
+  bool testBytesRange(
+      std::optional<std::string_view> min,
+      std::optional<std::string_view> max,
+      bool hasNull) const final;
+
+  /// Merges with filters that this filter implies or that imply it, e.g.
+  /// contains 'not set' with contains 'set', and with IN-lists.
+  std::unique_ptr<Filter> mergeWith(const Filter* other) const final;
+
+  /// Returns the bytes that a passing string contains.
+  const std::string& substring() const {
+    return substring_;
+  }
+
+  std::string toString() const final;
+
+  bool testingEquals(const Filter& other) const final;
+
+ private:
+  const std::string substring_;
+};
+
 } // namespace facebook::velox::common

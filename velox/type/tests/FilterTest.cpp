@@ -1738,6 +1738,86 @@ TEST(FilterTest, mergeWithStringLength) {
   EXPECT_FALSE(asciiValues.canMergeWith(atLeastThree));
 }
 
+TEST(FilterTest, stringContains) {
+  StringContains contains("set", false);
+  EXPECT_FALSE(contains.testNull());
+  EXPECT_TRUE(contains.testNonNull());
+  EXPECT_TRUE(testBytes(contains, "set"));
+  EXPECT_TRUE(testBytes(contains, "(not set)"));
+  EXPECT_TRUE(testBytes(contains, "sets"));
+  EXPECT_FALSE(testBytes(contains, "SET"));
+  EXPECT_FALSE(testBytes(contains, "se t"));
+  EXPECT_FALSE(testBytes(contains, ""));
+  // Bytes are searched as is, like strpos() and LIKE do, also in invalid
+  // UTF-8.
+  EXPECT_TRUE(testBytes(
+      contains,
+      "\xC3"
+      "set\x80"));
+  EXPECT_TRUE(testBytes(
+      StringContains(
+          "\xBC"
+          "b",
+          false),
+      "\xC3\xBC"
+      "b"));
+
+  // Strings shorter than the substring fail on length alone.
+  EXPECT_TRUE(contains.hasTestLength());
+  EXPECT_FALSE(contains.testLength(2));
+  EXPECT_TRUE(contains.testLength(3));
+
+  // The substring can be anywhere, so only single-value ranges are tested.
+  EXPECT_TRUE(contains.testBytesRange("a", "b", false));
+  EXPECT_TRUE(contains.testBytesRange("set", "set", false));
+  EXPECT_FALSE(contains.testBytesRange("abc", "abc", false));
+  EXPECT_FALSE(contains.testBytesRange("abc", "abc", true));
+
+  auto withNulls = contains.clone(true);
+  EXPECT_TRUE(withNulls->testNull());
+  EXPECT_TRUE(withNulls->testBytesRange("abc", "abc", true));
+  EXPECT_TRUE(withNulls->clone(false)->testingEquals(contains));
+  EXPECT_FALSE(contains.testingEquals(StringContains("sets", false)));
+}
+
+TEST(FilterTest, mergeWithStringContains) {
+  const StringContains contains("set", false);
+  // A string that contains 'not set' also contains 'set'.
+  EXPECT_TRUE(contains.mergeWith(StringContains("not set", true).clone().get())
+                  ->testingEquals(StringContains("not set", false)));
+  EXPECT_TRUE(StringContains("not set", false)
+                  .mergeWith(&contains)
+                  ->testingEquals(StringContains("not set", false)));
+  EXPECT_TRUE(StringContains("set", true)
+                  .mergeWith(StringContains("set", true).clone().get())
+                  ->testingEquals(StringContains("set", true)));
+  VELOX_ASSERT_THROW(
+      contains.mergeWith(StringContains("abc", false).clone().get()),
+      "mergeWith() is not supported");
+
+  EXPECT_TRUE(contains.mergeWith(in({"(not set)", "abc", "set"}).get())
+                  ->testingEquals(BytesValues({"(not set)", "set"}, false)));
+  EXPECT_TRUE(in({"(not set)", "abc", "set"})
+                  ->mergeWith(&contains)
+                  ->testingEquals(BytesValues({"(not set)", "set"}, false)));
+  // A range of one value merges like an IN-list.
+  EXPECT_TRUE(contains.mergeWith(equal("(not set)").get())
+                  ->testingEquals(*equal("(not set)")));
+  EXPECT_TRUE(
+      contains.mergeWith(equal("abc").get())->testingEquals(AlwaysFalse()));
+  EXPECT_TRUE(contains.mergeWith(isNotNull().get())->testingEquals(contains));
+  EXPECT_TRUE(contains.mergeWith(isNull().get())->testingEquals(AlwaysFalse()));
+  VELOX_ASSERT_THROW(
+      contains.mergeWith(lessThan("abc").get()),
+      "mergeWith() is not supported");
+  std::vector<std::unique_ptr<Filter>> ranges;
+  ranges.push_back(lessThan("b"));
+  ranges.push_back(greaterThan("y"));
+  const MultiRange multiRange(std::move(ranges), false);
+  VELOX_ASSERT_THROW(
+      multiRange.mergeWith(&contains), "mergeWith() is not supported");
+}
+
 TEST(FilterTest, caseMapped) {
   using Mapping = CaseMapped::Mapping;
   CaseMapped lower(Mapping::kLower, in({"aws rds", "abc"}));

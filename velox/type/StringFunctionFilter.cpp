@@ -809,4 +809,68 @@ bool CaseMapped::testingEquals(const Filter& other) const {
   return false;
 }
 
+StringContains::StringContains(std::string substring, bool nullAllowed)
+    : Filter(true, nullAllowed, FilterKind::kStringContains),
+      substring_(std::move(substring)) {
+  VELOX_CHECK(
+      !substring_.empty(), "StringContains requires a non-empty substring.");
+}
+
+folly::dynamic StringContains::serialize() const {
+  auto obj = Filter::serializeBase();
+  obj["substring"] = substring_;
+  return obj;
+}
+
+std::unique_ptr<Filter> StringContains::create(const folly::dynamic& obj) {
+  return std::make_unique<StringContains>(
+      obj["substring"].asString(), obj["nullAllowed"].asBool());
+}
+
+bool StringContains::testBytes(const char* value, int32_t length) const {
+  return std::string_view(value, length).find(substring_) !=
+      std::string_view::npos;
+}
+
+bool StringContains::testBytesRange(
+    std::optional<std::string_view> min,
+    std::optional<std::string_view> max,
+    bool hasNull) const {
+  return testTrivialBytesRange(*this, min, max, hasNull).value_or(true);
+}
+
+std::unique_ptr<Filter> StringContains::mergeWith(const Filter* other) const {
+  if (auto merged = mergeWithNullFilterOrInList(*this, *other)) {
+    return merged;
+  }
+  if (other->is(FilterKind::kStringContains)) {
+    // If one substring contains the other, a string that contains the longer
+    // one also contains the shorter one.
+    const auto& otherSubstring = other->as<StringContains>()->substring_;
+    const bool bothNullAllowed = nullAllowed_ && other->testNull();
+    if (substring_.find(otherSubstring) != std::string::npos) {
+      return std::make_unique<StringContains>(substring_, bothNullAllowed);
+    }
+    if (otherSubstring.find(substring_) != std::string::npos) {
+      return std::make_unique<StringContains>(otherSubstring, bothNullAllowed);
+    }
+  }
+  unsupportedMerge(*this, *other);
+}
+
+std::string StringContains::toString() const {
+  return fmt::format(
+      "StringContains('{}', {})",
+      substring_,
+      nullAllowed_ ? "with nulls" : "no nulls");
+}
+
+bool StringContains::testingEquals(const Filter& other) const {
+  if (const auto* otherContains =
+          Filter::testingBaseEquals<StringContains>(other)) {
+    return substring_ == otherContains->substring_;
+  }
+  return false;
+}
+
 } // namespace facebook::velox::common

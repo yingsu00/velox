@@ -729,12 +729,12 @@ TEST_F(HiveConnectorTest, extractImpliedFiltersFromRemainingFilter) {
   // The implied filter is added and the predicate stays in the remaining
   // filter.
   auto expr =
-      parseExpr("c0 like 'a_c' and c1 like '%x%' and c1 is not null", rowType);
+      parseExpr("c0 like 'a_c' and c1 like 'x%' and c1 is not null", rowType);
   SubfieldFilters filters;
   double sampleRate = 1;
   auto remaining =
       extractFiltersFromRemainingFilter(expr, &evaluator, filters, sampleRate);
-  ASSERT_EQ(*remaining, *parseExpr("c0 like 'a_c' and c1 like '%x%'", rowType));
+  ASSERT_EQ(*remaining, *parseExpr("c0 like 'a_c' and c1 like 'x%'", rowType));
   ASSERT_EQ(filters.size(), 2);
   ASSERT_TRUE(
       filters.at(Subfield("c0"))
@@ -917,6 +917,53 @@ TEST_F(HiveConnectorTest, extractCaseMappedFiltersFromRemainingFilter) {
   ASSERT_EQ(sampleRate, 1);
 }
 
+TEST_F(HiveConnectorTest, extractStringContainsFiltersFromRemainingFilter) {
+  auto queryCtx = core::QueryCtx::create();
+  exec::SimpleExpressionEvaluator evaluator(queryCtx.get(), pool_.get());
+  auto rowType = ROW({"c0", "c1"}, {VARCHAR(), VARCHAR()});
+
+  auto expr = parseExpr(
+      "strpos(lower(c0), 'capacity-reservation') > 0 and "
+      "c1 like '%unused%' and c1 is not null",
+      rowType);
+  SubfieldFilters filters;
+  double sampleRate = 1;
+  auto remaining =
+      extractFiltersFromRemainingFilter(expr, &evaluator, filters, sampleRate);
+  ASSERT_FALSE(remaining);
+  ASSERT_EQ(filters.size(), 2);
+  ASSERT_TRUE(filters.at(Subfield("c0"))
+                  ->testingEquals(
+                      common::CaseMapped(
+                          common::CaseMapped::Mapping::kLower,
+                          std::make_unique<common::StringContains>(
+                              "capacity-reservation", /*nullAllowed=*/false))));
+  ASSERT_TRUE(filters.at(Subfield("c1"))
+                  ->testingEquals(
+                      common::StringContains("unused", /*nullAllowed=*/false)));
+
+  // A substring of another one is implied by it.
+  expr = parseExpr("strpos(c0, 'set') > 0 and c0 like '%not set%'", rowType);
+  filters.clear();
+  remaining =
+      extractFiltersFromRemainingFilter(expr, &evaluator, filters, sampleRate);
+  ASSERT_FALSE(remaining);
+  ASSERT_TRUE(
+      filters.at(Subfield("c0"))
+          ->testingEquals(
+              common::StringContains("not set", /*nullAllowed=*/false)));
+
+  // Unrelated substrings do not merge into one filter.
+  expr = parseExpr("strpos(c0, 'ab') > 0 and strpos(c0, 'cd') > 0", rowType);
+  filters.clear();
+  remaining =
+      extractFiltersFromRemainingFilter(expr, &evaluator, filters, sampleRate);
+  ASSERT_EQ(*remaining, *parseExpr("strpos(c0, 'cd') > 0", rowType));
+  ASSERT_TRUE(
+      filters.at(Subfield("c0"))
+          ->testingEquals(common::StringContains("ab", /*nullAllowed=*/false)));
+}
+
 // Verifies that a predicate whose filter does not merge with the filter of
 // another conjunct on the same column stays in the remaining filter.
 TEST_F(HiveConnectorTest, extractFiltersKeepsPredicatesThatDoNotMerge) {
@@ -943,6 +990,9 @@ TEST_F(HiveConnectorTest, extractFiltersKeepsPredicatesThatDoNotMerge) {
       {"upper(c0) = 'A' and (lower(c0) = 'a' or lower(c0) = 'b')",
        "lower(c0) = 'a' or lower(c0) = 'b'",
        common::FilterKind::kCaseMapped},
+      {"strpos(c0, 'x') > 0 and (c0 < 'b' or c0 > 'y')",
+       "c0 < 'b' or c0 > 'y'",
+       common::FilterKind::kStringContains},
   };
   for (const auto& testCase : testCases) {
     SCOPED_TRACE(testCase.expr);

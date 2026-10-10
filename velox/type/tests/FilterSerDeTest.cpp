@@ -128,6 +128,7 @@ TEST_F(FilterSerDeTest, stringFunctionFilters) {
     testSerde(CaseMapped(
         CaseMapped::Mapping::kUpper,
         std::make_unique<NegatedBytesValues>(values, nullAllowed)));
+    testSerde(StringContains("set", nullAllowed));
   }
 }
 
