@@ -1336,11 +1336,33 @@ core::CallTypedExprPtr replaceFirstArgument(
       call.type(), std::move(inputs), call.name());
 }
 
+// Argument and mapping of lower(x) or upper(x).
+struct CaseMappingCall {
+  core::TypedExprPtr argument;
+  // Presto's lower() and upper() use simple Unicode case mapping, which
+  // CaseMapped applies.
+  common::CaseMapped::Mapping mapping;
+};
+
+// Returns x and the mapping if 'expr' is lower(x) or upper(x), or
+// std::nullopt.
+std::optional<CaseMappingCall> caseMappingCall(const core::TypedExprPtr& expr) {
+  using Mapping = common::CaseMapped::Mapping;
+  for (const auto& [name, mapping] :
+       {std::pair{"lower", Mapping::kLower},
+        std::pair{"upper", Mapping::kUpper}}) {
+    if (const auto* argument =
+            unaryCallArgument(expr, name, TypeKind::VARCHAR)) {
+      return CaseMappingCall{*argument, mapping};
+    }
+  }
+  return std::nullopt;
+}
+
 // Leaf call with its first argument, lower(x) or upper(x), replaced by x.
 struct UnwrappedCaseMapping {
   core::CallTypedExprPtr call;
-  // Mapping of lower() or upper(). Presto's lower() and upper() use simple
-  // Unicode case mapping, which CaseMapped applies.
+  // Mapping of lower() or upper().
   common::CaseMapped::Mapping mapping;
 };
 
@@ -1348,17 +1370,13 @@ struct UnwrappedCaseMapping {
 // lower(x) or upper(x), or std::nullopt otherwise.
 std::optional<UnwrappedCaseMapping> unwrapCaseMapping(
     const core::CallTypedExpr& call) {
-  using Mapping = common::CaseMapped::Mapping;
-  for (const auto& [name, mapping] :
-       {std::pair{"lower", Mapping::kLower},
-        std::pair{"upper", Mapping::kUpper}}) {
-    if (const auto* argument =
-            unaryCallArgument(call.inputs()[0], name, TypeKind::VARCHAR)) {
-      return UnwrappedCaseMapping{
-          replaceFirstArgument(call, *argument), mapping};
-    }
+  auto caseMapping = caseMappingCall(call.inputs()[0]);
+  if (!caseMapping.has_value()) {
+    return std::nullopt;
   }
-  return std::nullopt;
+  return UnwrappedCaseMapping{
+      replaceFirstArgument(call, std::move(caseMapping->argument)),
+      caseMapping->mapping};
 }
 
 // Returns 'field' with type 'type', or nullptr if 'field' is not a field
@@ -1534,6 +1552,83 @@ std::unique_ptr<common::Filter> likeLengthFilter(
   return std::make_unique<common::StringLength>(
       hasSingleChar ? Unit::kAsciiBytes : Unit::kBytes, equal(minLength));
 }
+
+// Returns the literal of a LIKE pattern '%literal%' of 'tokens' without other
+// wildcards, which LIKE matches as a substring of bytes, or std::nullopt.
+std::optional<std::string> likeSubstring(const std::vector<LikeToken>& tokens) {
+  if (tokens.size() < 3 || tokens.front().kind != LikeToken::Kind::kAnyChars ||
+      tokens.back().kind != LikeToken::Kind::kAnyChars) {
+    return std::nullopt;
+  }
+  std::string substring;
+  for (size_t i = 1; i + 1 < tokens.size(); ++i) {
+    if (tokens[i].kind != LikeToken::Kind::kLiteral) {
+      return std::nullopt;
+    }
+    substring.push_back(tokens[i].literal);
+  }
+  return substring;
+}
+
+// String and substring of a call that holds exactly when the string contains
+// the substring.
+struct ContainedSubstring {
+  core::TypedExprPtr string;
+  std::string substring;
+};
+
+// Returns x and s if 'call' holds exactly when x contains s: x LIKE '%s%', or
+// strpos(x, s) > 0, >= 1 or <> 0, since strpos() returns 0 if and only if x
+// does not contain s. 'negated' applies to 'call'.
+std::optional<ContainedSubstring> containedSubstring(
+    const core::CallTypedExpr& call,
+    core::ExpressionEvaluator* evaluator,
+    bool negated) {
+  const auto& inputs = call.inputs();
+  if (call.name() == "like") {
+    if (negated) {
+      return std::nullopt;
+    }
+    const auto tokens = likeCallTokens(call, evaluator);
+    if (!tokens.has_value()) {
+      return std::nullopt;
+    }
+    auto substring = likeSubstring(tokens.value());
+    if (!substring.has_value()) {
+      return std::nullopt;
+    }
+    return ContainedSubstring{inputs[0], std::move(substring.value())};
+  }
+
+  auto kind = comparisonKind(call.name());
+  if (!kind.has_value() || inputs.size() != 2 || !inputs[0]->isCallKind() ||
+      inputs[1]->type()->kind() != TypeKind::BIGINT) {
+    return std::nullopt;
+  }
+  const auto* strpos = inputs[0]->asUnchecked<core::CallTypedExpr>();
+  if (strpos->name() != "strpos" || strpos->inputs().size() != 2) {
+    return std::nullopt;
+  }
+  const auto bound = toConstant(inputs[1], evaluator);
+  if (bound == nullptr || bound->isNullAt(0)) {
+    return std::nullopt;
+  }
+  if (negated) {
+    kind = negateComparison(kind.value());
+  }
+  const auto value = singleValue<int64_t>(bound);
+  const bool found = (kind == ComparisonKind::kGt && value == 0) ||
+      (kind == ComparisonKind::kGte && value == 1) ||
+      (kind == ComparisonKind::kNeq && value == 0);
+  if (!found) {
+    return std::nullopt;
+  }
+  auto substring = varcharConstant(strpos->inputs()[1], evaluator);
+  if (!substring.has_value()) {
+    return std::nullopt;
+  }
+  return ContainedSubstring{strpos->inputs()[0], std::move(substring.value())};
+}
 } // namespace
 
 std::optional<std::pair<common::Subfield, std::unique_ptr<common::Filter>>>
@@ -1572,6 +1667,33 @@ PrestoExprToSubfieldFilterParser::leafCallToSubfieldFilter(
           unwrapped->mapping, std::move(result->second));
     }
     return result;
+  }
+
+  // x LIKE '%s%' and strpos(x, s) > 0 search the bytes of x for s, as
+  // StringContains does. lower(x) LIKE '%s%' is unwrapped above, but
+  // strpos(lower(x), s) has the mapping inside its first argument, so it is
+  // unwrapped here.
+  if (auto contained = containedSubstring(call, evaluator, negated)) {
+    auto caseMapping = caseMappingCall(contained->string);
+    const auto& string =
+        caseMapping.has_value() ? caseMapping->argument : contained->string;
+    common::Subfield subfield;
+    if (!toSubfield(string.get(), subfield)) {
+      return std::nullopt;
+    }
+    std::unique_ptr<common::Filter> filter;
+    if (contained->substring.empty()) {
+      // strpos(x, '') returns 1 for every non-null x.
+      filter = isNotNull();
+    } else {
+      filter = std::make_unique<common::StringContains>(
+          std::move(contained->substring), /*nullAllowed=*/false);
+    }
+    if (caseMapping.has_value()) {
+      filter =
+          common::CaseMapped::wrap(caseMapping->mapping, std::move(filter));
+    }
+    return std::make_pair(std::move(subfield), std::move(filter));
   }
 
   const auto* leftSide = call.inputs()[0].get();
