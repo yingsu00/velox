@@ -59,13 +59,14 @@ bool isTrueConstant(
       constant.toConstantVector(pool)->as<ConstantVector<bool>>()->valueAt(0);
 }
 
-// Returns false for filters on string functions, e.g. length(x), lower(x) and
-// the length implied by x LIKE 'ab%', which have no cuDF AST translation. Their
-// predicates stay in the remaining filter.
+// Returns false for filters on string functions, e.g. length(x), lower(x),
+// strpos(x, s) and the length implied by x LIKE 'ab%', which have no cuDF AST
+// translation. Their predicates stay in the remaining filter.
 bool hasCudfTranslation(const facebook::velox::common::Filter& filter) {
   using facebook::velox::common::FilterKind;
   return !filter.is(FilterKind::kStringLength) &&
-      !filter.is(FilterKind::kCaseMapped);
+      !filter.is(FilterKind::kCaseMapped) &&
+      !filter.is(FilterKind::kStringContains);
 }
 } // namespace
 

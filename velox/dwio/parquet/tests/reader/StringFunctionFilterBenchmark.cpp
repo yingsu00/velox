@@ -36,8 +36,9 @@ using namespace facebook::velox::exec::test;
 namespace {
 
 // Baseline parser. Rejects predicates whose first argument is a function call,
-// e.g. lower(c) = 'x' or length(c) < 5, and derives no implied filters, so
-// such predicates stay in the remaining filter.
+// e.g. lower(c) = 'x', length(c) < 5 or strpos(c, 's') > 0, and derives no
+// implied filters, so such predicates stay in the remaining filter. It still
+// pushes down c LIKE '%s%', which no benchmark case uses.
 class BaselineParser : public exec::PrestoExprToSubfieldFilterParser {
  public:
   std::optional<std::pair<common::Subfield, std::unique_ptr<common::Filter>>>
@@ -172,6 +173,9 @@ class StringFunctionFilterBenchmark
         {"lower_or",
          "lower(service) = 'aws lambda' or lower(service) = 'aws glue'"},
         {"like", "resource like '(not _et)'"},
+        {"strpos_lower", "strpos(lower(service), 'lambda') > 0"},
+        {"strpos_lower_resource",
+         "strpos(lower(resource), 'instance-1999') > 0"},
         {"length", "length(resource) < 50"},
     };
     for (const auto& [name, filter] : filters) {
@@ -224,7 +228,7 @@ class StringFunctionFilterBenchmark
 
   // Optimizations to enable in a run.
   struct Options {
-    // Pushes down filters on lower(), upper(), length() and LIKE.
+    // Pushes down filters on lower(), upper(), length(), strpos() and LIKE.
     bool pushdown;
     // Skips row groups whose dictionary has no passing value.
     bool dictionaryFilter;

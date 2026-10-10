@@ -56,6 +56,7 @@ enum class FilterKind {
   kBigintValuesUsingBloomFilter,
   kStringLength,
   kCaseMapped,
+  kStringContains,
 };
 
 VELOX_DECLARE_ENUM_NAME(FilterKind);
