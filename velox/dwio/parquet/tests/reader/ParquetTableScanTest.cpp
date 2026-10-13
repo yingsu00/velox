@@ -1126,6 +1126,54 @@ TEST_F(ParquetTableScanTest, caseMappedFilterSkipsRowGroups) {
   }
 }
 
+// Verifies that disabling string function filters keeps their predicates in
+// the remaining filter.
+TEST_F(ParquetTableScanTest, stringFunctionFiltersDisabled) {
+  auto data =
+      makeRowVector({"c0"}, {makeFlatVector<std::string>(10'000, [](auto row) {
+                      return fmt::format("AB-{:05}", row);
+                    })});
+  const auto rowType = asRowType(data->type());
+  const auto file = TempFilePath::create();
+  writeToParquetFile(file->getPath(), {data});
+
+  for (const auto& filter :
+       {"lower(c0) = 'ab-04321'",
+        "length(c0) = 9",
+        "strpos(lower(c0), 'ab-0432') > 0"}) {
+    SCOPED_TRACE(filter);
+    const auto expected =
+        AssertQueryBuilder(
+            PlanBuilder(pool()).values({data}).filter(filter).planNode())
+            .copyResults(pool());
+    for (const bool enabled : {true, false}) {
+      SCOPED_TRACE(fmt::format("enabled {}", enabled));
+      auto plan = PlanBuilder(pool()).tableScan(rowType, {}, filter).planNode();
+      const auto scanId = plan->id();
+      auto task =
+          AssertQueryBuilder(plan)
+              .connectorSessionProperty(
+                  kHiveConnectorId,
+                  parquetSessionProperty(
+                      "string_function_and_int64_timestamp_filters_enabled"),
+                  enabled ? "true" : "false")
+              .split(makeSplit(file->getPath()))
+              .assertResults(expected);
+      // The scan evaluates a remaining filter only if the predicate stays in
+      // it.
+      const auto remainingFilterTime = customStatSum(
+          *task,
+          scanId,
+          std::string(connector::Connector::kTotalRemainingFilterTime));
+      if (enabled) {
+        ASSERT_EQ(remainingFilterTime, 0);
+      } else {
+        ASSERT_GT(remainingFilterTime, 0);
+      }
+    }
+  }
+}
+
 // Verifies that row groups whose dictionary has no passing value are skipped,
 // including when their min and max do not exclude the value.
 TEST_F(ParquetTableScanTest, dictionaryFilterSkipsRowGroups) {
@@ -1696,19 +1744,27 @@ TEST_F(ParquetTableScanTest, timestampInt64Filters) {
             AssertQueryBuilder(
                 PlanBuilder(pool()).values({data}).filter(filter).planNode())
                 .copyResults(pool());
-        AssertQueryBuilder(PlanBuilder(pool())
-                               .tableScan(asRowType(data->type()), {}, filter)
-                               .planNode())
-            .connectorSessionProperty(
-                kHiveConnectorId,
-                HiveConfig::kReadTimestampUnitSession,
-                std::to_string(
-                    static_cast<int>(TimestampPrecision::kNanoseconds)))
-            // Small batches cover reads that start inside a page.
-            .config(core::QueryConfig::kPreferredOutputBatchRows, "97")
-            .config(core::QueryConfig::kMaxOutputBatchRows, "97")
-            .split(makeSplit(file->getPath()))
-            .assertResults(expected);
+        // When disabled, each value is converted to a timestamp and tested.
+        for (const bool filtersAsIntegers : {true, false}) {
+          AssertQueryBuilder(PlanBuilder(pool())
+                                 .tableScan(asRowType(data->type()), {}, filter)
+                                 .planNode())
+              .connectorSessionProperty(
+                  kHiveConnectorId,
+                  HiveConfig::kReadTimestampUnitSession,
+                  std::to_string(
+                      static_cast<int>(TimestampPrecision::kNanoseconds)))
+              .connectorSessionProperty(
+                  kHiveConnectorId,
+                  parquetSessionProperty(
+                      "string_function_and_int64_timestamp_filters_enabled"),
+                  filtersAsIntegers ? "true" : "false")
+              // Small batches cover reads that start inside a page.
+              .config(core::QueryConfig::kPreferredOutputBatchRows, "97")
+              .config(core::QueryConfig::kMaxOutputBatchRows, "97")
+              .split(makeSplit(file->getPath()))
+              .assertResults(expected);
+        }
       }
     }
   }

@@ -48,13 +48,15 @@ class ParquetParams : public dwio::common::FormatParams {
       const tz::TimeZone* sessionTimezone,
       TimestampPrecision timestampPrecision,
       bool nullStructIfAllFieldsMissing,
-      dwio::common::BufferedInput* dictionaryFilterInput)
+      dwio::common::BufferedInput* dictionaryFilterInput,
+      bool int64TimestampFiltersAsIntegers)
       : FormatParams(pool, stats),
         metaData_(metaData),
         sessionTimezone_(sessionTimezone),
         timestampPrecision_(timestampPrecision),
         nullStructIfAllFieldsMissing_(nullStructIfAllFieldsMissing),
-        dictionaryFilterInput_(dictionaryFilterInput) {}
+        dictionaryFilterInput_(dictionaryFilterInput),
+        int64TimestampFiltersAsIntegers_(int64TimestampFiltersAsIntegers) {}
   std::unique_ptr<dwio::common::FormatData> toFormatData(
       const std::shared_ptr<const dwio::common::TypeWithId>& type,
       const common::ScanSpec& scanSpec) override;
@@ -77,12 +79,20 @@ class ParquetParams : public dwio::common::FormatParams {
     return dictionaryFilterInput_;
   }
 
+  /// Whether filters on INT64 timestamps are translated to filters on the
+  /// stored integers. If false, each value is converted to a timestamp and
+  /// tested.
+  bool int64TimestampFiltersAsIntegers() const {
+    return int64TimestampFiltersAsIntegers_;
+  }
+
  private:
   const FileMetaDataPtr metaData_;
   const tz::TimeZone* sessionTimezone_;
   const TimestampPrecision timestampPrecision_;
   const bool nullStructIfAllFieldsMissing_;
   dwio::common::BufferedInput* const dictionaryFilterInput_;
+  const bool int64TimestampFiltersAsIntegers_;
 };
 
 /// Format-specific data created for each leaf column of a Parquet rowgroup.

@@ -1089,6 +1089,17 @@ Parquet Options (prefix ``hive.parquet.``)
        a page index, and reads the column and offset index of each filtered
        column of a row group. Not used for columns whose statistics are
        ignored. Session: ``parquet_page_index_filter_enabled``.
+   * - ``string-function-and-int64-timestamp-filters-enabled``
+     - bool
+     - true
+     - Push down predicates on ``length()``, ``lower()``, ``upper()``,
+       ``strpos()`` and LIKE as filters on the column, and evaluate filters on
+       INT64 timestamps as integers in the file's unit. When false, these
+       predicates stay in the remaining filter, and each INT64 timestamp is
+       converted to a timestamp before it is tested. Applies to scans of every
+       file format, because predicates become filters before the format of a
+       split is known.
+       Session: ``parquet_string_function_and_int64_timestamp_filters_enabled``.
    * - ``footer-memory-tracking-threshold``
      - integer
      - disabled (max uint64)

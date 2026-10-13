@@ -172,18 +172,33 @@ class Int64TimestampFilter final : public common::Filter {
 };
 
 // Returns a filter on the integers of INT64 timestamps of 'precision' that
-// passes the same values as 'filter'. Ranges become integer ranges, which
-// readers evaluate without converting each value to a timestamp.
+// passes the same values as 'filter'. If 'translateRanges', ranges become
+// integer ranges, which readers evaluate without converting each value to a
+// timestamp.
 std::unique_ptr<common::Filter> makeInt64TimestampFilter(
     const common::Filter& filter,
-    TimestampPrecision precision) {
+    TimestampPrecision precision,
+    bool translateRanges) {
   switch (filter.kind()) {
     case common::FilterKind::kAlwaysTrue:
     case common::FilterKind::kAlwaysFalse:
     case common::FilterKind::kIsNull:
     case common::FilterKind::kIsNotNull:
       return filter.clone();
+    // A wrapper with one of these kinds would be cast to the integer filter
+    // class. A timestamp column never has such a filter.
+    case common::FilterKind::kBigintRange:
+    case common::FilterKind::kNegatedBigintRange:
+    case common::FilterKind::kBigintValuesUsingHashTable:
+    case common::FilterKind::kBigintValuesUsingBitmask:
+    case common::FilterKind::kNegatedBigintValuesUsingHashTable:
+    case common::FilterKind::kNegatedBigintValuesUsingBitmask:
+    case common::FilterKind::kBigintValuesUsingBloomFilter:
+      VELOX_FAIL("Integer filter on a timestamp column: {}", filter.toString());
     case common::FilterKind::kTimestampRange: {
+      if (!translateRanges) {
+        break;
+      }
       const auto bounds =
           toInt64Bounds(*filter.as<common::TimestampRange>(), precision);
       if (bounds.has_value()) {
@@ -198,21 +213,14 @@ std::unique_ptr<common::Filter> makeInt64TimestampFilter(
       break;
     }
     case common::FilterKind::kMultiRange:
+      if (!translateRanges) {
+        break;
+      }
       if (auto multiRange = makeInt64MultiRange(
               *filter.as<common::MultiRange>(), precision)) {
         return multiRange;
       }
       break;
-    // A wrapper with one of these kinds would be cast to the integer filter
-    // class. A timestamp column never has such a filter.
-    case common::FilterKind::kBigintRange:
-    case common::FilterKind::kNegatedBigintRange:
-    case common::FilterKind::kBigintValuesUsingHashTable:
-    case common::FilterKind::kBigintValuesUsingBitmask:
-    case common::FilterKind::kNegatedBigintValuesUsingHashTable:
-    case common::FilterKind::kNegatedBigintValuesUsingBitmask:
-    case common::FilterKind::kBigintValuesUsingBloomFilter:
-      VELOX_FAIL("Integer filter on a timestamp column: {}", filter.toString());
     default:
       break;
   }
@@ -251,7 +259,8 @@ class TimestampColumnReader : public IntegerColumnReader {
       ParquetParams& params,
       common::ScanSpec& scanSpec)
       : IntegerColumnReader(requestedType, fileType, params, scanSpec),
-        requestedPrecision_(params.timestampPrecision()) {
+        requestedPrecision_(params.timestampPrecision()),
+        translateRangesToIntegers_(params.int64TimestampFiltersAsIntegers()) {
     if constexpr (std::is_same_v<T, int64_t>) {
       const auto typeWithId =
           std::static_pointer_cast<const ParquetTypeWithId>(fileType_);
@@ -368,7 +377,8 @@ class TimestampColumnReader : public IntegerColumnReader {
       const auto* filter = scanSpec_->filter();
       const auto int64Filter = filter == nullptr
           ? nullptr
-          : makeInt64TimestampFilter(*filter, filePrecision_);
+          : makeInt64TimestampFilter(
+                *filter, filePrecision_, translateRangesToIntegers_);
       readCommon<TimestampColumnReader, true>(rows, int64Filter.get());
     } else {
       // Use int128_t as a workaround. Timestamp in Velox is of 16-byte length.
@@ -441,6 +451,10 @@ class TimestampColumnReader : public IntegerColumnReader {
 
   // Whether Int64 Timestamp needs to be converted to the requested precision.
   bool needsConversion_ = false;
+
+  // Whether range filters on INT64 timestamps become integer ranges. If false,
+  // each value is converted to a timestamp and tested.
+  const bool translateRangesToIntegers_;
 };
 
 } // namespace facebook::velox::parquet

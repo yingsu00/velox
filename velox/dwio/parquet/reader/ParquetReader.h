@@ -86,6 +86,14 @@ class ParquetReaderOptions : public dwio::common::FormatSpecificOptions {
     return pageIndexFilterEnabled_;
   }
 
+  void setInt64TimestampFiltersAsIntegers(bool value) {
+    int64TimestampFiltersAsIntegers_ = value;
+  }
+
+  bool int64TimestampFiltersAsIntegers() const {
+    return int64TimestampFiltersAsIntegers_;
+  }
+
  private:
   /// Allows reading INT32 physical columns as narrower integer types.
   bool allowInt32Narrowing_{
@@ -107,6 +115,12 @@ class ParquetReaderOptions : public dwio::common::FormatSpecificOptions {
   /// Skips rows by the page index.
   bool pageIndexFilterEnabled_{
       ParquetConfig::kPageIndexFilterEnabledSessionProperty::defaultValue};
+
+  /// Evaluates filters on INT64 timestamps as integers in the file's unit.
+  bool int64TimestampFiltersAsIntegers_{
+      ParquetConfig::
+          kStringFunctionAndInt64TimestampFiltersEnabledSessionProperty::
+              defaultValue};
 };
 
 /// Implements the RowReader interface for Parquet.

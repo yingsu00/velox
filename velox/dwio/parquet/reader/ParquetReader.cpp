@@ -229,6 +229,9 @@ ParquetReaderFactory::createFormatOptions(
       ParquetConfig::dictionaryFilterEnabled(connectorConfig, session));
   options->setPageIndexFilterEnabled(
       ParquetConfig::pageIndexFilterEnabled(connectorConfig, session));
+  options->setInt64TimestampFiltersAsIntegers(
+      ParquetConfig::stringFunctionAndInt64TimestampFiltersEnabled(
+          connectorConfig, session));
   return options;
 }
 
@@ -283,6 +286,10 @@ class ReaderBase {
 
   bool pageIndexFilterEnabled() const {
     return parquetReaderOptions_.pageIndexFilterEnabled();
+  }
+
+  bool int64TimestampFiltersAsIntegers() const {
+    return parquetReaderOptions_.int64TimestampFiltersAsIntegers();
   }
 
   bool isFileColumnNamesReadAsLowerCase() const {
@@ -1633,7 +1640,8 @@ class ParquetRowReader::Impl {
         options_.timestampPrecision(),
         readerBase_->nullStructIfAllFieldsMissing(),
         readerBase_->dictionaryFilterEnabled() ? &readerBase_->bufferedInput()
-                                               : nullptr);
+                                               : nullptr,
+        readerBase_->int64TimestampFiltersAsIntegers());
     requestedType_ = options_.requestedType() ? options_.requestedType()
                                               : readerBase_->schema();
     columnReader_ = ParquetColumnReader::build(
