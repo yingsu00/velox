@@ -71,12 +71,14 @@ class IcebergTestBase : public exec::test::HiveConnectorTestBase {
   std::shared_ptr<IcebergDataSink> createDataSink(
       const RowTypePtr& rowType,
       const std::string& outputDirectoryPath,
-      const std::vector<PartitionField>& partitionFields = {});
+      const std::vector<PartitionField>& partitionFields = {},
+      const std::vector<IcebergSortField>& sortOrder = {});
 
   std::shared_ptr<IcebergDataSink> createDataSinkAndAppendData(
       const std::vector<RowVectorPtr>& vectors,
       const std::string& dataPath,
-      const std::vector<PartitionField>& partitionFields = {});
+      const std::vector<PartitionField>& partitionFields = {},
+      const std::vector<IcebergSortField>& sortOrder = {});
 
   std::vector<std::shared_ptr<ConnectorSplit>> createSplitsForDirectory(
       const std::string& directory);
@@ -218,7 +220,8 @@ class IcebergTestBase : public exec::test::HiveConnectorTestBase {
   IcebergInsertTableHandlePtr createInsertTableHandle(
       const RowTypePtr& rowType,
       const std::string& outputDirectoryPath,
-      const std::vector<PartitionField>& partitionFields = {});
+      const std::vector<PartitionField>& partitionFields = {},
+      const std::vector<IcebergSortField>& sortOrder = {});
 
   std::vector<std::string> listPartitionDirectories(
       const std::string& dataPath);

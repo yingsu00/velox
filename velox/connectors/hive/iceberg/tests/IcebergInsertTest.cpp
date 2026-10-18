@@ -410,6 +410,145 @@ TEST_F(IcebergInsertTest, maxTargetFileSizeRotation) {
 // Explicit NULL (column in insertedColumns) and omitted column (not in
 // insertedColumns) written to separate files. The explicit NULL must be
 // preserved; the omitted column must receive the write-default.
+// Asserts that each row of 'rows' is ordered after the previous one by the
+// given sort keys, which are compared in order until one differs.
+void assertSorted(
+    const RowVectorPtr& rows,
+    const std::vector<std::pair<column_index_t, CompareFlags>>& sortKeys) {
+  for (vector_size_t row = 1; row < rows->size(); ++row) {
+    for (const auto& [channel, flags] : sortKeys) {
+      const auto& column = rows->childAt(channel);
+      const auto result = column->compare(column.get(), row - 1, row, flags);
+      ASSERT_TRUE(result.has_value());
+      ASSERT_LE(result.value(), 0) << "Rows " << row - 1 << " and " << row
+                                   << " are out of order in column " << channel;
+      if (result.value() < 0) {
+        break;
+      }
+    }
+  }
+}
+
+CompareFlags toCompareFlags(const core::SortOrder& sortOrder) {
+  return {
+      sortOrder.isNullsFirst(),
+      sortOrder.isAscending(),
+      false,
+      CompareFlags::NullHandlingMode::kNullAsValue};
+}
+
+TEST_F(IcebergInsertTest, sortedWrite) {
+  const auto rowType = ROW({"c0", "c1"}, {BIGINT(), VARCHAR()});
+  // Few distinct c0 values, so ties exercise the second sort key.
+  std::vector<RowVectorPtr> vectors;
+  for (int32_t batch = 0; batch < 4; ++batch) {
+    vectors.push_back(makeRowVector(
+        rowType->names(),
+        {
+            makeFlatVector<int64_t>(
+                1'000,
+                [batch](auto row) { return (row * 7 + batch) % 20; },
+                [](auto row) { return row % 13 == 0; }),
+            makeFlatVector<std::string>(
+                1'000,
+                [batch](auto row) {
+                  return fmt::format("{}", (row * 31 + batch) % 997);
+                },
+                [](auto row) { return row % 17 == 0; }),
+        }));
+  }
+
+  // Covers all four direction and null placement combinations, including the
+  // two that Hive sorting columns reject.
+  const std::vector<std::pair<core::SortOrder, core::SortOrder>> sortOrders = {
+      {core::kAscNullsFirst, core::kAscNullsLast},
+      {core::kAscNullsLast, core::kDescNullsFirst},
+      {core::kDescNullsFirst, core::kDescNullsLast},
+      {core::kDescNullsLast, core::kAscNullsFirst},
+  };
+  for (const auto& [c0Order, c1Order] : sortOrders) {
+    SCOPED_TRACE(fmt::format("{}, {}", c0Order.toString(), c1Order.toString()));
+    const auto outputDirectory = TempDirectoryPath::create();
+    // Field ids are assigned from 1 in column order.
+    const auto dataSink = createDataSinkAndAppendData(
+        vectors,
+        outputDirectory->getPath(),
+        /*partitionFields=*/{},
+        {{1, c0Order}, {2, c1Order}});
+    const auto commitTasks = dataSink->close();
+    ASSERT_EQ(commitTasks.size(), 1);
+
+    const auto splits = createSplitsForDirectory(outputDirectory->getPath());
+    ASSERT_EQ(splits.size(), 1);
+    const auto plan = exec::test::PlanBuilder()
+                          .startTableScan(test::kIcebergConnectorId)
+                          .outputType(rowType)
+                          .endTableScan()
+                          .planNode();
+    exec::test::AssertQueryBuilder(plan).splits(splits).assertResults(vectors);
+    // A split can be read only once, so the second query gets new splits.
+    const auto rows =
+        exec::test::AssertQueryBuilder(plan)
+            .splits(createSplitsForDirectory(outputDirectory->getPath()))
+            .copyResults(pool());
+    assertSorted(
+        rows, {{0, toCompareFlags(c0Order)}, {1, toCompareFlags(c1Order)}});
+  }
+}
+
+TEST_F(IcebergInsertTest, sortedPartitionedWrite) {
+  const auto rowType = ROW({"c0", "c1"}, {BIGINT(), INTEGER()});
+  std::vector<RowVectorPtr> vectors;
+  for (int32_t batch = 0; batch < 3; ++batch) {
+    vectors.push_back(makeRowVector(
+        rowType->names(),
+        {
+            makeFlatVector<int64_t>(
+                1'000,
+                [batch](auto row) { return (row * 7919 + batch) % 1000; }),
+            makeFlatVector<int32_t>(1'000, [](auto row) { return row % 3; }),
+        }));
+  }
+
+  const auto outputDirectory = TempDirectoryPath::create();
+  const auto dataSink = createDataSinkAndAppendData(
+      vectors,
+      outputDirectory->getPath(),
+      {{1, TransformType::kIdentity, std::nullopt}},
+      {{1, core::kDescNullsLast}});
+  const auto commitTasks = dataSink->close();
+  // One file per partition, each sorted on its own.
+  ASSERT_EQ(commitTasks.size(), 3);
+
+  const auto splits = createSplitsForDirectory(outputDirectory->getPath());
+  ASSERT_EQ(splits.size(), 3);
+  const auto plan = exec::test::PlanBuilder()
+                        .startTableScan(test::kIcebergConnectorId)
+                        .outputType(rowType)
+                        .endTableScan()
+                        .planNode();
+  exec::test::AssertQueryBuilder(plan).splits(splits).assertResults(vectors);
+  // A split can be read only once, so each file is read with a new split.
+  for (const auto& split :
+       createSplitsForDirectory(outputDirectory->getPath())) {
+    const auto rows =
+        exec::test::AssertQueryBuilder(plan).split(split).copyResults(pool());
+    assertSorted(rows, {{0, toCompareFlags(core::kDescNullsLast)}});
+  }
+}
+
+TEST_F(IcebergInsertTest, sortFieldNotInInputColumns) {
+  const auto rowType = ROW({"c0", "c1"}, {BIGINT(), INTEGER()});
+  const auto outputDirectory = TempDirectoryPath::create();
+  VELOX_ASSERT_USER_THROW(
+      createDataSink(
+          rowType,
+          outputDirectory->getPath(),
+          /*partitionFields=*/{},
+          {{3, core::kAscNullsFirst}}),
+      "Sort field source column is not an input column: 3");
+}
+
 TEST_F(IcebergInsertTest, explicitNullPreservedOmittedGetsWriteDefault) {
   const auto outputDir = TempDirectoryPath::create();
   const auto rowType = ROW({"id", "status"}, {BIGINT(), VARCHAR()});

@@ -21,6 +21,7 @@
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
 #include <folly/json.h>
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <unordered_set>
@@ -144,7 +145,8 @@ IcebergInsertTableHandle::IcebergInsertTableHandle(
     std::unordered_map<std::string, ExistingDeletionVector>
         existingDeletionVectors,
     std::shared_ptr<const FileNameGenerator> fileNameGenerator,
-    std::vector<std::string> insertedColumns)
+    std::vector<std::string> insertedColumns,
+    std::vector<IcebergSortField> sortOrder)
     : HiveInsertTableHandle(
           std::vector<HiveColumnHandlePtr>(
               inputColumns.begin(),
@@ -160,7 +162,8 @@ IcebergInsertTableHandle::IcebergInsertTableHandle(
       partitionSpec_(partitionSpec),
       writeKind_(writeKind),
       existingDeletionVectors_(std::move(existingDeletionVectors)),
-      insertedColumns_(std::move(insertedColumns)) {
+      insertedColumns_(std::move(insertedColumns)),
+      sortOrder_(std::move(sortOrder)) {
   // Data-file writes and merge writes both require the input row type to
   // have inputColumns populated (the data file sub-sink consumes them and
   // the merge sink projects them into a narrow data batch). The
@@ -428,6 +431,37 @@ IcebergDataSink::IcebergDataSink(
   // returns the matching collector, or nullptr for formats without support.
   statsCollector_ = IcebergStatsCollector::create(
       insertTableHandle->storageFormat(), columnHandles, inputType_);
+
+  // The inherited writer factory wraps each file writer in a SortingWriter
+  // once sortWrite_ is set, so every data file is sorted on its own.
+  for (const auto& sortField : insertTableHandle->sortOrder()) {
+    const auto column = std::find_if(
+        columnHandles.begin(), columnHandles.end(), [&](const auto& handle) {
+          return handle->field().fieldId == sortField.sourceFieldId;
+        });
+    VELOX_USER_CHECK(
+        column != columnHandles.end(),
+        "Sort field source column is not an input column: {}",
+        sortField.sourceFieldId);
+    const auto inputChannel =
+        static_cast<column_index_t>(column - columnHandles.begin());
+    // Sort columns index the data columns, which exclude any input column
+    // that is not written to the file.
+    const auto dataChannel =
+        std::find(dataChannels_.begin(), dataChannels_.end(), inputChannel);
+    VELOX_CHECK(
+        dataChannel != dataChannels_.end(),
+        "Sort column is not a data column: {}",
+        (*column)->name());
+    sortColumnIndices_.push_back(
+        static_cast<column_index_t>(dataChannel - dataChannels_.begin()));
+    sortCompareFlags_.push_back(
+        {sortField.sortOrder.isNullsFirst(),
+         sortField.sortOrder.isAscending(),
+         false,
+         CompareFlags::NullHandlingMode::kNullAsValue});
+  }
+  sortWrite_ = !sortColumnIndices_.empty();
 }
 
 namespace {
