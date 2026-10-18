@@ -64,8 +64,11 @@ class IcebergFileNameGenerator : public FileNameGenerator {
 /// One field of an Iceberg sort order. Only identity transforms are supported,
 /// so the field sorts on the value of its source column.
 struct IcebergSortField {
-  /// Iceberg field id of the top-level source column.
-  int32_t sourceFieldId;
+  /// Iceberg field id of the top-level source column. Unset when the field
+  /// sorts on a sort key that the plan computes, such as a z-order value. Such
+  /// keys follow the input columns in the input rows, in the order of their
+  /// sort fields, and are not written to the data file.
+  std::optional<int32_t> sourceFieldId;
   core::SortOrder sortOrder;
 };
 

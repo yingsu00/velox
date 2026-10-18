@@ -22,11 +22,13 @@ SortingWriter::SortingWriter(
     std::unique_ptr<exec::SortBuffer> sortBuffer,
     vector_size_t maxOutputRowsConfig,
     uint64_t maxOutputBytesConfig,
-    uint64_t outputTimeSliceLimitMs)
+    uint64_t outputTimeSliceLimitMs,
+    column_index_t numSortOnlyColumns)
     : outputWriter_(std::move(writer)),
       maxOutputRowsConfig_(maxOutputRowsConfig),
       maxOutputBytesConfig_(maxOutputBytesConfig),
       finishTimeSliceLimitMs_(outputTimeSliceLimitMs),
+      numSortOnlyColumns_(numSortOnlyColumns),
       sortPool_(sortBuffer->pool()),
       canReclaim_(sortBuffer->canSpill()),
       sortBuffer_(std::move(sortBuffer)) {
@@ -77,7 +79,7 @@ bool SortingWriter::finish() {
     }
     output = sortBuffer_->getOutput(maxOutputBatchRows);
     if (output != nullptr) {
-      outputWriter_->write(output);
+      outputWriter_->write(dropSortOnlyColumns(output));
     }
   } while (output != nullptr);
 
@@ -156,6 +158,29 @@ vector_size_t SortingWriter::outputBatchRows() {
     estimatedMaxOutputRows = maxOutputRows;
   }
   return std::min(estimatedMaxOutputRows, maxOutputRowsConfig_);
+}
+
+RowVectorPtr SortingWriter::dropSortOnlyColumns(
+    const RowVectorPtr& sorted) const {
+  if (numSortOnlyColumns_ == 0) {
+    return sorted;
+  }
+  const auto& sortedType = sorted->rowType();
+  VELOX_CHECK_LT(numSortOnlyColumns_, sortedType->size());
+  const auto numColumns = sortedType->size() - numSortOnlyColumns_;
+  std::vector<std::string> names(
+      sortedType->names().begin(), sortedType->names().begin() + numColumns);
+  std::vector<TypePtr> types(
+      sortedType->children().begin(),
+      sortedType->children().begin() + numColumns);
+  std::vector<VectorPtr> children(
+      sorted->children().begin(), sorted->children().begin() + numColumns);
+  return std::make_shared<RowVector>(
+      sorted->pool(),
+      ROW(std::move(names), std::move(types)),
+      sorted->nulls(),
+      sorted->size(),
+      std::move(children));
 }
 
 std::unique_ptr<memory::MemoryReclaimer> SortingWriter::MemoryReclaimer::create(

@@ -15,11 +15,14 @@
  */
 
 #include "velox/common/base/tests/GTestUtils.h"
+#include "velox/common/file/File.h"
 #include "velox/connectors/hive/HiveConfig.h"
 #include "velox/connectors/hive/iceberg/IcebergColumnHandle.h"
 #include "velox/connectors/hive/iceberg/IcebergConnector.h"
 #include "velox/connectors/hive/iceberg/IcebergFieldMetadata.h"
 #include "velox/connectors/hive/iceberg/tests/IcebergTestBase.h"
+#include "velox/dwio/common/BufferedInput.h"
+#include "velox/dwio/common/ReaderFactory.h"
 #include "velox/exec/tests/utils/AssertQueryBuilder.h"
 #include "velox/exec/tests/utils/PlanBuilder.h"
 #include "velox/vector/BaseVector.h"
@@ -535,6 +538,83 @@ TEST_F(IcebergInsertTest, sortedPartitionedWrite) {
         exec::test::AssertQueryBuilder(plan).split(split).copyResults(pool());
     assertSorted(rows, {{0, toCompareFlags(core::kDescNullsLast)}});
   }
+}
+
+TEST_F(IcebergInsertTest, computedSortKeyWrite) {
+  // The plan appends a computed sort key, such as a z-order value, after the
+  // table columns. The sink sorts on it and leaves it out of the data file.
+  const auto tableType = ROW({"c0", "c1"}, {BIGINT(), VARCHAR()});
+  const auto inputType =
+      ROW({"c0", "c1", "sort_key"}, {BIGINT(), VARCHAR(), VARBINARY()});
+  std::vector<RowVectorPtr> inputs;
+  std::vector<RowVectorPtr> tableRows;
+  for (int32_t batch = 0; batch < 3; ++batch) {
+    auto c0 = makeFlatVector<int64_t>(
+        1'000, [batch](auto row) { return (row * 7'919 + batch) % 3'000; });
+    auto c1 = makeFlatVector<std::string>(
+        1'000, [batch](auto row) { return fmt::format("{}", row + batch); });
+    // Orders the rows by descending c0.
+    auto sortKey = makeFlatVector<std::string>(
+        1'000,
+        [&](auto row) {
+          return fmt::format("{:04}", 3'000 - c0->valueAt(row));
+        },
+        nullptr,
+        VARBINARY());
+    inputs.push_back(makeRowVector(inputType->names(), {c0, c1, sortKey}));
+    tableRows.push_back(makeRowVector(tableType->names(), {c0, c1}));
+  }
+
+  const auto outputDirectory = TempDirectoryPath::create();
+  const auto dataSink = createDataSink(
+      tableType,
+      outputDirectory->getPath(),
+      /*partitionFields=*/{},
+      {{std::nullopt, core::kAscNullsLast}},
+      inputType);
+  for (const auto& input : inputs) {
+    dataSink->appendData(input);
+  }
+  ASSERT_TRUE(dataSink->finish());
+  ASSERT_EQ(dataSink->close().size(), 1);
+
+  const auto files = listFiles(outputDirectory->getPath());
+  ASSERT_EQ(files.size(), 1);
+  dwio::common::ReaderOptions readerOptions{pool()};
+  const auto reader =
+      dwio::common::getReaderFactory(dwio::common::FileFormat::PARQUET)
+          ->createReader(
+              std::make_unique<dwio::common::BufferedInput>(
+                  std::make_shared<LocalReadFile>(files[0]),
+                  readerOptions.memoryPool()),
+              readerOptions);
+  EXPECT_EQ(reader->rowType()->names(), tableType->names());
+
+  const auto plan = exec::test::PlanBuilder()
+                        .startTableScan(test::kIcebergConnectorId)
+                        .outputType(tableType)
+                        .endTableScan()
+                        .planNode();
+  exec::test::AssertQueryBuilder(plan)
+      .splits(createSplitsForDirectory(outputDirectory->getPath()))
+      .assertResults(tableRows);
+  const auto rows =
+      exec::test::AssertQueryBuilder(plan)
+          .splits(createSplitsForDirectory(outputDirectory->getPath()))
+          .copyResults(pool());
+  assertSorted(rows, {{0, toCompareFlags(core::kDescNullsLast)}});
+}
+
+TEST_F(IcebergInsertTest, computedSortKeyMissingFromInput) {
+  const auto rowType = ROW({"c0"}, {BIGINT()});
+  const auto outputDirectory = TempDirectoryPath::create();
+  VELOX_ASSERT_USER_THROW(
+      createDataSink(
+          rowType,
+          outputDirectory->getPath(),
+          /*partitionFields=*/{},
+          {{std::nullopt, core::kAscNullsLast}}),
+      "Input has no column for a computed sort key");
 }
 
 TEST_F(IcebergInsertTest, sortFieldNotInInputColumns) {

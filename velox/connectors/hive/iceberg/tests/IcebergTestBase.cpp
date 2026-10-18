@@ -242,11 +242,12 @@ std::shared_ptr<IcebergDataSink> IcebergTestBase::createDataSink(
     const RowTypePtr& rowType,
     const std::string& outputDirectoryPath,
     const std::vector<PartitionField>& partitionFields,
-    const std::vector<IcebergSortField>& sortOrder) {
+    const std::vector<IcebergSortField>& sortOrder,
+    const RowTypePtr& inputType) {
   auto tableHandle = createInsertTableHandle(
       rowType, outputDirectoryPath, partitionFields, sortOrder);
   return std::make_shared<IcebergDataSink>(
-      rowType,
+      inputType != nullptr ? inputType : rowType,
       tableHandle,
       connectorQueryCtx_.get(),
       CommitStrategy::kNoCommit,

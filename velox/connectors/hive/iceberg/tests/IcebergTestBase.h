@@ -68,11 +68,15 @@ class IcebergTestBase : public exec::test::HiveConnectorTestBase {
       vector_size_t rowsPerBatch,
       double nullRatio = 0.0);
 
+  /// @param inputType Type of the rows the sink receives, when they have
+  /// columns after the table columns, such as computed sort keys. Defaults to
+  /// 'rowType'.
   std::shared_ptr<IcebergDataSink> createDataSink(
       const RowTypePtr& rowType,
       const std::string& outputDirectoryPath,
       const std::vector<PartitionField>& partitionFields = {},
-      const std::vector<IcebergSortField>& sortOrder = {});
+      const std::vector<IcebergSortField>& sortOrder = {},
+      const RowTypePtr& inputType = nullptr);
 
   std::shared_ptr<IcebergDataSink> createDataSinkAndAppendData(
       const std::vector<RowVectorPtr>& vectors,

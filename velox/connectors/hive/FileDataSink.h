@@ -287,6 +287,10 @@ class FileDataSink : public DataSink {
       const std::vector<column_index_t>& dataCols,
       const RowVectorPtr& input);
 
+  // Returns the data channels followed by the sort-only channels, which is the
+  // column order of the rows the sorting writer receives.
+  std::vector<column_index_t> sortInputChannels() const;
+
   FOLLY_ALWAYS_INLINE bool sortWrite() const {
     return sortWrite_;
   }
@@ -401,6 +405,12 @@ class FileDataSink : public DataSink {
   /// Whether this sink uses sorted writes. Set by subclass after computing
   /// sort columns in its constructor.
   bool sortWrite_{false};
+
+  /// Input channels that only feed the sort keys of a sorted write, such as a
+  /// computed z-order value. They follow the data channels in the rows the
+  /// sorting writer receives and are dropped before the file is written. Set
+  /// by subclass in its constructor.
+  std::vector<column_index_t> sortOnlyChannels_;
 
   State state_{State::kRunning};
 

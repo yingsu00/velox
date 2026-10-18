@@ -707,7 +707,7 @@ HiveDataSink::maybeCreateBucketSortWriter(
   auto* sortPool = writerInfo_[writerIndex]->sortPool.get();
   VELOX_CHECK_NOT_NULL(sortPool);
   auto sortBuffer = std::make_unique<exec::SortBuffer>(
-      getNonPartitionTypes(dataChannels_, inputType_),
+      getNonPartitionTypes(sortInputChannels(), inputType_),
       sortColumnIndices_,
       sortCompareFlags_,
       sortPool,
@@ -723,7 +723,8 @@ HiveDataSink::maybeCreateBucketSortWriter(
           connectorQueryCtx_->sessionProperties()),
       hiveConfig_->sortWriterMaxOutputBytes(
           connectorQueryCtx_->sessionProperties()),
-      sortWriterFinishTimeSliceLimitMs_);
+      sortWriterFinishTimeSliceLimitMs_,
+      static_cast<column_index_t>(sortOnlyChannels_.size()));
 }
 
 WriterParameters HiveDataSink::getWriterParameters(

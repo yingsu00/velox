@@ -108,6 +108,15 @@ RowVectorPtr FileDataSink::makeDataInput(
       input->getNullCount());
 }
 
+std::vector<column_index_t> FileDataSink::sortInputChannels() const {
+  std::vector<column_index_t> channels;
+  channels.reserve(dataChannels_.size() + sortOnlyChannels_.size());
+  channels.insert(channels.end(), dataChannels_.begin(), dataChannels_.end());
+  channels.insert(
+      channels.end(), sortOnlyChannels_.begin(), sortOnlyChannels_.end());
+  return channels;
+}
+
 FileDataSink::FileDataSink(
     RowTypePtr inputType,
     const ConnectorQueryCtx* connectorQueryCtx,
@@ -183,7 +192,9 @@ void FileDataSink::appendData(RowVectorPtr input) {
 
 void FileDataSink::write(size_t index, RowVectorPtr input) {
   WRITER_NON_RECLAIMABLE_SECTION_GUARD(index);
-  auto dataInput = makeDataInput(dataChannels_, input);
+  auto dataInput = sortOnlyChannels_.empty()
+      ? makeDataInput(dataChannels_, input)
+      : makeDataInput(sortInputChannels(), input);
 
   if (writers_[index] == nullptr) {
     writers_[index] = createWriterForIndex(index);

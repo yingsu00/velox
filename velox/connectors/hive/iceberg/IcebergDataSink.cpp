@@ -435,26 +435,41 @@ IcebergDataSink::IcebergDataSink(
   // The inherited writer factory wraps each file writer in a SortingWriter
   // once sortWrite_ is set, so every data file is sorted on its own.
   for (const auto& sortField : insertTableHandle->sortOrder()) {
-    const auto column = std::find_if(
-        columnHandles.begin(), columnHandles.end(), [&](const auto& handle) {
-          return handle->field().fieldId == sortField.sourceFieldId;
-        });
-    VELOX_USER_CHECK(
-        column != columnHandles.end(),
-        "Sort field source column is not an input column: {}",
-        sortField.sourceFieldId);
-    const auto inputChannel =
-        static_cast<column_index_t>(column - columnHandles.begin());
-    // Sort columns index the data columns, which exclude any input column
-    // that is not written to the file.
-    const auto dataChannel =
-        std::find(dataChannels_.begin(), dataChannels_.end(), inputChannel);
-    VELOX_CHECK(
-        dataChannel != dataChannels_.end(),
-        "Sort column is not a data column: {}",
-        (*column)->name());
-    sortColumnIndices_.push_back(
-        static_cast<column_index_t>(dataChannel - dataChannels_.begin()));
+    if (!sortField.sourceFieldId.has_value()) {
+      // Computed sort keys follow the input columns, and the sorting writer
+      // receives them after the data columns.
+      const auto inputChannel = static_cast<column_index_t>(
+          columnHandles.size() + sortOnlyChannels_.size());
+      VELOX_USER_CHECK_LT(
+          inputChannel,
+          inputType_->size(),
+          "Input has no column for a computed sort key");
+      sortColumnIndices_.push_back(
+          static_cast<column_index_t>(
+              dataChannels_.size() + sortOnlyChannels_.size()));
+      sortOnlyChannels_.push_back(inputChannel);
+    } else {
+      const auto column = std::find_if(
+          columnHandles.begin(), columnHandles.end(), [&](const auto& handle) {
+            return handle->field().fieldId == sortField.sourceFieldId.value();
+          });
+      VELOX_USER_CHECK(
+          column != columnHandles.end(),
+          "Sort field source column is not an input column: {}",
+          sortField.sourceFieldId.value());
+      const auto inputChannel =
+          static_cast<column_index_t>(column - columnHandles.begin());
+      // Sort columns index the data columns, which exclude any input column
+      // that is not written to the file.
+      const auto dataChannel =
+          std::find(dataChannels_.begin(), dataChannels_.end(), inputChannel);
+      VELOX_CHECK(
+          dataChannel != dataChannels_.end(),
+          "Sort column is not a data column: {}",
+          (*column)->name());
+      sortColumnIndices_.push_back(
+          static_cast<column_index_t>(dataChannel - dataChannels_.begin()));
+    }
     sortCompareFlags_.push_back(
         {sortField.sortOrder.isNullsFirst(),
          sortField.sortOrder.isAscending(),

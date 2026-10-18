@@ -25,12 +25,16 @@ namespace facebook::velox::dwio::common {
 /// Sorting Writer object is used to write sorted data into a single file.
 class SortingWriter : public Writer {
  public:
+  /// @param numSortOnlyColumns Number of trailing input columns that only serve
+  /// as sort keys. 'sortBuffer' sorts on them, and they are dropped before the
+  /// sorted rows reach 'writer'.
   SortingWriter(
       std::unique_ptr<Writer> writer,
       std::unique_ptr<exec::SortBuffer> sortBuffer,
       vector_size_t maxOutputRowsConfig,
       uint64_t maxOutputBytesConfig,
-      uint64_t outputTimeSliceLimitMs);
+      uint64_t outputTimeSliceLimitMs,
+      column_index_t numSortOnlyColumns);
 
   ~SortingWriter() override;
 
@@ -84,10 +88,14 @@ class SortingWriter : public Writer {
 
   vector_size_t outputBatchRows();
 
+  // Drops the sort-only columns from 'sorted'.
+  RowVectorPtr dropSortOnlyColumns(const RowVectorPtr& sorted) const;
+
   const std::unique_ptr<Writer> outputWriter_;
   const vector_size_t maxOutputRowsConfig_;
   const uint64_t maxOutputBytesConfig_;
   const uint64_t finishTimeSliceLimitMs_;
+  const column_index_t numSortOnlyColumns_;
   memory::MemoryPool* const sortPool_;
   const bool canReclaim_;
 
