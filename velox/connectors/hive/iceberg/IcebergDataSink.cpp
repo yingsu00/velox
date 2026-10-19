@@ -709,14 +709,21 @@ void IcebergDataSink::closeWriterAndCollectStats(size_t index) {
   // Finalize file info (capture file size, add to writtenFiles).
   finalizeWriterFile(index);
 
-  if (!fileAdded) {
-    return;
+  if (fileAdded) {
+    collectFileStats(index, *writers_[index], metadata, std::nullopt);
   }
+}
+
+void IcebergDataSink::collectFileStats(
+    size_t index,
+    dwio::common::Writer& writer,
+    std::unique_ptr<dwio::common::FileMetadata>& metadata,
+    std::optional<uint64_t> numRows) {
   // Collect format-specific per-file statistics: DWRF/ORC read the live
   // writer's footer, Parquet consumes the close() metadata. A null result
   // falls through to the row-count-only estimate below.
   if (statsCollector_ != nullptr) {
-    if (auto stats = statsCollector_->collect(*writers_[index], metadata)) {
+    if (auto stats = statsCollector_->collect(writer, metadata)) {
       dataFileStats_[index].emplace_back(std::move(stats));
       return;
     }
@@ -727,7 +734,7 @@ void IcebergDataSink::closeWriterAndCollectStats(size_t index) {
   // that exposes row count, so derive it from writerInfo_->numWrittenRows. That
   // counter accumulates across all files written by this writer (rotated files
   // included), so compute per-file recordCount as the delta since the previous
-  // closeWriterAndCollectStats call for this writer index.
+  // file of this writer index, unless the caller knows the file's rows.
   //
   // Without this, the manifest writes recordCount=0 for every DWRF/ORC file,
   // which makes the DELETE/UPDATE/MERGE planner believe each file is empty
@@ -735,9 +742,11 @@ void IcebergDataSink::closeWriterAndCollectStats(size_t index) {
   if (reportedRowsPerWriter_.size() <= index) {
     reportedRowsPerWriter_.resize(index + 1, 0);
   }
-  const int64_t totalRows = writerInfo_[index]->numWrittenRows;
-  const int64_t thisFileRows = totalRows - reportedRowsPerWriter_[index];
-  reportedRowsPerWriter_[index] = totalRows;
+  const int64_t thisFileRows = numRows.has_value()
+      ? static_cast<int64_t>(numRows.value())
+      : static_cast<int64_t>(writerInfo_[index]->numWrittenRows) -
+          reportedRowsPerWriter_[index];
+  reportedRowsPerWriter_[index] += thisFileRows;
 
   auto stats = std::make_shared<IcebergDataFileStatistics>();
   stats->numRecords = thisFileRows;
@@ -745,6 +754,21 @@ void IcebergDataSink::closeWriterAndCollectStats(size_t index) {
   // That only degrades predicate pruning (a perf optimization), not
   // correctness.
   dataFileStats_[index].emplace_back(std::move(stats));
+}
+
+void IcebergDataSink::closeSortedFile(
+    size_t index,
+    dwio::common::Writer& writer,
+    uint64_t numRows) {
+  if (dataFileStats_.size() <= index) {
+    dataFileStats_.resize(index + 1);
+  }
+  auto metadata = writer.close();
+  const bool fileAdded = getCurrentFileBytes(index) > 0;
+  finalizeSortedFile(index, numRows);
+  if (fileAdded) {
+    collectFileStats(index, writer, metadata, numRows);
+  }
 }
 
 void IcebergDataSink::rotateWriter(size_t index) {

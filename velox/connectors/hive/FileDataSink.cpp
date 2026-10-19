@@ -255,6 +255,28 @@ void FileDataSink::finalizeWriterFile(size_t index) {
   info->cumulativeWrittenBytes = ioStats_[index]->rawBytesWritten();
 }
 
+void FileDataSink::closeSortedFile(
+    size_t index,
+    dwio::common::Writer& writer,
+    uint64_t numRows) {
+  writer.close();
+  finalizeSortedFile(index, numRows);
+  mergeWriterStats(closedWriterStats_, writer.runtimeStats());
+}
+
+void FileDataSink::finalizeSortedFile(size_t index, uint64_t numRows) {
+  VELOX_CHECK_LT(index, writerInfo_.size());
+  auto& info = writerInfo_[index];
+  // A sorted write counts the rows it receives before it writes any file, so
+  // currentFileWrittenRows holds the rows of this file and of the files after
+  // it.
+  VELOX_CHECK_LE(numRows, info->currentFileWrittenRows);
+  const auto remainingRows = info->currentFileWrittenRows - numRows;
+  info->currentFileWrittenRows = numRows;
+  finalizeWriterFile(index);
+  info->currentFileWrittenRows = remainingRows;
+}
+
 void FileDataSink::rotateWriter(size_t index) {
   VELOX_CHECK_LT(index, writers_.size());
   VELOX_CHECK_LT(index, writerInfo_.size());

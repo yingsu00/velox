@@ -343,6 +343,22 @@ class IcebergDataSink : public HiveDataSink {
   // Caller is responsible for the surrounding NonReclaimableSectionGuard.
   void closeWriterAndCollectStats(size_t index);
 
+  // Appends the IcebergDataFileStatistics of the file 'writer' just closed to
+  // dataFileStats_[index]. 'metadata' is what close() returned. 'numRows' is
+  // the file's row count when the caller knows it; otherwise it is derived from
+  // the rows the writer received since its previous file.
+  void collectFileStats(
+      size_t index,
+      dwio::common::Writer& writer,
+      std::unique_ptr<dwio::common::FileMetadata>& metadata,
+      std::optional<uint64_t> numRows);
+
+  // Also collects the Iceberg statistics of the closed file.
+  void closeSortedFile(
+      size_t index,
+      dwio::common::Writer& writer,
+      uint64_t numRows) override;
+
   // Iceberg partition specification defining how the table is partitioned.
   // Contains partition fields with source column names, transform types
   // (e.g., identity, year, month, day, hour, bucket, truncate), transform

@@ -23,12 +23,14 @@ SortingWriter::SortingWriter(
     vector_size_t maxOutputRowsConfig,
     uint64_t maxOutputBytesConfig,
     uint64_t outputTimeSliceLimitMs,
-    column_index_t numSortOnlyColumns)
+    column_index_t numSortOnlyColumns,
+    std::unique_ptr<FileRotator> fileRotator)
     : outputWriter_(std::move(writer)),
       maxOutputRowsConfig_(maxOutputRowsConfig),
       maxOutputBytesConfig_(maxOutputBytesConfig),
       finishTimeSliceLimitMs_(outputTimeSliceLimitMs),
       numSortOnlyColumns_(numSortOnlyColumns),
+      fileRotator_(std::move(fileRotator)),
       sortPool_(sortBuffer->pool()),
       canReclaim_(sortBuffer->canSpill()),
       sortBuffer_(std::move(sortBuffer)) {
@@ -79,7 +81,15 @@ bool SortingWriter::finish() {
     }
     output = sortBuffer_->getOutput(maxOutputBatchRows);
     if (output != nullptr) {
+      // Rotating only when more rows remain avoids an empty last file.
+      if (fileRotator_ != nullptr && numRowsInFile_ > 0 &&
+          fileRotator_->isFileFull()) {
+        outputWriter_ =
+            fileRotator_->rotate(std::move(outputWriter_), numRowsInFile_);
+        numRowsInFile_ = 0;
+      }
       outputWriter_->write(dropSortOnlyColumns(output));
+      numRowsInFile_ += output->size();
     }
   } while (output != nullptr);
 

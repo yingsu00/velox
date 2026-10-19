@@ -377,6 +377,17 @@ class FileDataSink : public DataSink {
   // Finalizes the current file for the writer at the given index.
   void finalizeWriterFile(size_t index);
 
+  // Closes 'writer', the full file writer of the sorted write at 'index', and
+  // records its file, which holds 'numRows' rows. Unlike rotateWriter(), the
+  // sorting writer at 'index' stays open and writes the rest of its sorted
+  // rows to the next file.
+  virtual void
+  closeSortedFile(size_t index, dwio::common::Writer& writer, uint64_t numRows);
+
+  // Records the current file of the sorted write at 'index', which holds
+  // 'numRows' of the rows the writer received.
+  void finalizeSortedFile(size_t index, uint64_t numRows);
+
   virtual void closeInternal();
 
   // IMPORTANT NOTE: these are passed to writers as raw pointers. FileDataSink

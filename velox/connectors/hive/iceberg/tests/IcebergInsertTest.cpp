@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include <folly/hash/Hash.h>
+
 #include "velox/common/base/tests/GTestUtils.h"
 #include "velox/common/file/File.h"
 #include "velox/connectors/hive/HiveConfig.h"
@@ -410,9 +412,6 @@ TEST_F(IcebergInsertTest, maxTargetFileSizeRotation) {
   ASSERT_EQ(writeAndRead("10MB"), 1);
 }
 
-// Explicit NULL (column in insertedColumns) and omitted column (not in
-// insertedColumns) written to separate files. The explicit NULL must be
-// preserved; the omitted column must receive the write-default.
 // Asserts that each row of 'rows' is ordered after the previous one by the
 // given sort keys, which are compared in order until one differs.
 void assertSorted(
@@ -540,6 +539,76 @@ TEST_F(IcebergInsertTest, sortedPartitionedWrite) {
   }
 }
 
+TEST_F(IcebergInsertTest, sortedWriteRotatesFiles) {
+  // A sorted write starts a new file once the current one reaches the target
+  // size, so each file holds a contiguous range of the sort order.
+  setConnectorSessionProperty(
+      HiveConfig::kParquetMaxTargetFileSizeSession, "16kB");
+  const auto rowType = ROW({"c0", "c1"}, {BIGINT(), VARCHAR()});
+  std::vector<RowVectorPtr> vectors;
+  for (int32_t batch = 0; batch < 5; ++batch) {
+    auto c0 = makeFlatVector<int64_t>(2'000, [batch](auto row) {
+      return (row * 7'919 + batch * 2'000) % 10'000;
+    });
+    // Hashes of c0 compress poorly, so the files reach the target size.
+    auto c1 = makeFlatVector<std::string>(2'000, [&](auto row) {
+      return fmt::format("{:016x}", folly::hash::twang_mix64(c0->valueAt(row)));
+    });
+    vectors.push_back(makeRowVector(rowType->names(), {c0, c1}));
+  }
+
+  const auto outputDirectory = TempDirectoryPath::create();
+  const auto dataSink = createDataSinkAndAppendData(
+      vectors,
+      outputDirectory->getPath(),
+      /*partitionFields=*/{},
+      {{1, core::kAscNullsLast}});
+  const auto commitTasks = dataSink->close();
+  const auto files = listFiles(outputDirectory->getPath());
+  ASSERT_GT(files.size(), 1);
+  ASSERT_EQ(commitTasks.size(), files.size());
+
+  const auto plan = exec::test::PlanBuilder()
+                        .startTableScan(test::kIcebergConnectorId)
+                        .outputType(rowType)
+                        .endTableScan()
+                        .planNode();
+  exec::test::AssertQueryBuilder(plan)
+      .splits(createSplitsForDirectory(outputDirectory->getPath()))
+      .assertResults(vectors);
+
+  // The first and last c0 of each file, and its rows.
+  std::vector<std::tuple<int64_t, int64_t, int64_t>> fileRanges;
+  for (const auto& split :
+       createSplitsForDirectory(outputDirectory->getPath())) {
+    const auto rows =
+        exec::test::AssertQueryBuilder(plan).split(split).copyResults(pool());
+    assertSorted(rows, {{0, toCompareFlags(core::kAscNullsLast)}});
+    const auto* c0 = rows->childAt(0)->asFlatVector<int64_t>();
+    fileRanges.emplace_back(
+        c0->valueAt(0), c0->valueAt(rows->size() - 1), rows->size());
+  }
+  std::sort(fileRanges.begin(), fileRanges.end());
+  for (size_t i = 1; i < fileRanges.size(); ++i) {
+    EXPECT_LE(std::get<1>(fileRanges[i - 1]), std::get<0>(fileRanges[i]))
+        << "Files " << i - 1 << " and " << i << " overlap";
+  }
+
+  // Each file's commit message reports the rows the file holds.
+  std::vector<int64_t> committedRows;
+  for (const auto& task : commitTasks) {
+    committedRows.push_back(
+        folly::parseJson(task)["metrics"]["recordCount"].asInt());
+  }
+  std::vector<int64_t> fileRows;
+  for (const auto& range : fileRanges) {
+    fileRows.push_back(std::get<2>(range));
+  }
+  std::sort(committedRows.begin(), committedRows.end());
+  std::sort(fileRows.begin(), fileRows.end());
+  EXPECT_EQ(committedRows, fileRows);
+}
+
 TEST_F(IcebergInsertTest, computedSortKeyWrite) {
   // The plan appends a computed sort key, such as a z-order value, after the
   // table columns. The sink sorts on it and leaves it out of the data file.
@@ -629,6 +698,9 @@ TEST_F(IcebergInsertTest, sortFieldNotInInputColumns) {
       "Sort field source column is not an input column: 3");
 }
 
+// Explicit NULL (column in insertedColumns) and omitted column (not in
+// insertedColumns) written to separate files. The explicit NULL must be
+// preserved; the omitted column must receive the write-default.
 TEST_F(IcebergInsertTest, explicitNullPreservedOmittedGetsWriteDefault) {
   const auto outputDir = TempDirectoryPath::create();
   const auto rowType = ROW({"id", "status"}, {BIGINT(), VARCHAR()});
