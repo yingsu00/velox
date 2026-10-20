@@ -2273,6 +2273,61 @@ TEST_F(ParquetWriterTest, rowGroupSizeConfig) {
   EXPECT_EQ(1, sessionReader->fileMetaData().numRowGroups());
 }
 
+TEST_F(ParquetWriterTest, rowGroupMaxRowsConfig) {
+  constexpr int64_t kRows = 1'000;
+  std::vector<RowVectorPtr> batches;
+  for (int64_t offset = 0; offset < kRows; offset += 100) {
+    batches.push_back(makeRowVector({makeFlatVector<int64_t>(
+        100, [offset](auto row) { return offset + row; })}));
+  }
+
+  const auto numRowGroups =
+      [&](std::unordered_map<std::string, std::string> connectorConfig,
+          std::unordered_map<std::string, std::string> session) {
+        auto sink = std::make_unique<MemorySink>(
+            200 * 1024 * 1024,
+            dwio::common::FileSink::Options{.pool = leafPool_.get()});
+        auto* sinkPtr = sink.get();
+        dwio::common::WriterOptions options;
+        options.memoryPool = rootPool_.get();
+        ParquetWriterFactory factory;
+        options.formatSpecificOptions = factory.createFormatOptions(
+            config::ConfigBase(std::move(connectorConfig)),
+            config::ConfigBase(std::move(session)));
+        auto writer = std::make_unique<parquet::Writer>(
+            std::move(sink), options, batches[0]->rowType());
+        for (const auto& batch : batches) {
+          writer->write(batch);
+        }
+        writer->close();
+        writers_.push_back(std::move(writer));
+        const auto reader = createReaderInMemory(*sinkPtr);
+        EXPECT_EQ(reader->numberOfRows(), kRows);
+        return reader->fileMetaData().numRowGroups();
+      };
+
+  // The default cap is far above the rows written.
+  EXPECT_EQ(numRowGroups({}, {}), 1);
+  // The cap splits row groups inside a batch.
+  EXPECT_EQ(
+      numRowGroups(
+          {{std::string(ParquetConfig::kWriterRowGroupMaxRows), "250"}}, {}),
+      4);
+  // The session property overrides the connector config.
+  EXPECT_EQ(
+      numRowGroups(
+          {{std::string(ParquetConfig::kWriterRowGroupMaxRows), "250"}},
+          {{std::string(ParquetConfig::kWriterRowGroupMaxRowsSession), "500"}}),
+      2);
+
+  VELOX_ASSERT_USER_THROW(
+      ParquetWriterFactory().createFormatOptions(
+          config::ConfigBase(
+              {{std::string(ParquetConfig::kWriterRowGroupMaxRows), "0"}}),
+          config::ConfigBase(std::unordered_map<std::string, std::string>{})),
+      "Parquet writer row group max rows must be greater than zero");
+}
+
 TEST_F(ParquetWriterTest, rowGroupSizeConfigValidation) {
   ParquetWriterFactory factory;
   const config::ConfigBase session(

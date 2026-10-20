@@ -152,6 +152,16 @@ class ParquetConfig {
       "128MB",
       "Soft target for the serialized row group size in bytes for the Parquet "
       "writer.")
+  VELOX_FORMAT_CONFIG_PROPERTY(
+      kWriterRowGroupMaxRowsSession,
+      kWriterRowGroupMaxRows,
+      "writer_row_group_max_rows",
+      "writer.row-group-max-rows",
+      uint64_t,
+      1'048'576,
+      "Maximum number of rows in a row group for the Parquet writer. A row "
+      "group closes at this many rows or at the row group size, whichever "
+      "comes first.")
   static constexpr std::string_view kWriterCreatedBy = "writer.created-by";
 
   // Writer config accessors expect format-scoped configs. Connector prefixes
@@ -226,6 +236,13 @@ class ParquetConfig {
         kWriterRowGroupSizeSession, connectorConfig, kWriterRowGroupSize);
   }
 
+  static std::optional<uint64_t> writerRowGroupMaxRows(
+      const config::ConfigBase& connectorConfig,
+      const config::ConfigBase& session) {
+    return session.getLegacyWithFallback<uint64_t>(
+        kWriterRowGroupMaxRowsSession, connectorConfig, kWriterRowGroupMaxRows);
+  }
+
   static std::optional<std::string> writerCreatedBy(
       const config::ConfigBase& connectorConfig) {
     return connectorConfig.get<std::string>(std::string(kWriterCreatedBy));
@@ -273,6 +290,8 @@ class ParquetConfig {
         kWriterEnablePageIndexSessionProperty>(properties, sessionPrefix);
     dwio::common::registerFormatConfigProperty<
         kWriterRowGroupSizeSessionProperty>(properties, sessionPrefix);
+    dwio::common::registerFormatConfigProperty<
+        kWriterRowGroupMaxRowsSessionProperty>(properties, sessionPrefix);
     dwio::common::registerFormatConfigProperty<
         kNullStructIfAllFieldsMissingSessionProperty>(
         properties, sessionPrefix);

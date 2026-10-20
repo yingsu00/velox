@@ -134,6 +134,7 @@ void ParquetWriterOptions::merge(
   mergeIfSet(dataPageSize, parquetOverrides->dataPageSize);
   mergeIfSet(batchSize, parquetOverrides->batchSize);
   mergeIfSet(rowGroupSizeBytes, parquetOverrides->rowGroupSizeBytes);
+  mergeIfSet(rowGroupMaxRows, parquetOverrides->rowGroupMaxRows);
   mergeIfSet(createdBy, parquetOverrides->createdBy);
 }
 
@@ -379,6 +380,17 @@ std::optional<int64_t> toParquetPageSize(std::optional<std::string> pageSize) {
   return config::toCapacity(*pageSize, config::CapacityUnit::BYTE);
 }
 
+std::optional<uint64_t> toParquetRowGroupMaxRows(
+    std::optional<uint64_t> rowGroupMaxRows) {
+  if (rowGroupMaxRows.has_value()) {
+    VELOX_USER_CHECK_GT(
+        rowGroupMaxRows.value(),
+        0,
+        "Parquet writer row group max rows must be greater than zero");
+  }
+  return rowGroupMaxRows;
+}
+
 std::optional<uint64_t> toParquetRowGroupSize(
     std::optional<std::string> rowGroupSize) {
   if (!rowGroupSize) {
@@ -468,7 +480,9 @@ Writer::Writer(
         parquetWriterOptions.rowGroupSizeBytes.value_or(
             DefaultFlushPolicy::kDefaultBytesInRowGroup);
     flushPolicy_ = std::make_unique<DefaultFlushPolicy>(
-        DefaultFlushPolicy::kDefaultRowsInGroup, bytesInRowGroup);
+        parquetWriterOptions.rowGroupMaxRows.value_or(
+            DefaultFlushPolicy::kDefaultRowsInGroup),
+        bytesInRowGroup);
   }
   options_.timestampUnit = static_cast<TimestampUnit>(
       parquetWriteTimestampUnit.value_or(TimestampPrecision::kNanoseconds));
@@ -862,6 +876,8 @@ ParquetWriterFactory::createFormatOptions(
       ParquetConfig::writerPageSize(connectorConfig, session));
   parquetOptions->rowGroupSizeBytes = toParquetRowGroupSize(
       ParquetConfig::writerRowGroupSize(connectorConfig, session));
+  parquetOptions->rowGroupMaxRows = toParquetRowGroupMaxRows(
+      ParquetConfig::writerRowGroupMaxRows(connectorConfig, session));
   parquetOptions->batchSize = toParquetBatchSize(
       ParquetConfig::writerBatchSize(connectorConfig, session));
   parquetOptions->createdBy = ParquetConfig::writerCreatedBy(connectorConfig);
