@@ -1113,6 +1113,14 @@ Parquet Options (prefix ``hive.parquet.``)
        a page index, and reads the column and offset index of each filtered
        column of a row group. Not used for columns whose statistics are
        ignored. Session: ``parquet_page_index_filter_enabled``.
+   * - ``string-function-filters-enabled``
+     - bool
+     - true
+     - Push down predicates on ``length()``, ``lower()``, ``upper()``,
+       ``strpos()`` and LIKE as filters on the column. When false, these
+       predicates stay in the remaining filter. Applies to scans of every file
+       format, because predicates become filters before the format of a split
+       is known. Session: ``parquet_string_function_filters_enabled``.
    * - ``footer-memory-tracking-threshold``
      - integer
      - disabled (max uint64)

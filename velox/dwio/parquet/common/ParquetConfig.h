@@ -88,6 +88,19 @@ class ParquetConfig {
       "each filtered column of a row group when the file has them. Not used "
       "for columns whose statistics are ignored.")
 
+  VELOX_FORMAT_CONFIG(
+      kStringFunctionFiltersEnabledSession,
+      kStringFunctionFiltersEnabled,
+      stringFunctionFiltersEnabled,
+      "string_function_filters_enabled",
+      "string-function-filters-enabled",
+      bool,
+      true,
+      "Push down predicates on length(), lower(), upper(), strpos() and "
+      "LIKE as filters on the column. When false, these predicates stay in "
+      "the remaining filter. Applies to scans of every file format, because "
+      "predicates become filters before the format of a split is known.")
+
   static constexpr uint64_t kDefaultFooterMemoryTrackingThreshold =
       std::numeric_limits<uint64_t>::max();
   VELOX_FORMAT_CONFIG(
@@ -307,6 +320,9 @@ class ParquetConfig {
         kDictionaryFilterEnabledSessionProperty>(properties, sessionPrefix);
     dwio::common::registerFormatConfigProperty<
         kPageIndexFilterEnabledSessionProperty>(properties, sessionPrefix);
+    dwio::common::registerFormatConfigProperty<
+        kStringFunctionFiltersEnabledSessionProperty>(
+        properties, sessionPrefix);
   }
 };
 
