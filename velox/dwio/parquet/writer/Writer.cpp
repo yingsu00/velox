@@ -132,6 +132,7 @@ void ParquetWriterOptions::merge(
   mergeIfSet(useParquetDataPageV2, parquetOverrides->useParquetDataPageV2);
   mergeIfSet(enableWritePageIndex, parquetOverrides->enableWritePageIndex);
   mergeIfSet(dataPageSize, parquetOverrides->dataPageSize);
+  mergeIfSet(pageMaxRows, parquetOverrides->pageMaxRows);
   mergeIfSet(batchSize, parquetOverrides->batchSize);
   mergeIfSet(rowGroupSizeBytes, parquetOverrides->rowGroupSizeBytes);
   mergeIfSet(rowGroupMaxRows, parquetOverrides->rowGroupMaxRows);
@@ -220,6 +221,12 @@ std::shared_ptr<WriterProperties> getArrowParquetWriterOptions(
   properties = properties->encoding(parquetOptions.encoding);
   properties = properties->dataPagesize(parquetOptions.dataPageSize.value_or(
       facebook::velox::parquet::arrow::kDefaultDataPageSize));
+  if (parquetOptions.pageMaxRows.has_value()) {
+    properties = properties->maxRowsPerPage(
+        static_cast<int64_t>(std::min<uint64_t>(
+            parquetOptions.pageMaxRows.value(),
+            facebook::velox::parquet::arrow::kDefaultMaxRowsPerPage)));
+  }
   properties = properties->writeBatchSize(parquetOptions.batchSize.value_or(
       facebook::velox::parquet::arrow::DEFAULT_WRITE_BATCH_SIZE));
   properties = properties->maxRowGroupLength(
@@ -389,6 +396,17 @@ std::optional<uint64_t> toParquetRowGroupMaxRows(
         "Parquet writer row group max rows must be greater than zero");
   }
   return rowGroupMaxRows;
+}
+
+std::optional<uint64_t> toParquetPageMaxRows(
+    std::optional<uint64_t> pageMaxRows) {
+  if (pageMaxRows.has_value()) {
+    VELOX_USER_CHECK_GT(
+        pageMaxRows.value(),
+        0,
+        "Parquet writer page max rows must be greater than zero");
+  }
+  return pageMaxRows;
 }
 
 std::optional<uint64_t> toParquetRowGroupSize(
@@ -889,6 +907,8 @@ ParquetWriterFactory::createFormatOptions(
       ParquetConfig::writerRowGroupSize(connectorConfig, session));
   parquetOptions->rowGroupMaxRows = toParquetRowGroupMaxRows(
       ParquetConfig::writerRowGroupMaxRows(connectorConfig, session));
+  parquetOptions->pageMaxRows = toParquetPageMaxRows(
+      ParquetConfig::writerPageMaxRows(connectorConfig, session));
   parquetOptions->batchSize = toParquetBatchSize(
       ParquetConfig::writerBatchSize(connectorConfig, session));
   parquetOptions->createdBy = ParquetConfig::writerCreatedBy(connectorConfig);

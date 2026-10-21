@@ -142,6 +142,8 @@ struct ParquetWriterOptions : public dwio::common::FormatSpecificOptions {
 
   std::optional<int64_t> batchSize;
   std::optional<int64_t> dataPageSize;
+  /// Maximum number of rows in a data page. Defaults to no limit.
+  std::optional<uint64_t> pageMaxRows;
   std::optional<int64_t> dictionaryPageSizeLimit;
   std::optional<uint64_t> rowGroupSizeBytes;
   /// Maximum number of rows in a row group. Defaults to
