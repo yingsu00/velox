@@ -83,7 +83,7 @@ bool SortingWriter::finish() {
     if (output != nullptr) {
       // Rotating only when more rows remain avoids an empty last file.
       if (fileRotator_ != nullptr && numRowsInFile_ > 0 &&
-          fileRotator_->isFileFull()) {
+          fileRotator_->isFileFull(*outputWriter_)) {
         outputWriter_ =
             fileRotator_->rotate(std::move(outputWriter_), numRowsInFile_);
         numRowsInFile_ = 0;

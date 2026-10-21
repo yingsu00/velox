@@ -711,8 +711,9 @@ class HiveDataSink::SortedFileRotator
   SortedFileRotator(HiveDataSink* dataSink, size_t writerIndex)
       : dataSink_(dataSink), writerIndex_(writerIndex) {}
 
-  bool isFileFull() override {
-    return dataSink_->getCurrentFileBytes(writerIndex_) >=
+  bool isFileFull(const dwio::common::Writer& writer) override {
+    return writer.reachedTargetFileSize() ||
+        dataSink_->getCurrentFileBytes(writerIndex_) >=
         dataSink_->maxTargetFileBytes_;
   }
 

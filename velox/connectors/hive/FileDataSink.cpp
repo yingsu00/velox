@@ -212,8 +212,8 @@ void FileDataSink::write(size_t index, RowVectorPtr input) {
     return;
   }
 
-  const auto currentFileBytes = getCurrentFileBytes(index);
-  if (currentFileBytes >= maxTargetFileBytes_) {
+  if (writers_[index]->reachedTargetFileSize() ||
+      getCurrentFileBytes(index) >= maxTargetFileBytes_) {
     rotateWriter(index);
   }
 }

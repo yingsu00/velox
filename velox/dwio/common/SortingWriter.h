@@ -32,8 +32,9 @@ class SortingWriter : public Writer {
    public:
     virtual ~FileRotator() = default;
 
-    /// Returns true when the current output file has reached its target size.
-    virtual bool isFileFull() = 0;
+    /// Returns true when the output file of 'writer' has reached its target
+    /// size.
+    virtual bool isFileFull(const Writer& writer) = 0;
 
     /// Closes 'fullWriter', which wrote 'numRows' rows, and returns the writer
     /// for the next file.
